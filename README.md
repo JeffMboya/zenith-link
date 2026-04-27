@@ -166,27 +166,6 @@ POST /command             → forward TC command to spacecraft
 
 ---
 
-## Project layout
-
-```
-cmd/
-  spacecraft/     — entrypoint
-  groundstation/  — entrypoint
-  relay/          — entrypoint
-spacecraft/       — service implementation + API
-groundstation/    — service implementation + API
-pkg/
-  ccsds/          — Space Packet, TM frame, TC frame, CLCW, CRC
-  zenith/         — Zenith-Link v2 encode/decode
-  orbital/        — propagator, ECI/ECEF, contact windows
-  errors/         — sentinel errors + wrapping
-c/                — C reference implementation
-frontend/         — React + CesiumJS dashboard
-docker/           — Dockerfiles + compose
-```
-
----
-
 ## Author
 
 Built by [Jeff Mboya](https://github.com/JeffMboya)
