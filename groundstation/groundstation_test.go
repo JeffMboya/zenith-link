@@ -2,6 +2,7 @@ package groundstation_test
 
 import (
 	"context"
+	"sync"
 	"testing"
 	"time"
 
@@ -191,15 +192,23 @@ func TestSubscribe(t *testing.T) {
 		tm := defaultTelemetry()
 		frame := makeFrame(t, tm)
 
+		var wg sync.WaitGroup
 		for range 20 {
 			ctx, cancel := context.WithCancel(context.Background())
 			_, err := svc.Subscribe(ctx)
 			require.NoError(t, err)
 
-			go cancel()
-			go func() { _, _ = svc.Receive(context.Background(), frame) }()
+			wg.Add(2)
+			go func() {
+				defer wg.Done()
+				cancel()
+			}()
+			go func() {
+				defer wg.Done()
+				_, _ = svc.Receive(context.Background(), frame)
+			}()
 		}
-		time.Sleep(50 * time.Millisecond)
+		wg.Wait()
 	})
 
 	t.Run("max subscriber limit is enforced", func(t *testing.T) {
