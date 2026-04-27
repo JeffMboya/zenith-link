@@ -186,3 +186,166 @@ func (s *service) TelemetryFrame(ctx context.Context, t time.Time) ([]byte, erro
 	}
 	return zenith.Encode(tm, s.cfg.HMACKey)
 }
+
+func (s *service) TMFrame(ctx context.Context, t time.Time, frameSize int) ([]byte, error) {
+	zlFrame, err := s.TelemetryFrame(ctx, t)
+	if err != nil {
+		return nil, err
+	}
+
+	s.mu.Lock()
+	spSeq := s.nextSpSeqLocked()
+	mc := s.nextMCFCLocked()
+	vc := s.nextVCFCLocked()
+	s.mu.Unlock()
+
+	sh := spacepacket.CDSFromTime(t)
+	pkt := spacepacket.SpacePacket{
+		Primary: spacepacket.PrimaryHeader{
+			Type:               spacepacket.Telemetry,
+			HasSecondaryHeader: true,
+			APID:               s.cfg.TelemetryAPID,
+			GroupingFlags:      spacepacket.Unsegmented,
+			SequenceCount:      spSeq,
+		},
+		Secondary: &sh,
+		UserData:  zlFrame,
+	}
+
+	encoded, err := spacepacket.Encode(pkt)
+	if err != nil {
+		return nil, err
+	}
+
+	hdr := tmframe.PrimaryHeader{
+		SCID:                     s.cfg.SCID,
+		VCID:                     s.cfg.VCID,
+		MasterChannelFrameCount:  mc,
+		VirtualChannelFrameCount: vc,
+		SegmentLengthID:          0b11,
+		FirstHeaderPointer:       0,
+	}
+
+	frame := tmframe.TransferFrame{
+		Primary:   hdr,
+		DataField: encoded,
+	}
+
+	return tmframe.Encode(frame, frameSize)
+}
+
+func (s *service) State(ctx context.Context, t time.Time) (State, error) {
+	eci, err := orbital.Propagate(s.cfg.Elements, t)
+	if err != nil {
+		return State{}, err
+	}
+	ecef := orbital.ECIToECEF(eci, t)
+	geo := orbital.ECEFToGeodetic(ecef)
+	inSun := orbital.InSunlight(eci, t)
+
+	return State{
+		Time:       t,
+		ECI:        eci,
+		Geodetic:   geo,
+		InSunlight: inSun,
+	}, nil
+}
+
+func (s *service) ExecuteCommand(_ context.Context, rawTC []byte) (CommandResult, error) {
+	frame, err := tcframe.Decode(rawTC)
+	if err != nil {
+		return CommandResult{}, errors.Wrap(errors.ErrMalformedFrame, err)
+	}
+
+	if frame.Primary.SCID != s.cfg.SCID {
+		return CommandResult{}, errors.Wrap(errors.ErrInvalidField,
+			errors.New(fmt.Sprintf("TC frame SCID %d does not match spacecraft SCID %d",
+				frame.Primary.SCID, s.cfg.SCID)))
+	}
+
+	if len(frame.DataField) == 0 {
+		return CommandResult{}, errors.Wrap(errors.ErrMalformedFrame,
+			errors.New("TC data field is empty — no command ID"))
+	}
+
+	cmd := Command{
+		ID:      CommandID(frame.DataField[0]),
+		Payload: frame.DataField[1:],
+	}
+
+	return s.execute(cmd)
+}
+
+func (s *service) execute(cmd Command) (CommandResult, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	switch cmd.ID {
+	case CmdInferenceRun:
+		// Simulate deterministic inference result rotating through classes.
+		nowUnix := time.Now().Unix()
+		classIdx := uint8((nowUnix / 30) % 7)
+		conf := uint8(180 + (nowUnix % 75))
+		s.lastInference = &inferenceState{class: classIdx, conf: conf}
+		return CommandResult{
+			CommandID: cmd.ID,
+			Accepted:  true,
+			Message:   fmt.Sprintf("inference complete: class=%s conf=%d%%", inferenceClassNames[classIdx], int(conf)*100/255),
+		}, nil
+
+	case CmdReboot:
+		s.seqCount = 0
+		s.frameSeq = 0
+		s.mcfc = 0
+		s.vcfc = 0
+		s.lastInference = nil
+		s.mode = 0
+		return CommandResult{CommandID: cmd.ID, Accepted: true, Message: "reboot complete"}, nil
+
+	case CmdSetMode:
+		if len(cmd.Payload) < 1 {
+			return CommandResult{CommandID: cmd.ID, Accepted: false, Message: "CmdSetMode requires 1-byte payload"}, nil
+		}
+		s.mode = cmd.Payload[0]
+		return CommandResult{
+			CommandID: cmd.ID,
+			Accepted:  true,
+			Message:   fmt.Sprintf("mode set to %d", s.mode),
+		}, nil
+
+	default:
+		return CommandResult{}, errors.Wrap(errors.ErrCommandUnknown,
+			errors.New(fmt.Sprintf("command ID 0x%02X is not recognised", uint8(cmd.ID))))
+	}
+}
+
+func (s *service) Windows(_ context.Context, gsLat, gsLon float64, start, end time.Time, minElevDeg float64) ([]orbital.ContactWindow, error) {
+	return orbital.ContactWindows(s.cfg.Elements, gsLat, gsLon, start, end, minElevDeg)
+}
+
+// ─── locked sequence helpers ─────────────────────────────────────────────────
+// All callers must hold s.mu.
+
+func (s *service) nextSeqLocked() uint16 {
+	v := s.seqCount
+	s.seqCount++ // wraps at 0xFFFF via natural uint16 overflow
+	return v
+}
+
+func (s *service) nextSpSeqLocked() uint16 {
+	v := s.frameSeq
+	s.frameSeq = (s.frameSeq + 1) & 0x3FFF
+	return v
+}
+
+func (s *service) nextMCFCLocked() uint8 {
+	v := s.mcfc
+	s.mcfc++
+	return v
+}
+
+func (s *service) nextVCFCLocked() uint8 {
+	v := s.vcfc
+	s.vcfc++
+	return v
+}
