@@ -6,13 +6,13 @@ import { TelemetryPanel } from './components/TelemetryPanel'
 import { CommandPanel } from './components/CommandPanel'
 
 export default function App() {
-  const { latest, connected } = useWebSocket()
+  const { latest, connected, linkLost } = useWebSocket()
   const orbitalPos = useOrbitalPosition()
 
   return (
     <>
       <Globe3D data={latest} orbitalPos={orbitalPos} />
-      <KPIBar metrics={latest?.metrics ?? null} connected={connected} />
+      <KPIBar metrics={latest?.metrics ?? null} connected={connected} linkLost={linkLost} />
       <TelemetryPanel state={latest?.satellite ?? null} />
       <CommandPanel />
     </>

@@ -46,30 +46,31 @@ export function CommandPanel() {
   }
 
   const typeColor: Record<LogEntry['type'], string> = {
-    sent: '#00c8f0',
-    ack: '#00e878',
-    error: '#f03040',
+    sent: 'var(--cyan)',
+    ack: 'var(--green)',
+    error: 'var(--red)',
   }
 
   return (
     <div style={{
       position: 'fixed', bottom: 0, left: 0, zIndex: 90,
       width: open ? 320 : 120,
-      background: 'rgba(4,13,28,0.90)', borderTop: '1px solid #1a4878', borderRight: '1px solid #1a4878',
+      background: 'rgba(4,13,28,0.90)', borderTop: '1px solid var(--border)', borderRight: '1px solid var(--border)',
       backdropFilter: 'blur(6px)',
       transition: 'width 0.2s ease', borderRadius: '0 4px 0 0',
     }}>
       {/* Header */}
       <button
         onClick={() => setOpen(o => !o)}
+        aria-label={open ? 'Collapse uplink command panel' : 'Expand uplink command panel'}
         style={{
           width: '100%', padding: '6px 12px', background: 'none', border: 'none',
           display: 'flex', alignItems: 'center', gap: 8, cursor: 'pointer',
-          borderBottom: open ? '1px solid #1a4878' : 'none',
+          borderBottom: open ? '1px solid var(--border)' : 'none',
         }}
       >
-        <span style={{ color: '#f0a800', fontSize: 8, letterSpacing: 2 }}>⌨ UPLINK CMD</span>
-        {!open && <span style={{ color: '#3a6898', fontSize: 9 }}>{open ? '▼' : '▲'}</span>}
+        <span style={{ color: 'var(--amber)', fontSize: 9, letterSpacing: 2 }}>⌨ UPLINK CMD</span>
+        {!open && <span style={{ color: 'var(--text-dim)', fontSize: 9 }}>▲</span>}
       </button>
 
       {open && (
@@ -80,11 +81,11 @@ export function CommandPanel() {
             fontSize: 10, lineHeight: 1.6,
           }}>
             {log.length === 0 && (
-              <div style={{ color: '#3a6898' }}>No commands sent yet.</div>
+              <div style={{ color: 'var(--text-dim)' }}>No commands sent yet.</div>
             )}
             {log.map((e, i) => (
               <div key={i} style={{ color: typeColor[e.type] }}>
-                <span style={{ color: '#3a6898', marginRight: 6 }}>
+                <span style={{ color: 'var(--text-dim)', marginRight: 6 }}>
                   {new Date(e.ts).toLocaleTimeString('en-US', { hour12: false })}
                 </span>
                 {e.text}
@@ -95,9 +96,9 @@ export function CommandPanel() {
           {/* Presets */}
           <div style={{ display: 'flex', flexWrap: 'wrap', gap: 4, marginBottom: 8 }}>
             {PRESETS.map(p => (
-              <button key={p} onClick={() => send(p)} style={{
-                background: '#071830', border: '1px solid #1a4878', color: '#5878a0',
-                fontSize: 8, padding: '2px 6px', cursor: 'pointer', borderRadius: 2,
+              <button key={p} onClick={() => send(p)} aria-label={`Send preset command: ${p}`} style={{
+                background: 'var(--bg-deep)', border: '1px solid var(--border)', color: 'var(--text-mid)',
+                fontSize: 9, padding: '2px 6px', cursor: 'pointer', borderRadius: 2,
                 letterSpacing: 1,
               }}>
                 {p}
@@ -112,19 +113,21 @@ export function CommandPanel() {
               onChange={e => setInput(e.target.value)}
               onKeyDown={e => e.key === 'Enter' && send(input)}
               placeholder="COMMAND..."
+              aria-label="Uplink command input"
               style={{
-                flex: 1, background: '#071830', border: '1px solid #1a4878',
-                color: '#b8cfe8', fontSize: 10, padding: '4px 8px',
-                fontFamily: 'Courier New', outline: 'none',
+                flex: 1, background: 'var(--bg-deep)', border: '1px solid var(--border)',
+                color: 'var(--text-body)', fontSize: 10, padding: '4px 8px',
+                fontFamily: 'var(--font-mono)', outline: 'none',
               }}
             />
             <button
               onClick={() => send(input)}
               disabled={sending}
+              aria-label="Transmit command"
               style={{
-                background: sending ? '#071830' : '#0d2040',
-                border: '1px solid #1a4878', color: sending ? '#3a6898' : '#00c8f0',
-                fontSize: 9, padding: '4px 10px', cursor: 'pointer', letterSpacing: 1,
+                background: sending ? 'var(--bg-deep)' : 'var(--bg-dark)',
+                border: '1px solid var(--border)', color: sending ? 'var(--text-dim)' : 'var(--cyan)',
+                fontSize: 9, padding: '4px 10px', cursor: sending ? 'not-allowed' : 'pointer', letterSpacing: 1,
               }}
             >
               TX

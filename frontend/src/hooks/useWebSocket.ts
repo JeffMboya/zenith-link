@@ -64,16 +64,22 @@ function toStateUpdate(raw: RawTelemetry, track: { lat: number; lon: number; alt
 export function useWebSocket() {
   const [latest, setLatest] = useState<StateUpdate | null>(null)
   const [connected, setConnected] = useState(false)
+  const [linkLost, setLinkLost] = useState(false)
   const ws = useRef<WebSocket | null>(null)
   const reconnectTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
   const trackRef = useRef<{ lat: number; lon: number; alt: number }[]>([])
+  const everConnected = useRef(false)
 
   const connect = useCallback(() => {
     const proto = window.location.protocol === 'https:' ? 'wss' : 'ws'
     const url = `${proto}://${window.location.host}/ws`
     const socket = new WebSocket(url)
 
-    socket.onopen = () => setConnected(true)
+    socket.onopen = () => {
+      setConnected(true)
+      setLinkLost(false)
+      everConnected.current = true
+    }
 
     socket.onmessage = (e) => {
       try {
@@ -89,6 +95,7 @@ export function useWebSocket() {
 
     socket.onclose = () => {
       setConnected(false)
+      if (everConnected.current) setLinkLost(true)
       reconnectTimer.current = setTimeout(connect, RECONNECT_DELAY_MS)
     }
 
@@ -105,5 +112,5 @@ export function useWebSocket() {
     }
   }, [connect])
 
-  return { latest, connected }
+  return { latest, connected, linkLost }
 }

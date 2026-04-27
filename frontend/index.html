@@ -4,10 +4,49 @@
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>Zenith-Link | Mission Control</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;700&display=swap" rel="stylesheet" />
     <style>
+      :root {
+        /* Surfaces */
+        --bg-darkest:   #040d1c;
+        --bg-deep:      #071830;
+        --bg-dark:      #0d2040;
+        --border:       #1a4878;
+
+        /* Text */
+        --text-dim:     #3a6898;
+        --text-mid:     #5878a0;
+        --text-body:    #b8cfe8;
+
+        /* Accents */
+        --cyan:         #00c8f0;
+        --cyan-dim:     #00a8d0;
+        --teal:         #00e8c0;
+        --green:        #00e878;
+        --amber:        #f0a800;
+        --red:          #f03040;
+        --purple:       #c060f0;
+
+        /* Typography */
+        --font-mono: 'IBM Plex Mono', 'Courier New', Menlo, monospace;
+      }
+
       *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
       html, body, #root { width: 100%; height: 100%; overflow: hidden; }
-      body { background: #040d1c; font-family: 'Courier New', Menlo, monospace; }
+      body {
+        background: var(--bg-darkest);
+        font-family: var(--font-mono);
+        color: var(--text-body);
+        -webkit-font-smoothing: antialiased;
+      }
+
+      /* Focus ring for keyboard nav */
+      :focus-visible {
+        outline: 1px solid var(--cyan);
+        outline-offset: 2px;
+      }
     </style>
   </head>
   <body>

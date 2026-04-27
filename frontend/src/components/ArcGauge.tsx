@@ -8,7 +8,7 @@ interface Props {
   size?: number
 }
 
-export function ArcGauge({ value, min, max, label, unit, color = '#00c8f0', size = 90 }: Props) {
+export function ArcGauge({ value, min, max, label, unit, color = 'var(--cyan)', size = 90 }: Props) {
   const pct = Math.max(0, Math.min(1, (value - min) / (max - min)))
   const r = 34
   const cx = 50
@@ -30,20 +30,20 @@ export function ArcGauge({ value, min, max, label, unit, color = '#00c8f0', size
   const displayVal = Math.abs(value) < 10 ? value.toFixed(2) : value.toFixed(1)
 
   return (
-    <svg width={size} height={size} viewBox="0 0 100 100">
+    <svg width={size} height={size} viewBox="0 0 100 100" aria-label={`${label}: ${displayVal} ${unit}`}>
       {/* Track */}
-      <path d={arcPath(1)} fill="none" stroke="#1a4878" strokeWidth={5} strokeLinecap="round" />
+      <path d={arcPath(1)} fill="none" stroke="var(--border)" strokeWidth={5} strokeLinecap="round" />
       {/* Value arc */}
       <path d={arcPath(pct)} fill="none" stroke={color} strokeWidth={5} strokeLinecap="round" />
-      {/* Value text */}
-      <text x={cx} y={cy - 4} textAnchor="middle" fill={color} fontSize={13} fontFamily="Courier New" fontWeight="bold">
+      {/* Value */}
+      <text x={cx} y={cy - 4} textAnchor="middle" fill={color} fontSize={13} fontFamily="var(--font-mono)" fontWeight="bold">
         {displayVal}
       </text>
-      <text x={cx} y={cy + 8} textAnchor="middle" fill="#5878a0" fontSize={7} fontFamily="Courier New">
+      <text x={cx} y={cy + 9} textAnchor="middle" fill="var(--text-mid)" fontSize={8} fontFamily="var(--font-mono)">
         {unit}
       </text>
-      {/* Label */}
-      <text x={cx} y={cy + 22} textAnchor="middle" fill="#3a6898" fontSize={7} fontFamily="Courier New" letterSpacing={1}>
+      {/* Label — increased from 7→9 for readability */}
+      <text x={cx} y={cy + 23} textAnchor="middle" fill="var(--text-dim)" fontSize={9} fontFamily="var(--font-mono)" letterSpacing={1}>
         {label}
       </text>
     </svg>
