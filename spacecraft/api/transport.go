@@ -72,8 +72,8 @@ func tmFrameHandler(svc spacecraft.Service) http.HandlerFunc {
 				writeError(w, http.StatusBadRequest, err)
 				return
 			}
-			if n < 9 {
-				writeError(w, http.StatusBadRequest, fmt.Errorf("frame size must be at least 9"))
+			if n < 9 || n > tmframe.MaxFrameSize {
+				writeError(w, http.StatusBadRequest, fmt.Errorf("size must be between 9 and %d", tmframe.MaxFrameSize))
 				return
 			}
 			frameSize = n
