@@ -203,3 +203,88 @@ func CDSToTime(h SecondaryHeader) time.Time {
 // Encode serialises the full Space Packet to a byte slice. The
 // PacketDataLength field in the primary header is computed automatically and
 // does NOT need to be set by the caller.
+func Encode(pkt SpacePacket) ([]byte, error) {
+	// Build the packet data field first so we know its length.
+	var dataField []byte
+	if pkt.Primary.HasSecondaryHeader {
+		if pkt.Secondary == nil {
+			return nil, errors.Wrap(errors.ErrMalformedFrame,
+				errors.New("HasSecondaryHeader is true but Secondary is nil"))
+		}
+		s := EncodeSecondary(*pkt.Secondary)
+		dataField = append(dataField, s[:]...)
+	}
+	dataField = append(dataField, pkt.UserData...)
+
+	if len(dataField) == 0 {
+		return nil, errors.Wrap(errors.ErrMalformedFrame,
+			errors.New("packet data field must contain at least 1 byte"))
+	}
+	if len(dataField) > int(MaxDataLength)+1 {
+		return nil, errors.ErrFrameTooLarge
+	}
+
+	pkt.Primary.PacketDataLength = uint16(len(dataField) - 1)
+
+	hdr, err := EncodePrimary(pkt.Primary)
+	if err != nil {
+		return nil, err
+	}
+
+	out := make([]byte, PrimaryHeaderSize+len(dataField))
+	copy(out[:PrimaryHeaderSize], hdr[:])
+	copy(out[PrimaryHeaderSize:], dataField)
+	return out, nil
+}
+
+// Decode parses a complete Space Packet from b.
+// It validates the primary header and PacketDataLength field against the
+// actual buffer length.
+func Decode(b []byte) (SpacePacket, error) {
+	if len(b) < PrimaryHeaderSize {
+		return SpacePacket{}, errors.Wrap(errors.ErrMalformedFrame,
+			errors.New("buffer shorter than primary header"))
+	}
+
+	primary, err := DecodePrimary(b[:PrimaryHeaderSize])
+	if err != nil {
+		return SpacePacket{}, err
+	}
+
+	// Total packet length from the DataLength field.
+	expectedTotal := PrimaryHeaderSize + int(primary.PacketDataLength) + 1
+	if len(b) < expectedTotal {
+		return SpacePacket{}, errors.Wrap(errors.ErrDataLenMismatch,
+			errors.New("buffer shorter than PacketDataLength indicates"))
+	}
+
+	dataField := b[PrimaryHeaderSize:expectedTotal]
+
+	pkt := SpacePacket{Primary: primary}
+
+	offset := 0
+	if primary.HasSecondaryHeader {
+		if len(dataField) < SecondaryHeaderSize {
+			return SpacePacket{}, errors.Wrap(errors.ErrMalformedFrame,
+				errors.New("secondary header flag set but insufficient data"))
+		}
+		sh, err := DecodeSecondary(dataField[:SecondaryHeaderSize])
+		if err != nil {
+			return SpacePacket{}, err
+		}
+		pkt.Secondary = &sh
+		offset = SecondaryHeaderSize
+	}
+
+	pkt.UserData = make([]byte, len(dataField)-offset)
+	copy(pkt.UserData, dataField[offset:])
+	return pkt, nil
+}
+
+// boolBit converts a bool to uint16 (0 or 1) for bit field construction.
+func boolBit(v bool) uint16 {
+	if v {
+		return 1
+	}
+	return 0
+}
