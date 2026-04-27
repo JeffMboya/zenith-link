@@ -28,6 +28,7 @@ func NewRouter(svc spacecraft.Service) http.Handler {
 	r.Get("/frame/zenith", zenithFrameHandler(svc))
 	r.Post("/command", commandHandler(svc))
 	r.Get("/windows", windowsHandler(svc))
+	r.Get("/track", trackHandler(svc))
 
 	return r
 }
@@ -173,6 +174,53 @@ func windowsHandler(svc spacecraft.Service) http.HandlerFunc {
 			return
 		}
 		writeJSON(w, http.StatusOK, contactWindowsFromDomain(ws))
+	}
+}
+
+// trackHandler returns predicted orbital positions for the next N minutes
+// at a configurable step interval. Used by the frontend to render the
+// forward ground track on the 3D globe.
+//
+// Query parameters:
+//
+//	minutes  look-ahead duration [default 90, max 200]
+//	step_s   sample interval in seconds [default 30, min 10]
+func trackHandler(svc spacecraft.Service) http.HandlerFunc {
+	type trackPoint struct {
+		Lat float64 `json:"lat"`
+		Lon float64 `json:"lon"`
+		Alt float64 `json:"alt_m"`
+	}
+	return func(w http.ResponseWriter, r *http.Request) {
+		minutes := 90.0
+		stepSec := 30.0
+		if s := r.URL.Query().Get("minutes"); s != "" {
+			if v, err := strconv.ParseFloat(s, 64); err == nil && v > 0 && v <= 200 {
+				minutes = v
+			}
+		}
+		if s := r.URL.Query().Get("step_s"); s != "" {
+			if v, err := strconv.ParseFloat(s, 64); err == nil && v >= 10 {
+				stepSec = v
+			}
+		}
+		now := time.Now().UTC()
+		end := now.Add(time.Duration(minutes * float64(time.Minute)))
+		step := time.Duration(stepSec * float64(time.Second))
+
+		var points []trackPoint
+		for t := now; !t.After(end); t = t.Add(step) {
+			st, err := svc.State(r.Context(), t)
+			if err != nil {
+				continue
+			}
+			points = append(points, trackPoint{
+				Lat: st.Geodetic.LatitudeDeg,
+				Lon: st.Geodetic.LongitudeDeg,
+				Alt: st.Geodetic.AltitudeM,
+			})
+		}
+		writeJSON(w, http.StatusOK, map[string]any{"points": points, "step_s": stepSec})
 	}
 }
 

@@ -13,6 +13,7 @@ export default defineConfig({
       '/health': 'http://localhost:8081',
       '/windows': 'http://localhost:8080',
       '/state': 'http://localhost:8080',
+      '/track': 'http://localhost:8080',
     },
   },
 })

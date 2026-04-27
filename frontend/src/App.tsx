@@ -11,6 +11,7 @@ export default function App() {
 
   return (
     <>
+      {/* Globe renders behind everything — forward track hook lives inside Globe3D */}
       <Globe3D data={latest} orbitalPos={orbitalPos} />
       <KPIBar metrics={latest?.metrics ?? null} connected={connected} linkLost={linkLost} />
       <TelemetryPanel state={latest?.satellite ?? null} />
