@@ -11,6 +11,8 @@ export default defineConfig({
       '/metrics': 'http://localhost:8081',
       '/command': 'http://localhost:8081',
       '/health': 'http://localhost:8081',
+      '/windows': 'http://localhost:8080',
+      '/state': 'http://localhost:8080',
     },
   },
 })

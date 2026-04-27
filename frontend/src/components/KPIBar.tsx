@@ -1,6 +1,8 @@
+import { useEffect, useState } from 'react'
 import type { LinkMetrics } from '../types'
 
 const LINK_COST_PER_MB = 15
+const WINDOWS_POLL_MS = 30_000
 
 interface Props {
   metrics: LinkMetrics | null
@@ -11,6 +13,68 @@ interface KPI {
   label: string
   value: string
   color: string
+}
+
+interface ContactWindow {
+  aos: string
+  duration_sec: number
+  max_elevation_deg: number
+}
+
+function useNextPass() {
+  const [label, setLabel] = useState<string | null>(null)
+  const [color, setColor] = useState('#3a6898')
+
+  useEffect(() => {
+    let timer: ReturnType<typeof setTimeout>
+
+    async function poll() {
+      try {
+        const res = await fetch('/windows')
+        if (!res.ok) return
+        const data = await res.json() as { windows: ContactWindow[] }
+        if (!data.windows?.length) { setLabel('NO PASS'); setColor('#3a6898'); return }
+
+        const w = data.windows[0]
+        const aosMs = new Date(w.aos).getTime()
+        const now = Date.now()
+        const diffSec = Math.round((aosMs - now) / 1000)
+
+        if (diffSec < 0) {
+          // AOS already passed — show pass in progress or stale
+          const losSec = Math.round((aosMs + w.duration_sec * 1000 - now) / 1000)
+          if (losSec > 0) {
+            setLabel(`IN PASS ${losSec}s`)
+            setColor('#00e878')
+          } else {
+            setLabel('PASS DONE')
+            setColor('#3a6898')
+          }
+        } else {
+          const h = Math.floor(diffSec / 3600)
+          const m = Math.floor((diffSec % 3600) / 60)
+          const s = diffSec % 60
+          const elev = w.max_elevation_deg.toFixed(0)
+          if (h > 0) {
+            setLabel(`${h}h ${m}m · ${elev}°`)
+          } else if (m > 0) {
+            setLabel(`${m}m ${s}s · ${elev}°`)
+          } else {
+            setLabel(`${s}s · ${elev}°`)
+          }
+          setColor(diffSec < 300 ? '#f0a800' : '#00c8f0')
+        }
+      } catch {
+        // network error — keep last value
+      }
+      timer = setTimeout(poll, WINDOWS_POLL_MS)
+    }
+
+    poll()
+    return () => clearTimeout(timer)
+  }, [])
+
+  return { label, color }
 }
 
 function kpis(m: LinkMetrics): KPI[] {
@@ -31,6 +95,8 @@ function kpis(m: LinkMetrics): KPI[] {
 }
 
 export function KPIBar({ metrics, connected }: Props) {
+  const { label: passLabel, color: passColor } = useNextPass()
+
   return (
     <div style={{
       position: 'fixed', top: 0, left: 0, right: 0, zIndex: 100,
@@ -67,6 +133,17 @@ export function KPIBar({ metrics, connected }: Props) {
               AWAITING LINK ACQUISITION...
             </div>
         }
+      </div>
+
+      {/* Next pass tile */}
+      <div style={{
+        padding: '6px 16px', borderLeft: '1px solid #1a4878',
+        display: 'flex', flexDirection: 'column', alignItems: 'center', minWidth: 110,
+      }}>
+        <span style={{ color: passColor, fontSize: 13, fontWeight: 700, lineHeight: 1.2, letterSpacing: 1 }}>
+          {passLabel ?? '—'}
+        </span>
+        <span style={{ color: '#3a6898', fontSize: 8, letterSpacing: 2, marginTop: 2 }}>NEXT PASS</span>
       </div>
 
       {/* Link status */}
