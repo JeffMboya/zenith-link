@@ -248,6 +248,10 @@ func TestTMFrameHandler(t *testing.T) {
 			setupMock:  func(_ *mocks.Service) {},
 			wantStatus: http.StatusBadRequest,
 		},
+		{
+			desc:       "size above maximum returns 400",
+			url:        "/frame?size=2049",
+			setupMock:  func(_ *mocks.Service) {},
 			wantStatus: http.StatusBadRequest,
 		},
 	}
