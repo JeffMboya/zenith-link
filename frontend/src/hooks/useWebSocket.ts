@@ -11,6 +11,12 @@ interface RawTelemetry {
   lat_e7: number
   lon_e7: number
   alt_m: number
+  att_roll?: number
+  att_pitch?: number
+  att_yaw?: number
+  ang_vel_x?: number
+  ang_vel_y?: number
+  ang_vel_z?: number
   bat_v: number
   solar_v: number
   temp_c: number
@@ -22,19 +28,19 @@ function toStateUpdate(raw: RawTelemetry, track: { lat: number; lon: number; alt
     type: 'state_update',
     ts: raw.timestamp,
     satellite: {
-      pitch: 0,
-      yaw: 0,
-      roll: 0,
-      omega_x: 0,
-      omega_y: 0,
-      omega_z: 0,
+      pitch:   (raw.att_pitch  ?? 0) / 100,   // 0.01° LSB → °
+      yaw:     (raw.att_yaw    ?? 0) / 100,
+      roll:    (raw.att_roll   ?? 0) / 100,
+      omega_x: (raw.ang_vel_x  ?? 0) / 100,   // 0.01 deg/s LSB → deg/s
+      omega_y: (raw.ang_vel_y  ?? 0) / 100,
+      omega_z: (raw.ang_vel_z  ?? 0) / 100,
       latitude: raw.lat_e7 / 1e7,
       longitude: raw.lon_e7 / 1e7,
       altitude: raw.alt_m,
       battery_voltage: raw.bat_v / 1000,
       solar_voltage: raw.solar_v / 1000,
       chassis_temp: raw.temp_c / 100,
-      cpu_temp: 0,
+      cpu_temp: raw.temp_c / 100 + 8,          // derived: chassis + 8°C offset
       rssi: raw.rssi / 10,
     },
     metrics: {

@@ -280,6 +280,12 @@ type telemetryRes struct {
 	LatE7          int32   `json:"lat_e7,omitempty"`
 	LonE7          int32   `json:"lon_e7,omitempty"`
 	AltM           int32   `json:"alt_m,omitempty"`
+	AttRoll        int16   `json:"att_roll,omitempty"`
+	AttPitch       int16   `json:"att_pitch,omitempty"`
+	AttYaw         int16   `json:"att_yaw,omitempty"`
+	AngVelX        int16   `json:"ang_vel_x,omitempty"`
+	AngVelY        int16   `json:"ang_vel_y,omitempty"`
+	AngVelZ        int16   `json:"ang_vel_z,omitempty"`
 	BatV           uint16  `json:"bat_v,omitempty"`
 	SolarV         uint16  `json:"solar_v,omitempty"`
 	TempC          int16   `json:"temp_c,omitempty"`
@@ -299,6 +305,12 @@ func telemetryFromDomain(tm zenith.Telemetry) telemetryRes {
 		LatE7:     tm.LatE7,
 		LonE7:     tm.LonE7,
 		AltM:      tm.AltM,
+		AttRoll:   tm.AttRoll,
+		AttPitch:  tm.AttPitch,
+		AttYaw:    tm.AttYaw,
+		AngVelX:   tm.AngVelX,
+		AngVelY:   tm.AngVelY,
+		AngVelZ:   tm.AngVelZ,
 		BatV:      tm.BatV,
 		SolarV:    tm.SolarV,
 		TempC:     tm.TempC,

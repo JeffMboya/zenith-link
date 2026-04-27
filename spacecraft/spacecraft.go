@@ -17,6 +17,8 @@ import (
 	"sync"
 	"time"
 
+	"math"
+
 	"github.com/absmach/zenith-link/pkg/ccsds/spacepacket"
 	"github.com/absmach/zenith-link/pkg/ccsds/tcframe"
 	"github.com/absmach/zenith-link/pkg/ccsds/tmframe"
@@ -142,6 +144,7 @@ func (s *service) Telemetry(ctx context.Context, t time.Time) (zenith.Telemetry,
 
 	presence := zenith.PresencePosition |
 		zenith.PresenceAttitude |
+		zenith.PresenceAngVel |
 		zenith.PresenceBatV |
 		zenith.PresenceSolarV |
 		zenith.PresenceTempC |
@@ -154,6 +157,20 @@ func (s *service) Telemetry(ctx context.Context, t time.Time) (zenith.Telemetry,
 		batV = 7600
 	}
 
+	// Simulate attitude as slow oscillations keyed on mission time.
+	// Roll ±5°, Pitch ±10°, Yaw ±180° (slow drift). Units: 0.01° LSB.
+	phi := float64(t.Unix()) / 60.0 // one full oscillation per 2π minutes
+	attRoll := int16(math.Round(math.Sin(phi*0.7)*500))             // ±5°
+	attPitch := int16(math.Round(math.Sin(phi*0.4+1.2)*1000))       // ±10°
+	attYaw := int16(math.Round(math.Sin(phi*0.15+0.8) * 18000))     // ±180°
+	// Chassis 20°C ±3°C slow oscillation. Units: 0.01°C LSB.
+	chassisC := int16(math.Round((20.0 + 3.0*math.Sin(phi*0.3)) * 100))
+
+	// Angular velocity small residuals (reaction wheel noise). Units: 0.01 deg/s.
+	angVelX := int16(math.Round(math.Sin(phi*2.1+0.5) * 15))  // ±0.15 deg/s
+	angVelY := int16(math.Round(math.Sin(phi*1.7+1.1) * 12))  // ±0.12 deg/s
+	angVelZ := int16(math.Round(math.Sin(phi*2.9+2.3) * 8))   // ±0.08 deg/s
+
 	tm := zenith.Telemetry{
 		Sequence:  seq,
 		Timestamp: uint32(t.Unix()),
@@ -161,12 +178,15 @@ func (s *service) Telemetry(ctx context.Context, t time.Time) (zenith.Telemetry,
 		LatE7:     int32(st.Geodetic.LatitudeDeg * 1e7),
 		LonE7:     int32(st.Geodetic.LongitudeDeg * 1e7),
 		AltM:      int32(st.Geodetic.AltitudeM),
-		AttRoll:   0,
-		AttPitch:  0,
-		AttYaw:    0,
+		AttRoll:   attRoll,
+		AttPitch:  attPitch,
+		AttYaw:    attYaw,
+		AngVelX:   angVelX,
+		AngVelY:   angVelY,
+		AngVelZ:   angVelZ,
 		BatV:      batV,
 		SolarV:    solarV,
-		TempC:     2000,
+		TempC:     chassisC,
 		RSSI:      -850,
 	}
 
