@@ -195,3 +195,130 @@ func Encode(tm Telemetry, hmacKey []byte) ([]byte, error) {
 // Returns ErrHMACFailure if the HMAC does not match.
 // Returns ErrBadMagic if the magic number is wrong.
 // Returns ErrBadVersion if the version byte is not 2.
+func Decode(b []byte, hmacKey []byte) (Telemetry, error) {
+	if len(hmacKey) == 0 {
+		return Telemetry{}, errors.Wrap(errors.ErrHMACFailure, errors.New("HMAC key must not be empty"))
+	}
+	if len(b) < MinFrameSize {
+		return Telemetry{}, errors.Wrap(errors.ErrFrameTooSmall,
+			errors.New("frame shorter than minimum Zenith-Link size"))
+	}
+
+	// ─── HMAC verification (before any other parsing) ─────────────────────
+	bodyEnd := len(b) - HMACSize
+	mac := hmac.New(sha256.New, hmacKey)
+	mac.Write(b[:bodyEnd])
+	expected := mac.Sum(nil)
+	if !hmac.Equal(b[bodyEnd:], expected) {
+		return Telemetry{}, errors.ErrHMACFailure
+	}
+
+	// ─── Header ──────────────────────────────────────────────────────────────
+	magic := binary.BigEndian.Uint16(b[0:])
+	if magic != Magic {
+		return Telemetry{}, errors.Wrap(errors.ErrBadMagic,
+			errors.New("Zenith-Link magic mismatch"))
+	}
+	if b[2] != Version {
+		return Telemetry{}, errors.Wrap(errors.ErrBadVersion,
+			errors.New("Zenith-Link version mismatch"))
+	}
+
+	tm := Telemetry{
+		Flags:     b[3],
+		Sequence:  binary.BigEndian.Uint16(b[4:]),
+		Timestamp: binary.BigEndian.Uint32(b[6:]),
+	}
+
+	// ─── Presence bitmask ────────────────────────────────────────────────────
+	tm.Presence = binary.BigEndian.Uint16(b[HeaderSize:])
+
+	// Verify payload length matches presence bits.
+	expectedPayload := presencePayloadSize(tm.Presence)
+	actualPayload := bodyEnd - HeaderSize - PresenceSize
+	if actualPayload != expectedPayload {
+		return Telemetry{}, errors.Wrap(errors.ErrDataLenMismatch,
+			errors.New("payload length does not match presence bitmask"))
+	}
+
+	// ─── Payload ─────────────────────────────────────────────────────────────
+	pos := HeaderSize + PresenceSize
+
+	if tm.Presence&PresencePosition != 0 {
+		tm.LatE7 = int32(binary.BigEndian.Uint32(b[pos:]))
+		pos += 4
+		tm.LonE7 = int32(binary.BigEndian.Uint32(b[pos:]))
+		pos += 4
+		tm.AltM = int32(binary.BigEndian.Uint32(b[pos:]))
+		pos += 4
+	}
+	if tm.Presence&PresenceAttitude != 0 {
+		tm.AttRoll = int16(binary.BigEndian.Uint16(b[pos:]))
+		pos += 2
+		tm.AttPitch = int16(binary.BigEndian.Uint16(b[pos:]))
+		pos += 2
+		tm.AttYaw = int16(binary.BigEndian.Uint16(b[pos:]))
+		pos += 2
+	}
+	if tm.Presence&PresenceAngVel != 0 {
+		tm.AngVelX = int16(binary.BigEndian.Uint16(b[pos:]))
+		pos += 2
+		tm.AngVelY = int16(binary.BigEndian.Uint16(b[pos:]))
+		pos += 2
+		tm.AngVelZ = int16(binary.BigEndian.Uint16(b[pos:]))
+		pos += 2
+	}
+	if tm.Presence&PresenceBatV != 0 {
+		tm.BatV = binary.BigEndian.Uint16(b[pos:])
+		pos += 2
+	}
+	if tm.Presence&PresenceSolarV != 0 {
+		tm.SolarV = binary.BigEndian.Uint16(b[pos:])
+		pos += 2
+	}
+	if tm.Presence&PresenceTempC != 0 {
+		tm.TempC = int16(binary.BigEndian.Uint16(b[pos:]))
+		pos += 2
+	}
+	if tm.Presence&PresenceRSSI != 0 {
+		tm.RSSI = int16(binary.BigEndian.Uint16(b[pos:]))
+		pos += 2
+	}
+	if tm.Presence&PresenceInference != 0 {
+		tm.InferenceClass = b[pos]
+		tm.InferenceConf = b[pos+1]
+	}
+
+	return tm, nil
+}
+
+// presencePayloadSize returns the number of payload bytes required for the
+// given presence bitmask.
+func presencePayloadSize(presence uint16) int {
+	size := 0
+	if presence&PresencePosition != 0 {
+		size += 12 // int32 × 3
+	}
+	if presence&PresenceAttitude != 0 {
+		size += 6 // int16 × 3
+	}
+	if presence&PresenceAngVel != 0 {
+		size += 6 // int16 × 3
+	}
+	if presence&PresenceBatV != 0 {
+		size += 2
+	}
+	if presence&PresenceSolarV != 0 {
+		size += 2
+	}
+	if presence&PresenceTempC != 0 {
+		size += 2
+	}
+	if presence&PresenceRSSI != 0 {
+		size += 2
+	}
+	if presence&PresenceInference != 0 {
+		size += 2 // uint8 class + uint8 conf
+	}
+	return size
+}
