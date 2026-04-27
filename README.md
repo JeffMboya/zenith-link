@@ -2,7 +2,7 @@
 
 A satellite ground segment stack built from scratch in Go. It simulates an LEO spacecraft downlinking telemetry, a ground station receiving and authenticating it, an inter-satellite relay bridging contact gaps, and a 3D mission control dashboard — all wired together with a compact binary protocol and a full CCSDS implementation.
 
-I built this to understand what a real satellite link actually looks like at the byte level, and why JSON is a terrible idea over a constrained RF downlink. The engineering reasoning is in [`ENGINEERING_LOG.md`](ENGINEERING_LOG.md).
+I built this to understand what a real satellite link actually looks like at the byte level, and why JSON is a terrible idea over a constrained RF downlink.
 
 ---
 
