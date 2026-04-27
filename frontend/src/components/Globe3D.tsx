@@ -13,6 +13,7 @@ import { Viewer, Entity, PointGraphics, LabelGraphics, PolylineGraphics } from '
 import type { StateUpdate, GroundStation } from '../types'
 import type { OrbitalPos } from '../hooks/useOrbitalPosition'
 import { useForwardTrack } from '../hooks/useForwardTrack'
+import { useConstellation } from '../hooks/useConstellation'
 
 // Cesium Ion token — optional. Without it we fall back to bundled NaturalEarthII imagery.
 Ion.defaultAccessToken = (import.meta as unknown as { env: Record<string, string> }).env.VITE_CESIUM_TOKEN ?? ''
@@ -21,6 +22,14 @@ const GS_COLORS: Record<string, string> = {
   Nairobi:        '#00e878',
   Svalbard:       '#00c8f0',
   'Punta Arenas': '#c060f0',
+}
+
+// Colour per orbital plane — matches the constellation design comment in constellation.go
+const PLANE_COLOR: Record<string, Color> = {
+  A: Color.CYAN.withAlpha(0.9),                          // 51.6° ISS-like
+  B: Color.fromCssColorString('#00e878').withAlpha(0.9), // 97.5° SSO
+  C: Color.fromCssColorString('#f0a800').withAlpha(0.9), // 28.5° low-incl
+  D: Color.fromCssColorString('#c060f0').withAlpha(0.9), // 70°   high-incl
 }
 
 interface Props {
@@ -38,6 +47,7 @@ export function Globe3D({ data, orbitalPos }: Props) {
   const flew = useRef(false)
   const imageryInit = useRef(false)
   const forwardTrack = useForwardTrack()
+  const constellation = useConstellation()
 
   // On mount: swap imagery and set default full-globe camera position
   useEffect(() => {
@@ -183,6 +193,35 @@ export function Globe3D({ data, orbitalPos }: Props) {
           />
         </Entity>
       ))}
+
+      {/* Constellation members AT-2 through AT-16 — small dots, colour-coded by plane.
+          AT-1 is rendered above as the primary satellite with full telemetry. */}
+      {constellation.filter(s => s.id !== 'AT-1').map(s => {
+        const color = PLANE_COLOR[s.plane] ?? Color.WHITE.withAlpha(0.7)
+        return (
+          <Entity
+            key={s.id}
+            position={Cartesian3.fromDegrees(s.lon, s.lat, s.alt_m)}
+            name={s.id}
+          >
+            <PointGraphics
+              color={color}
+              pixelSize={6}
+              outlineColor={Color.BLACK.withAlpha(0.4)}
+              outlineWidth={1}
+            />
+            <LabelGraphics
+              text={s.id}
+              fillColor={color}
+              font="9px 'IBM Plex Mono', 'Courier New', monospace"
+              pixelOffset={new Cartesian2(10, 0)}
+              style={LabelStyle.FILL}
+              showBackground={false}
+              translucencyByDistance={undefined}
+            />
+          </Entity>
+        )
+      })}
     </Viewer>
   )
 }

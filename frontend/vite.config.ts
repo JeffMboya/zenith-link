@@ -14,6 +14,7 @@ export default defineConfig({
       '/windows': 'http://localhost:8080',
       '/state': 'http://localhost:8080',
       '/track': 'http://localhost:8080',
+      '/constellation': 'http://localhost:8080',
     },
   },
 })

@@ -29,6 +29,7 @@ func NewRouter(svc spacecraft.Service) http.Handler {
 	r.Post("/command", commandHandler(svc))
 	r.Get("/windows", windowsHandler(svc))
 	r.Get("/track", trackHandler(svc))
+	r.Get("/constellation", constellationHandler())
 
 	return r
 }
