@@ -54,57 +54,50 @@ export function Globe3D({ data, orbitalPos, constellation, selectedSatId, onSele
   const clickHandlerRef = useRef<ScreenSpaceEventHandler | null>(null)
   const forwardTrack = useForwardTrack()
 
-  // On mount: swap imagery, set initial camera, wire click handler
+  // Imagery + camera — no dependency array so it retries every render until the
+  // Cesium viewer is actually initialised (viewerRef.current may be null on first paint).
+  // imageryInit.current prevents it from running more than once.
   useEffect(() => {
     if (imageryInit.current) return
     const viewer = viewerRef.current?.cesiumElement
     if (!viewer) return
     imageryInit.current = true
 
-    // NaturalEarthII bundled imagery — no Cesium Ion token needed
     const layers = viewer.imageryLayers
     layers.removeAll()
     TileMapServiceImageryProvider.fromUrl(
       buildModuleUrl('Assets/Textures/NaturalEarthII'),
     ).then(p => layers.addImageryProvider(p)).catch(() => {})
 
-    // Full-globe overview on load
     viewer.camera.setView({
       destination: Cartesian3.fromDegrees(0, 20, 22_000_000),
     })
+  })
 
-    // Click handler — pick satellite entity by name
+  // Click handler — re-registers when onSelectSat changes so the closure is always fresh.
+  // Also no-ops until the viewer is ready.
+  useEffect(() => {
+    if (clickHandlerRef.current) {
+      clickHandlerRef.current.destroy()
+      clickHandlerRef.current = null
+    }
+    const viewer = viewerRef.current?.cesiumElement
+    if (!viewer) return
+
     const handler = new ScreenSpaceEventHandler(viewer.scene.canvas)
     handler.setInputAction((e: { position: Cartesian2 }) => {
-      const picked = viewer.scene.pick(e.position)
-      if (defined(picked) && picked.id) {
-        // picked.id is the Cesium Entity object; .name is the entity name we set
-        const name: string | undefined = picked.id.name
-        if (name && /^AT-\d+$/.test(name)) {
-          onSelectSat(name)
-        }
-      }
-    }, ScreenSpaceEventType.LEFT_CLICK)
-
-    clickHandlerRef.current = handler
-    return () => { handler.destroy() }
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [])
-
-  // Keep click handler's onSelectSat reference current without re-registering
-  useEffect(() => {
-    // Handler captures onSelectSat via closure — we update it by re-registering only
-    // if the viewer is already initialised and the handler exists.
-    const viewer = viewerRef.current?.cesiumElement
-    if (!viewer || !clickHandlerRef.current) return
-    clickHandlerRef.current.removeInputAction(ScreenSpaceEventType.LEFT_CLICK)
-    clickHandlerRef.current.setInputAction((e: { position: Cartesian2 }) => {
       const picked = viewer.scene.pick(e.position)
       if (defined(picked) && picked.id) {
         const name: string | undefined = picked.id.name
         if (name && /^AT-\d+$/.test(name)) onSelectSat(name)
       }
     }, ScreenSpaceEventType.LEFT_CLICK)
+
+    clickHandlerRef.current = handler
+    return () => {
+      handler.destroy()
+      clickHandlerRef.current = null
+    }
   }, [onSelectSat])
 
   // Fly to satellite once we have the first position — full globe view
