@@ -3,3 +3,5 @@ c/test_zenith_link
 *.o
 *.out
 .gstack/
+DESIGN.md
+TODOS.md
