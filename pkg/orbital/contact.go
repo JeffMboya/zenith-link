@@ -74,11 +74,8 @@ func ContactWindows(elem Elements, gsLat, gsLon float64, start, end time.Time, m
 	if minElevDeg < 0 || minElevDeg >= 90 {
 		return nil, errors.Wrap(errors.ErrInvalidField, errors.New("minElevDeg must be in [0, 90)"))
 	}
-	if gsLat < -90 || gsLat > 90 {
-		return nil, errors.Wrap(errors.ErrInvalidField, errors.New("gsLat must be in [-90, 90]"))
-	}
-	if gsLon < -180 || gsLon > 180 {
-		return nil, errors.Wrap(errors.ErrInvalidField, errors.New("gsLon must be in [-180, 180]"))
+	if err := validateGSCoords(gsLat, gsLon); err != nil {
+		return nil, err
 	}
 
 	minElevRad := minElevDeg * math.Pi / 180
@@ -129,11 +126,8 @@ func IsInContact(elem Elements, gsLat, gsLon float64, t time.Time, minElevDeg fl
 	if err := elem.Validate(); err != nil {
 		return false, err
 	}
-	if gsLat < -90 || gsLat > 90 {
-		return false, errors.Wrap(errors.ErrInvalidField, errors.New("gsLat must be in [-90, 90]"))
-	}
-	if gsLon < -180 || gsLon > 180 {
-		return false, errors.Wrap(errors.ErrInvalidField, errors.New("gsLon must be in [-180, 180]"))
+	if err := validateGSCoords(gsLat, gsLon); err != nil {
+		return false, err
 	}
 	if minElevDeg < 0 || minElevDeg >= 90 {
 		return false, errors.Wrap(errors.ErrInvalidField, errors.New("minElevDeg must be in [0, 90)"))
@@ -147,6 +141,10 @@ func IsInContact(elem Elements, gsLat, gsLon float64, t time.Time, minElevDeg fl
 	return elev >= minElevDeg*math.Pi/180, nil
 }
 
+func validateGSCoords(gsLat, gsLon float64) error {
+	if gsLat < -90 || gsLat > 90 {
+		return errors.Wrap(errors.ErrInvalidField, errors.New("gsLat must be in [-90, 90]"))
+	}
 	if gsLon < -180 || gsLon > 180 {
 		return errors.Wrap(errors.ErrInvalidField, errors.New("gsLon must be in [-180, 180]"))
 	}
