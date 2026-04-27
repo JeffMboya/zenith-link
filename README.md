@@ -130,29 +130,29 @@ go test ./... -race -count=1
 
 ---
 
-## API — quick reference
+## API
 
-**Spacecraft**
+**Spacecraft** — port 8080
 
-```
-GET  /health              → {"status":"ok"}
-GET  /telemetry           → decoded telemetry JSON
-GET  /state               → orbital state (ECI + geodetic)
-GET  /frame               → raw CCSDS TM Transfer Frame (binary)
-GET  /frame/zenith        → raw Zenith-Link v2 frame (binary)
-GET  /windows             → contact windows for a ground station
-POST /command             → send TC Transfer Frame (binary body)
-```
+| Method | Path            | Body / notes                              | Response                          |
+|--------|-----------------|-------------------------------------------|-----------------------------------|
+| GET    | `/health`       |                                           | `{"status":"ok"}`                 |
+| GET    | `/telemetry`    |                                           | Decoded telemetry fields as JSON  |
+| GET    | `/state`        |                                           | Orbital state — ECI + geodetic    |
+| GET    | `/frame`        |                                           | Raw CCSDS TM Transfer Frame       |
+| GET    | `/frame/zenith` |                                           | Raw Zenith-Link v2 frame          |
+| GET    | `/windows`      |                                           | Computed contact windows for GS   |
+| POST   | `/command`      | CCSDS TC Transfer Frame (`octet-stream`)  | `{"accepted":true,...}`           |
 
-**Ground station**
+**Ground station** — port 8081
 
-```
-GET  /health              → {"status":"ok"}
-GET  /latest              → latest received telemetry
-POST /receive             → ingest a raw Zenith-Link frame
-GET  /ws                  → WebSocket stream of telemetry updates
-POST /command             → forward TC command to spacecraft
-```
+| Method | Path       | Body / notes                                                   | Response                         |
+|--------|------------|----------------------------------------------------------------|----------------------------------|
+| GET    | `/health`  |                                                                | `{"status":"ok"}`                |
+| GET    | `/latest`  |                                                                | Latest received telemetry + meta |
+| POST   | `/receive` | Raw Zenith-Link frame (`octet-stream`); relay sets `X-Relayed-By` header | Decoded telemetry      |
+| GET    | `/ws`      | Upgrades to WebSocket                                          | Stream of telemetry updates      |
+| POST   | `/command` | `{"command_id":1,"payload_b64":"..."}` — forwarded to spacecraft as TC frame | `{"accepted":true,...}` |
 
 ---
 
