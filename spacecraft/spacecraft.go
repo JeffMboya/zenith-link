@@ -122,3 +122,67 @@ type service struct {
 }
 
 // New creates a new spacecraft Service.
+func New(cfg Config) Service {
+	return &service{
+		cfg:      cfg,
+		seqCount: cfg.SequenceCount,
+	}
+}
+
+func (s *service) Telemetry(ctx context.Context, t time.Time) (zenith.Telemetry, error) {
+	st, err := s.State(ctx, t)
+	if err != nil {
+		return zenith.Telemetry{}, err
+	}
+
+	s.mu.Lock()
+	seq := s.nextSeqLocked()
+	inf := s.lastInference
+	s.mu.Unlock()
+
+	presence := zenith.PresencePosition |
+		zenith.PresenceAttitude |
+		zenith.PresenceBatV |
+		zenith.PresenceSolarV |
+		zenith.PresenceTempC |
+		zenith.PresenceRSSI
+
+	batV := uint16(7400)
+	solarV := uint16(0)
+	if st.InSunlight {
+		solarV = 5200
+		batV = 7600
+	}
+
+	tm := zenith.Telemetry{
+		Sequence:  seq,
+		Timestamp: uint32(t.Unix()),
+		Presence:  presence,
+		LatE7:     int32(st.Geodetic.LatitudeDeg * 1e7),
+		LonE7:     int32(st.Geodetic.LongitudeDeg * 1e7),
+		AltM:      int32(st.Geodetic.AltitudeM),
+		AttRoll:   0,
+		AttPitch:  0,
+		AttYaw:    0,
+		BatV:      batV,
+		SolarV:    solarV,
+		TempC:     2000,
+		RSSI:      -850,
+	}
+
+	if inf != nil {
+		tm.Presence |= zenith.PresenceInference
+		tm.InferenceClass = inf.class
+		tm.InferenceConf = inf.conf
+	}
+
+	return tm, nil
+}
+
+func (s *service) TelemetryFrame(ctx context.Context, t time.Time) ([]byte, error) {
+	tm, err := s.Telemetry(ctx, t)
+	if err != nil {
+		return nil, err
+	}
+	return zenith.Encode(tm, s.cfg.HMACKey)
+}
