@@ -222,3 +222,145 @@ func ECEFToGeodetic(ecef ECIState) GeodeticPosition {
 
 // PropagateGeodetic propagates elements to time t and returns the geodetic
 // sub-satellite point. Combines Propagate → ECIToECEF → ECEFToGeodetic.
+func PropagateGeodetic(elem Elements, t time.Time) (GeodeticPosition, error) {
+	eci, err := Propagate(elem, t)
+	if err != nil {
+		return GeodeticPosition{}, err
+	}
+	ecef := ECIToECEF(eci, t)
+	return ECEFToGeodetic(ecef), nil
+}
+
+// InSunlight returns true when the satellite (given its ECI position at t) is
+// not in Earth's shadow, using a cylindrical shadow model.
+func InSunlight(eci ECIState, t time.Time) bool {
+	sunECI := sunPosition(t)
+
+	// Project the satellite position onto the sun-direction vector.
+	sLen := math.Sqrt(sunECI.X*sunECI.X + sunECI.Y*sunECI.Y + sunECI.Z*sunECI.Z)
+	sx, sy, sz := sunECI.X/sLen, sunECI.Y/sLen, sunECI.Z/sLen
+	dot := eci.X*sx + eci.Y*sy + eci.Z*sz
+
+	// If dot > 0 the satellite is on the sun-side of Earth: sunlit.
+	if dot > 0 {
+		return true
+	}
+
+	// Compute perpendicular distance from the satellite to the Earth-Sun line.
+	perpX := eci.X - dot*sx
+	perpY := eci.Y - dot*sy
+	perpZ := eci.Z - dot*sz
+	perpDist := math.Sqrt(perpX*perpX + perpY*perpY + perpZ*perpZ)
+
+	return perpDist > earthRadiusM
+}
+
+// OrbitalPeriod returns the period of the orbit [s] for the given semi-major axis [m].
+func OrbitalPeriod(semiMajorAxis float64) float64 {
+	return 2 * math.Pi * math.Sqrt(semiMajorAxis*semiMajorAxis*semiMajorAxis/earthMu)
+}
+
+// ─── internal helpers ────────────────────────────────────────────────────────
+
+// solveKepler solves Kepler's equation M = E - e·sin(E) via Newton-Raphson.
+// Converges quadratically; typical accuracy < 1e-12 rad.
+func solveKepler(M, e float64) (float64, error) {
+	E := M
+	for i := 0; i < 50; i++ {
+		dE := (M - E + e*math.Sin(E)) / (1 - e*math.Cos(E))
+		E += dE
+		if math.Abs(dE) < 1e-12 {
+			return E, nil
+		}
+	}
+	return 0, errors.Wrap(errors.ErrOrbitalPropagate,
+		errors.New("Kepler's equation did not converge"))
+}
+
+// perifocalToECI rotates position/velocity from the perifocal (PQW) frame to
+// the ECI frame given the three Euler angles (inc, RAAN, argP).
+func perifocalToECI(xP, yP, vxP, vyP, inc, raan, argP float64) ECIState {
+	cosR, sinR := math.Cos(raan), math.Sin(raan)
+	cosI, sinI := math.Cos(inc), math.Sin(inc)
+	cosW, sinW := math.Cos(argP), math.Sin(argP)
+
+	// Rotation matrix columns (transposed, so rows are the ECI unit vectors).
+	r11 := cosR*cosW - sinR*sinW*cosI
+	r12 := -cosR*sinW - sinR*cosW*cosI
+	r21 := sinR*cosW + cosR*sinW*cosI
+	r22 := -sinR*sinW + cosR*cosW*cosI
+	r31 := sinW * sinI
+	r32 := cosW * sinI
+
+	return ECIState{
+		X:  r11*xP + r12*yP,
+		Y:  r21*xP + r22*yP,
+		Z:  r31*xP + r32*yP,
+		VX: r11*vxP + r12*vyP,
+		VY: r21*vxP + r22*vyP,
+		VZ: r31*vxP + r32*vyP,
+	}
+}
+
+// gmst returns the Greenwich Mean Sidereal Time [rad] at time t using the
+// IAU 1982 formula (accurate to ~0.1 s over several decades).
+func gmst(t time.Time) float64 {
+	// Julian centuries since J2000.0.
+	jd := julianDate(t)
+	T := (jd - 2451545.0) / 36525.0
+
+	// GMST in seconds of time at 0h UT1.
+	gmstSec := 24110.54841 +
+		8640184.812866*T +
+		0.093104*T*T -
+		6.2e-6*T*T*T
+
+	// Add fractional day contribution.
+	ut1 := float64(t.Hour()*3600+t.Minute()*60+t.Second()) +
+		float64(t.Nanosecond())*1e-9
+	gmstSec += ut1 * 1.00273790935
+
+	// Convert to radians and normalise to [0, 2π).
+	return normalise(gmstSec * 2 * math.Pi / 86400)
+}
+
+// julianDate computes the Julian Date for t.
+func julianDate(t time.Time) float64 {
+	// Days since J2000.0 = JD 2451545.0.
+	return 2451545.0 + t.Sub(j2000).Hours()/24.0
+}
+
+// sunPosition returns a low-precision ECI position vector for the Sun at time t.
+// Accurate to ~1°; sufficient for eclipse detection.
+func sunPosition(t time.Time) ECIState {
+	jd := julianDate(t)
+	n := jd - 2451545.0 // days since J2000.0
+
+	// Mean longitude and mean anomaly [deg].
+	L := normalise(math.Mod(280.460+0.9856474*n, 360) * math.Pi / 180)
+	g := normalise(math.Mod(357.528+0.9856003*n, 360) * math.Pi / 180)
+
+	// Ecliptic longitude [rad].
+	lambda := L + 1.915*math.Pi/180*math.Sin(g) + 0.020*math.Pi/180*math.Sin(2*g)
+
+	// Obliquity of ecliptic [rad].
+	eps := (23.439 - 0.0000004*n) * math.Pi / 180
+
+	// Sun distance [m].
+	dist := (1.000140612 - 0.016708617*math.Cos(g) - 0.000139589*math.Cos(2*g)) * auMetres
+
+	return ECIState{
+		X: dist * math.Cos(lambda),
+		Y: dist * math.Cos(eps) * math.Sin(lambda),
+		Z: dist * math.Sin(eps) * math.Sin(lambda),
+	}
+}
+
+// normalise wraps an angle to [0, 2π).
+func normalise(angle float64) float64 {
+	angle = math.Mod(angle, 2*math.Pi)
+	if angle < 0 {
+		angle += 2 * math.Pi
+	}
+	return angle
+}
