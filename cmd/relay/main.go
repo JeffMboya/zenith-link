@@ -185,6 +185,10 @@ func fetchAndStore(ctx context.Context, client *http.Client, cfg config, buf *re
 	}
 	defer resp.Body.Close()
 
+	if resp.StatusCode != http.StatusOK {
+		logger.Warn("relay poll: SC-1 returned non-200", slog.Int("status", resp.StatusCode))
+		return
+	}
 
 	frame, err := io.ReadAll(io.LimitReader(resp.Body, 8192))
 	if err != nil {
