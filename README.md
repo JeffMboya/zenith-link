@@ -94,8 +94,6 @@ SC1_ADDR=http://localhost:8080 GS_ADDR=http://localhost:8081 go run ./cmd/relay
 go test ./... -race -count=1
 ```
 
-All 13 packages have tests. The race detector is clean.
-
 ---
 
 ## Environment variables
