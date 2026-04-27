@@ -395,6 +395,32 @@ func TestExtractSpacePackets(t *testing.T) {
 			fhp:       2, // first 2 bytes are tail of previous packet
 			wantPkts:  1,
 		},
+		{
+			desc:      "FHPNoPacketStart with no pending — discards entire data field",
+			dataField: pkt1,
+			fhp:       tmframe.FHPNoPacketStart,
+			pending:   nil,
+			wantPkts:  0,
+		},
+		{
+			desc:      "complete pending packet (remaining=0) emits packet without error",
+			// pkt1 is 9 bytes; passing it as pending with empty dataField means
+			// remaining=0 → packet is already complete and should be emitted.
+			pending:   append([]byte{}, pkt1...),
+			dataField: []byte{},
+			fhp:       tmframe.FHPNoPacketStart,
+			wantPkts:  1,
+		},
+		{
+			desc: "malformed pending packet: more bytes buffered than declared length — returns error",
+			// pkt1 is 9 bytes with PacketDataLength=2 (totalLen=9).
+			// Appending one extra byte gives len(pending)=10 > totalLen=9 → remaining=-1 → error.
+			pending:   append(append([]byte{}, pkt1...), 0xFF),
+			dataField: []byte{},
+			fhp:       tmframe.FHPNoPacketStart,
+			wantPkts:  0,
+			wantErr:   true,
+		},
 	}
 
 	for _, tc := range tests {
