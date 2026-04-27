@@ -48,11 +48,11 @@ The protocol is also implemented in C (`c/`) as a reference. Both implementation
 
 ## Services and ports
 
-| Service      | Port | Role |
-|--------------|------|------|
-| spacecraft   | 8080 | Telemetry source, TC command sink |
-| groundstation| 8081 | Frame receiver, WebSocket stream |
-| relay        | 8082 | ISL store-and-forward (health only) |
+| Service       | Port | Role                                |
+|---------------|------|-------------------------------------|
+| spacecraft    | 8080 | Telemetry source, TC command sink   |
+| groundstation | 8081 | Frame receiver, WebSocket stream    |
+| relay         | 8082 | ISL store-and-forward (health only) |
 
 The frontend is static — serve `frontend/dist/` from any web server or open `index.html` directly.
 
@@ -100,33 +100,33 @@ go test ./... -race -count=1
 
 **Spacecraft (`cmd/spacecraft`)**
 
-| Variable | Default | Description |
-|----------|---------|-------------|
-| `ZENITH_HMAC_KEY` | required | Shared HMAC key |
-| `SPACECRAFT_ADDR` | `:8080` | Listen address |
-| `SPACECRAFT_SCID` | `90` | 10-bit CCSDS Spacecraft ID |
-| `SPACECRAFT_VCID` | `0` | 6-bit Virtual Channel ID |
-| `SPACECRAFT_APID` | `256` | Telemetry Space Packet APID |
+| Variable             | Default               | Description                             |
+|----------------------|-----------------------|-----------------------------------------|
+| `ZENITH_HMAC_KEY`    | required              | Shared HMAC key                         |
+| `SPACECRAFT_ADDR`    | `:8080`               | Listen address                          |
+| `SPACECRAFT_SCID`    | `90`                  | 10-bit CCSDS Spacecraft ID              |
+| `SPACECRAFT_VCID`    | `0`                   | 6-bit Virtual Channel ID                |
+| `SPACECRAFT_APID`    | `256`                 | Telemetry Space Packet APID             |
 
 **Ground station (`cmd/groundstation`)**
 
-| Variable | Default | Description |
-|----------|---------|-------------|
-| `ZENITH_HMAC_KEY` | required | Shared HMAC key — must match spacecraft |
-| `GROUNDSTATION_ADDR` | `:8081` | Listen address |
-| `SC_ADDR` | required | Spacecraft base URL for TC forwarding |
-| `GS_LAT` / `GS_LON` | `-1.2864` / `36.8172` | Ground station coordinates (Nairobi) |
-| `GS_MAX_SUBSCRIBERS` | `64` | Max concurrent WebSocket connections |
+| Variable             | Default               | Description                             |
+|----------------------|-----------------------|-----------------------------------------|
+| `ZENITH_HMAC_KEY`    | required              | Shared HMAC key — must match spacecraft |
+| `GROUNDSTATION_ADDR` | `:8081`               | Listen address                          |
+| `SC_ADDR`            | required              | Spacecraft base URL for TC forwarding   |
+| `GS_LAT` / `GS_LON`  | `-1.2864` / `36.8172` | Ground station coordinates (Nairobi)    |
+| `GS_MAX_SUBSCRIBERS` | `64`                  | Max concurrent WebSocket connections    |
 
 **Relay (`cmd/relay`)**
 
-| Variable | Default | Description |
-|----------|---------|-------------|
-| `SC1_ADDR` | required | Spacecraft base URL |
-| `GS_ADDR` | required | Ground station base URL |
-| `RELAY_SCID` | `91` | This relay's CCSDS Spacecraft ID |
-| `MIN_ELEV_DEG` | `5.0` | Elevation mask for contact windows |
-| `POLL_INTERVAL_SEC` | `30` | How often to poll the spacecraft |
+| Variable             | Default               | Description                             |
+|----------------------|-----------------------|-----------------------------------------|
+| `SC1_ADDR`           | required              | Spacecraft base URL                     |
+| `GS_ADDR`            | required              | Ground station base URL                 |
+| `RELAY_SCID`         | `91`                  | This relay's CCSDS Spacecraft ID        |
+| `MIN_ELEV_DEG`       | `5.0`                 | Elevation mask for contact windows      |
+| `POLL_INTERVAL_SEC`  | `30`                  | How often to poll the spacecraft        |
 
 ---
 
