@@ -92,3 +92,133 @@ func (e Elements) Validate() error {
 
 // Propagate computes the ECI state (position + velocity) at time t using the
 // two-body solution with first-order J2 secular corrections.
+func Propagate(elem Elements, t time.Time) (ECIState, error) {
+	if err := elem.Validate(); err != nil {
+		return ECIState{}, err
+	}
+
+	dt := t.Sub(elem.Epoch).Seconds()
+	a := elem.SemiMajorAxis
+	e := elem.Eccentricity
+	inc := elem.Inclination
+
+	// Mean motion [rad/s].
+	n := math.Sqrt(earthMu / (a * a * a))
+
+	// J2 secular rates.
+	p := a * (1 - e*e)
+	rp := earthRadiusM / p
+	j2Factor := -1.5 * earthJ2 * rp * rp * n
+
+	dRAAN := j2Factor * math.Cos(inc)
+	dArgP := j2Factor * (2.5*math.Sin(inc)*math.Sin(inc) - 2)
+
+	// Updated angles.
+	raan := normalise(elem.RAAN + dRAAN*dt)
+	argP := normalise(elem.ArgPerigee + dArgP*dt)
+	M := normalise(elem.MeanAnomaly + n*dt)
+
+	// Solve Kepler's equation M = E - e·sin(E) via Newton-Raphson.
+	E, err := solveKepler(M, e)
+	if err != nil {
+		return ECIState{}, err
+	}
+
+	// True anomaly.
+	nu := 2 * math.Atan2(
+		math.Sqrt(1+e)*math.Sin(E/2),
+		math.Sqrt(1-e)*math.Cos(E/2),
+	)
+
+	// Radius [m] and radial speed [m/s].
+	r := a * (1 - e*math.Cos(E))
+	h := math.Sqrt(earthMu * p)
+
+	// Position and velocity in the perifocal (PQW) frame.
+	cosNu, sinNu := math.Cos(nu), math.Sin(nu)
+	xPQW := r * cosNu
+	yPQW := r * sinNu
+	vxPQW := -earthMu / h * sinNu
+	vyPQW := earthMu / h * (e + cosNu)
+
+	// Rotation from perifocal to ECI.
+	state := perifocalToECI(xPQW, yPQW, vxPQW, vyPQW, inc, raan, argP)
+	return state, nil
+}
+
+// ECIToECEF converts an ECI position to ECEF at time t using Greenwich Mean
+// Sidereal Time (GMST).
+func ECIToECEF(eci ECIState, t time.Time) ECIState {
+	theta := gmst(t)
+	cosT, sinT := math.Cos(theta), math.Sin(theta)
+
+	return ECIState{
+		X:  cosT*eci.X + sinT*eci.Y,
+		Y:  -sinT*eci.X + cosT*eci.Y,
+		Z:  eci.Z,
+		VX: cosT*eci.VX + sinT*eci.VY - earthOmega*sinT*eci.X + earthOmega*cosT*eci.Y,
+		VY: -sinT*eci.VX + cosT*eci.VY - earthOmega*cosT*eci.X - earthOmega*sinT*eci.Y,
+		VZ: eci.VZ,
+	}
+}
+
+// ECEFToGeodetic converts an ECEF position to WGS-84 geodetic coordinates
+// using Bowring's iterative method (converges to sub-millimetre accuracy in
+// 2–3 iterations for near-Earth orbits).
+// The polar singularity (p ≈ 0) is handled separately.
+func ECEFToGeodetic(ecef ECIState) GeodeticPosition {
+	x, y, z := ecef.X, ecef.Y, ecef.Z
+
+	a := earthRadiusM
+	f := earthFlattening
+	b := a * (1 - f)     // semi-minor axis
+	e2 := 2*f - f*f      // first eccentricity squared
+	ep2 := e2 / (1 - e2) // second eccentricity squared
+
+	p := math.Sqrt(x*x + y*y)
+	lon := math.Atan2(y, x)
+
+	// Polar singularity: avoid dividing by cos(lat) ≈ 0.
+	if p < 1.0 {
+		lat := math.Pi / 2
+		if z < 0 {
+			lat = -math.Pi / 2
+		}
+		alt := math.Abs(z) - b
+		return GeodeticPosition{
+			LatitudeDeg:  lat * 180 / math.Pi,
+			LongitudeDeg: lon * 180 / math.Pi,
+			AltitudeM:    alt,
+		}
+	}
+
+	// Initial estimate (Bowring's method).
+	theta := math.Atan2(z*a, p*b)
+	sinT, cosT := math.Sin(theta), math.Cos(theta)
+
+	lat := math.Atan2(
+		z+ep2*b*sinT*sinT*sinT,
+		p-e2*a*cosT*cosT*cosT,
+	)
+
+	// Iterate for sub-millimetre accuracy.
+	for i := 0; i < 3; i++ {
+		sinL := math.Sin(lat)
+		N := a / math.Sqrt(1-e2*sinL*sinL)
+		lat = math.Atan2(z+e2*N*sinL, p)
+	}
+
+	sinL := math.Sin(lat)
+	cosL := math.Cos(lat)
+	N := a / math.Sqrt(1-e2*sinL*sinL)
+	alt := p/cosL - N
+
+	return GeodeticPosition{
+		LatitudeDeg:  lat * 180 / math.Pi,
+		LongitudeDeg: lon * 180 / math.Pi,
+		AltitudeM:    alt,
+	}
+}
+
+// PropagateGeodetic propagates elements to time t and returns the geodetic
+// sub-satellite point. Combines Propagate → ECIToECEF → ECEFToGeodetic.
