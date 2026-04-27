@@ -131,3 +131,67 @@ type Telemetry struct {
 // Encode serialises a Telemetry struct into a Zenith-Link v2 frame and
 // appends the 32-byte HMAC-SHA256 trailer using hmacKey.
 // hmacKey must not be nil or empty.
+func Encode(tm Telemetry, hmacKey []byte) ([]byte, error) {
+	if len(hmacKey) == 0 {
+		return nil, errors.Wrap(errors.ErrHMACFailure, errors.New("HMAC key must not be empty"))
+	}
+
+	payloadSize := presencePayloadSize(tm.Presence)
+	totalSize := HeaderSize + PresenceSize + payloadSize + HMACSize
+
+	buf := make([]byte, 0, totalSize)
+
+	// ─── Header ──────────────────────────────────────────────────────────────
+	buf = binary.BigEndian.AppendUint16(buf, Magic)
+	buf = append(buf, Version)
+	buf = append(buf, tm.Flags)
+	buf = binary.BigEndian.AppendUint16(buf, tm.Sequence)
+	buf = binary.BigEndian.AppendUint32(buf, tm.Timestamp)
+
+	// ─── Presence bitmask ────────────────────────────────────────────────────
+	buf = binary.BigEndian.AppendUint16(buf, tm.Presence)
+
+	// ─── Payload ─────────────────────────────────────────────────────────────
+	if tm.Presence&PresencePosition != 0 {
+		buf = binary.BigEndian.AppendUint32(buf, uint32(tm.LatE7))
+		buf = binary.BigEndian.AppendUint32(buf, uint32(tm.LonE7))
+		buf = binary.BigEndian.AppendUint32(buf, uint32(tm.AltM))
+	}
+	if tm.Presence&PresenceAttitude != 0 {
+		buf = binary.BigEndian.AppendUint16(buf, uint16(tm.AttRoll))
+		buf = binary.BigEndian.AppendUint16(buf, uint16(tm.AttPitch))
+		buf = binary.BigEndian.AppendUint16(buf, uint16(tm.AttYaw))
+	}
+	if tm.Presence&PresenceAngVel != 0 {
+		buf = binary.BigEndian.AppendUint16(buf, uint16(tm.AngVelX))
+		buf = binary.BigEndian.AppendUint16(buf, uint16(tm.AngVelY))
+		buf = binary.BigEndian.AppendUint16(buf, uint16(tm.AngVelZ))
+	}
+	if tm.Presence&PresenceBatV != 0 {
+		buf = binary.BigEndian.AppendUint16(buf, tm.BatV)
+	}
+	if tm.Presence&PresenceSolarV != 0 {
+		buf = binary.BigEndian.AppendUint16(buf, tm.SolarV)
+	}
+	if tm.Presence&PresenceTempC != 0 {
+		buf = binary.BigEndian.AppendUint16(buf, uint16(tm.TempC))
+	}
+	if tm.Presence&PresenceRSSI != 0 {
+		buf = binary.BigEndian.AppendUint16(buf, uint16(tm.RSSI))
+	}
+	if tm.Presence&PresenceInference != 0 {
+		buf = append(buf, tm.InferenceClass, tm.InferenceConf)
+	}
+
+	// ─── HMAC-SHA256 trailer ─────────────────────────────────────────────────
+	mac := hmac.New(sha256.New, hmacKey)
+	mac.Write(buf)
+	buf = mac.Sum(buf)
+
+	return buf, nil
+}
+
+// Decode parses and authenticates a Zenith-Link v2 frame.
+// Returns ErrHMACFailure if the HMAC does not match.
+// Returns ErrBadMagic if the magic number is wrong.
+// Returns ErrBadVersion if the version byte is not 2.
