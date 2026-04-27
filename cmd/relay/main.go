@@ -235,7 +235,7 @@ func forwardLoop(ctx context.Context, client *http.Client, cfg config, elem orbi
 				continue
 			}
 
-			if err := forwardFrame(ctx, client, cfg, frame, logger); err != nil {
+			if err := forwardFrame(ctx, client, cfg, frame); err != nil {
 				logger.Warn("relay: forward failed", slog.Any("error", err))
 			} else {
 				lastForwarded = time.Now()
@@ -250,7 +250,7 @@ func forwardLoop(ctx context.Context, client *http.Client, cfg config, elem orbi
 	}
 }
 
-func forwardFrame(ctx context.Context, client *http.Client, cfg config, frame []byte, _ *slog.Logger) error {
+func forwardFrame(ctx context.Context, client *http.Client, cfg config, frame []byte) error {
 	url := cfg.GSAddr + "/receive"
 	req, err := http.NewRequestWithContext(ctx, http.MethodPost, url,
 		bytes.NewReader(frame))
