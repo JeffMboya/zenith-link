@@ -62,3 +62,41 @@ type service struct {
 }
 
 // New creates a new ground station Service.
+func New(cfg Config) Service {
+	if cfg.MaxSubscribers <= 0 {
+		cfg.MaxSubscribers = 64
+	}
+	return &service{cfg: cfg}
+}
+
+func (s *service) Receive(ctx context.Context, rawFrame []byte) (zenith.Telemetry, error) {
+	tm, err := zenith.Decode(rawFrame, s.cfg.HMACKey)
+	if err != nil {
+		return zenith.Telemetry{}, err
+	}
+
+	s.mu.Lock()
+	s.frameCount++
+	s.latest = &LatestState{
+		Telemetry:   tm,
+		ReceivedAt:  time.Now().UTC(),
+		FrameNumber: s.frameCount,
+	}
+	subs := make([]chan zenith.Telemetry, len(s.subscribers))
+	copy(subs, s.subscribers)
+	s.mu.Unlock()
+
+	// Non-blocking broadcast to internal fan-out channels. These channels are
+	// never closed by anyone other than the pipe goroutine in Subscribe (after
+	// removal from s.subscribers), so no concurrent-close risk here.
+	for _, ch := range subs {
+		select {
+		case ch <- tm:
+		default:
+			// Slow subscriber: frame dropped rather than blocking.
+		}
+	}
+
+	return tm, nil
+}
+
