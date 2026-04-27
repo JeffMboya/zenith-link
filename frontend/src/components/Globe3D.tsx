@@ -39,26 +39,30 @@ export function Globe3D({ data, orbitalPos }: Props) {
   const imageryInit = useRef(false)
   const forwardTrack = useForwardTrack()
 
-  // Replace Ion default imagery with bundled NaturalEarthII (no token needed)
+  // On mount: swap imagery and set default full-globe camera position
   useEffect(() => {
     if (imageryInit.current) return
     const viewer = viewerRef.current?.cesiumElement
     if (!viewer) return
     imageryInit.current = true
 
+    // Replace Ion base layer with bundled NaturalEarthII (no token needed)
     const layers = viewer.imageryLayers
-    layers.removeAll()   // drop the Ion base layer
-
+    layers.removeAll()
     TileMapServiceImageryProvider.fromUrl(
       buildModuleUrl('Assets/Textures/NaturalEarthII'),
     ).then(provider => {
       layers.addImageryProvider(provider)
-    }).catch(() => {
-      // If even the bundled texture fails, leave the sphere unskinned
+    }).catch(() => { /* leave unskinned if assets unavailable */ })
+
+    // Start at a full-globe overview — Earth as a sphere against the starfield.
+    // 22,000 km altitude shows the complete disc with clear space around it.
+    viewer.camera.setView({
+      destination: Cartesian3.fromDegrees(0, 20, 22_000_000),
     })
   })
 
-  // Fly to satellite once we have the first position
+  // Once the satellite position arrives, fly to it while keeping the full globe in view
   const firstPos = orbitalPos ?? (data?.satellite
     ? { lat: data.satellite.latitude, lon: data.satellite.longitude, alt: data.satellite.altitude }
     : null)
@@ -69,7 +73,8 @@ export function Globe3D({ data, orbitalPos }: Props) {
     if (!viewer) return
     flew.current = true
     viewer.camera.flyTo({
-      destination: Cartesian3.fromDegrees(firstPos.lon, firstPos.lat, firstPos.alt + 4_000_000),
+      // 20,000 km altitude keeps the full globe visible with the satellite in frame
+      destination: Cartesian3.fromDegrees(firstPos.lon, firstPos.lat, 20_000_000),
       duration: 2,
     })
   }, [firstPos])
