@@ -7,15 +7,17 @@ import {
   LabelStyle,
   TileMapServiceImageryProvider,
   buildModuleUrl,
+  ScreenSpaceEventHandler,
+  ScreenSpaceEventType,
+  defined,
 } from 'cesium'
 import type { Viewer as CesiumViewer } from 'cesium'
 import { Viewer, Entity, PointGraphics, LabelGraphics, PolylineGraphics } from 'resium'
 import type { StateUpdate, GroundStation } from '../types'
 import type { OrbitalPos } from '../hooks/useOrbitalPosition'
+import type { ConstellationSat } from '../hooks/useConstellation'
 import { useForwardTrack } from '../hooks/useForwardTrack'
-import { useConstellation } from '../hooks/useConstellation'
 
-// Cesium Ion token — optional. Without it we fall back to bundled NaturalEarthII imagery.
 Ion.defaultAccessToken = (import.meta as unknown as { env: Record<string, string> }).env.VITE_CESIUM_TOKEN ?? ''
 
 const GS_COLORS: Record<string, string> = {
@@ -24,17 +26,20 @@ const GS_COLORS: Record<string, string> = {
   'Punta Arenas': '#c060f0',
 }
 
-// Colour per orbital plane — matches the constellation design comment in constellation.go
+// Plane colours for constellation members
 const PLANE_COLOR: Record<string, Color> = {
-  A: Color.CYAN.withAlpha(0.9),                          // 51.6° ISS-like
-  B: Color.fromCssColorString('#00e878').withAlpha(0.9), // 97.5° SSO
-  C: Color.fromCssColorString('#f0a800').withAlpha(0.9), // 28.5° low-incl
-  D: Color.fromCssColorString('#c060f0').withAlpha(0.9), // 70°   high-incl
+  A: Color.CYAN.withAlpha(0.9),
+  B: Color.fromCssColorString('#00e878').withAlpha(0.9),
+  C: Color.fromCssColorString('#f0a800').withAlpha(0.9),
+  D: Color.fromCssColorString('#c060f0').withAlpha(0.9),
 }
 
 interface Props {
   data: StateUpdate | null
   orbitalPos: OrbitalPos | null
+  constellation: ConstellationSat[]
+  selectedSatId: string
+  onSelectSat: (id: string) => void
 }
 
 function gsColor(gs: GroundStation): Color {
@@ -42,37 +47,67 @@ function gsColor(gs: GroundStation): Color {
   return Color.fromCssColorString(hex).withAlpha(gs.inView ? 1.0 : 0.4)
 }
 
-export function Globe3D({ data, orbitalPos }: Props) {
+export function Globe3D({ data, orbitalPos, constellation, selectedSatId, onSelectSat }: Props) {
   const viewerRef = useRef<{ cesiumElement: CesiumViewer } | null>(null)
   const flew = useRef(false)
   const imageryInit = useRef(false)
+  const clickHandlerRef = useRef<ScreenSpaceEventHandler | null>(null)
   const forwardTrack = useForwardTrack()
-  const constellation = useConstellation()
 
-  // On mount: swap imagery and set default full-globe camera position
+  // On mount: swap imagery, set initial camera, wire click handler
   useEffect(() => {
     if (imageryInit.current) return
     const viewer = viewerRef.current?.cesiumElement
     if (!viewer) return
     imageryInit.current = true
 
-    // Replace Ion base layer with bundled NaturalEarthII (no token needed)
+    // NaturalEarthII bundled imagery — no Cesium Ion token needed
     const layers = viewer.imageryLayers
     layers.removeAll()
     TileMapServiceImageryProvider.fromUrl(
       buildModuleUrl('Assets/Textures/NaturalEarthII'),
-    ).then(provider => {
-      layers.addImageryProvider(provider)
-    }).catch(() => { /* leave unskinned if assets unavailable */ })
+    ).then(p => layers.addImageryProvider(p)).catch(() => {})
 
-    // Start at a full-globe overview — Earth as a sphere against the starfield.
-    // 22,000 km altitude shows the complete disc with clear space around it.
+    // Full-globe overview on load
     viewer.camera.setView({
       destination: Cartesian3.fromDegrees(0, 20, 22_000_000),
     })
-  })
 
-  // Once the satellite position arrives, fly to it while keeping the full globe in view
+    // Click handler — pick satellite entity by name
+    const handler = new ScreenSpaceEventHandler(viewer.scene.canvas)
+    handler.setInputAction((e: { position: Cartesian2 }) => {
+      const picked = viewer.scene.pick(e.position)
+      if (defined(picked) && picked.id) {
+        // picked.id is the Cesium Entity object; .name is the entity name we set
+        const name: string | undefined = picked.id.name
+        if (name && /^AT-\d+$/.test(name)) {
+          onSelectSat(name)
+        }
+      }
+    }, ScreenSpaceEventType.LEFT_CLICK)
+
+    clickHandlerRef.current = handler
+    return () => { handler.destroy() }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
+
+  // Keep click handler's onSelectSat reference current without re-registering
+  useEffect(() => {
+    // Handler captures onSelectSat via closure — we update it by re-registering only
+    // if the viewer is already initialised and the handler exists.
+    const viewer = viewerRef.current?.cesiumElement
+    if (!viewer || !clickHandlerRef.current) return
+    clickHandlerRef.current.removeInputAction(ScreenSpaceEventType.LEFT_CLICK)
+    clickHandlerRef.current.setInputAction((e: { position: Cartesian2 }) => {
+      const picked = viewer.scene.pick(e.position)
+      if (defined(picked) && picked.id) {
+        const name: string | undefined = picked.id.name
+        if (name && /^AT-\d+$/.test(name)) onSelectSat(name)
+      }
+    }, ScreenSpaceEventType.LEFT_CLICK)
+  }, [onSelectSat])
+
+  // Fly to satellite once we have the first position — full globe view
   const firstPos = orbitalPos ?? (data?.satellite
     ? { lat: data.satellite.latitude, lon: data.satellite.longitude, alt: data.satellite.altitude }
     : null)
@@ -83,24 +118,20 @@ export function Globe3D({ data, orbitalPos }: Props) {
     if (!viewer) return
     flew.current = true
     viewer.camera.flyTo({
-      // 20,000 km altitude keeps the full globe visible with the satellite in frame
       destination: Cartesian3.fromDegrees(firstPos.lon, firstPos.lat, 20_000_000),
       duration: 2,
     })
   }, [firstPos])
 
-  // Satellite position: 1Hz orbital feed > last WS telemetry > default
+  // AT-1 position (primary, 1Hz feed)
   const satLat = orbitalPos?.lat ?? data?.satellite.latitude ?? 0
   const satLon = orbitalPos?.lon ?? data?.satellite.longitude ?? 0
   const satAlt = orbitalPos?.alt ?? data?.satellite.altitude ?? 550_000
   const satPos = Cartesian3.fromDegrees(satLon, satLat, satAlt)
 
-  // Past ground track from telemetry history
   const pastTrack = (data?.ground_track ?? []).map(p =>
     Cartesian3.fromDegrees(p.lon, p.lat, p.alt)
   )
-
-  // Forward predicted track (90 min, 30s intervals)
   const futureTrack = forwardTrack.map(p =>
     Cartesian3.fromDegrees(p.lon, p.lat, p.alt_m)
   )
@@ -120,35 +151,37 @@ export function Globe3D({ data, orbitalPos }: Props) {
       infoBox={false}
       style={{ position: 'fixed', top: 0, left: 0, width: '100%', height: '100%' }}
     >
-      {/* Forward predicted track — dim, dashed-feel (low alpha) */}
+      {/* Forward track — white, low alpha; stands out against both ocean and land */}
       {futureTrack.length >= 2 && (
         <Entity name="forward-track">
           <PolylineGraphics
             positions={futureTrack}
-            width={1}
-            material={Color.CYAN.withAlpha(0.18)}
+            width={1.2}
+            material={Color.WHITE.withAlpha(0.25)}
           />
         </Entity>
       )}
 
-      {/* Past ground track */}
+      {/* Past ground track — white, brighter */}
       {pastTrack.length >= 2 && (
         <Entity name="past-track">
           <PolylineGraphics
             positions={pastTrack}
-            width={1.5}
-            material={Color.CYAN.withAlpha(0.45)}
+            width={1.8}
+            material={Color.WHITE.withAlpha(0.6)}
           />
         </Entity>
       )}
 
-      {/* Satellite marker */}
+      {/* AT-1 — primary satellite, cyan, larger, always labelled */}
       <Entity position={satPos} name="AT-1">
         <PointGraphics
           color={Color.CYAN}
-          pixelSize={10}
-          outlineColor={Color.fromCssColorString('#004060')}
-          outlineWidth={2}
+          pixelSize={selectedSatId === 'AT-1' ? 12 : 10}
+          outlineColor={selectedSatId === 'AT-1'
+            ? Color.WHITE.withAlpha(0.9)
+            : Color.fromCssColorString('#004060')}
+          outlineWidth={selectedSatId === 'AT-1' ? 2.5 : 2}
         />
         <LabelGraphics
           text="AT-1"
@@ -183,7 +216,7 @@ export function Globe3D({ data, orbitalPos }: Props) {
         </Entity>
       ))}
 
-      {/* Contact lines when ground station is in view */}
+      {/* Contact lines */}
       {data?.ground_stations.filter(gs => gs.inView).map(gs => (
         <Entity key={`link-${gs.name}`} name={`link-${gs.name}`}>
           <PolylineGraphics
@@ -194,10 +227,10 @@ export function Globe3D({ data, orbitalPos }: Props) {
         </Entity>
       ))}
 
-      {/* Constellation members AT-2 through AT-16 — small dots, colour-coded by plane.
-          AT-1 is rendered above as the primary satellite with full telemetry. */}
+      {/* Constellation members AT-2 through AT-16 */}
       {constellation.filter(s => s.id !== 'AT-1').map(s => {
         const color = PLANE_COLOR[s.plane] ?? Color.WHITE.withAlpha(0.7)
+        const isSelected = s.id === selectedSatId
         return (
           <Entity
             key={s.id}
@@ -206,9 +239,9 @@ export function Globe3D({ data, orbitalPos }: Props) {
           >
             <PointGraphics
               color={color}
-              pixelSize={6}
-              outlineColor={Color.BLACK.withAlpha(0.4)}
-              outlineWidth={1}
+              pixelSize={isSelected ? 10 : 6}
+              outlineColor={isSelected ? Color.WHITE.withAlpha(0.9) : Color.BLACK.withAlpha(0.4)}
+              outlineWidth={isSelected ? 2 : 1}
             />
             <LabelGraphics
               text={s.id}
@@ -217,7 +250,6 @@ export function Globe3D({ data, orbitalPos }: Props) {
               pixelOffset={new Cartesian2(10, 0)}
               style={LabelStyle.FILL}
               showBackground={false}
-              translucencyByDistance={undefined}
             />
           </Entity>
         )
