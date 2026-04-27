@@ -137,3 +137,101 @@ func DecodePrimary(b []byte) (PrimaryHeader, error) {
 	h.FirstHeaderPointer = w2 & 0x07FF
 	return h, nil
 }
+
+// Encode serialises a TransferFrame into a fixed-size byte slice.
+//
+// frameSize is the total frame length in bytes (primary header + data field +
+// optional OCF + 2-byte FECF). The data field is zero-padded if shorter than
+// frameSize requires.
+func Encode(f TransferFrame, frameSize int) ([]byte, error) {
+	overhead := PrimaryHeaderSize + FECFSize
+	if f.Primary.OCFFlag {
+		overhead += OCFSize
+	}
+	if frameSize < overhead+MinDataFieldSize {
+		return nil, errors.Wrap(errors.ErrFrameTooSmall,
+			errors.New("frameSize too small for header + at least 1 data byte + FECF"))
+	}
+	if frameSize > MaxFrameSize {
+		return nil, errors.ErrFrameTooLarge
+	}
+
+	dataFieldSize := frameSize - overhead
+	if len(f.DataField) > dataFieldSize {
+		return nil, errors.Wrap(errors.ErrFrameTooLarge,
+			errors.New("DataField exceeds available space in frame"))
+	}
+
+	buf := make([]byte, frameSize)
+
+	hdr, err := EncodePrimary(f.Primary)
+	if err != nil {
+		return nil, err
+	}
+	copy(buf[:PrimaryHeaderSize], hdr[:])
+
+	// Data field (zero-padded to dataFieldSize).
+	copy(buf[PrimaryHeaderSize:PrimaryHeaderSize+dataFieldSize], f.DataField)
+
+	// Operational Control Field.
+	if f.Primary.OCFFlag {
+		if f.OCF == nil {
+			return nil, errors.Wrap(errors.ErrInvalidField, errors.New("OCFFlag set but OCF is nil"))
+		}
+		copy(buf[PrimaryHeaderSize+dataFieldSize:], f.OCF[:])
+	}
+
+	// Frame Error Control Field — CRC over everything except the 2-byte FECF.
+	fecfPos := frameSize - FECFSize
+	v := crc.CCITT16(buf[:fecfPos])
+	buf[fecfPos] = byte(v >> 8)
+	buf[fecfPos+1] = byte(v)
+
+	return buf, nil
+}
+
+// Decode parses a complete TM Transfer Frame from b, verifying the FECF CRC.
+// The OCF presence is determined from the OCFFlag in the primary header.
+func Decode(b []byte) (TransferFrame, error) {
+	if len(b) < MinFrameSize {
+		return TransferFrame{}, errors.Wrap(errors.ErrFrameTooSmall,
+			errors.New("TM frame shorter than minimum 9 bytes"))
+	}
+	if len(b) > MaxFrameSize {
+		return TransferFrame{}, errors.ErrFrameTooLarge
+	}
+
+	if !crc.Verify(b) {
+		return TransferFrame{}, errors.ErrCRCMismatch
+	}
+
+	primary, err := DecodePrimary(b[:PrimaryHeaderSize])
+	if err != nil {
+		return TransferFrame{}, err
+	}
+
+	// Determine data field boundaries.
+	trailerSize := FECFSize
+	if primary.OCFFlag {
+		trailerSize += OCFSize
+	}
+	dataEnd := len(b) - trailerSize
+	if dataEnd <= PrimaryHeaderSize {
+		return TransferFrame{}, errors.Wrap(errors.ErrMalformedFrame,
+			errors.New("no room for data field after headers and trailer"))
+	}
+
+	tf := TransferFrame{
+		Primary:   primary,
+		DataField: make([]byte, dataEnd-PrimaryHeaderSize),
+	}
+	copy(tf.DataField, b[PrimaryHeaderSize:dataEnd])
+
+	if primary.OCFFlag {
+		var ocf [OCFSize]byte
+		copy(ocf[:], b[dataEnd:dataEnd+OCFSize])
+		tf.OCF = &ocf
+	}
+
+	return tf, nil
+}
