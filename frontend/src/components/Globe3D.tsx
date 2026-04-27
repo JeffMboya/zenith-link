@@ -10,6 +10,7 @@ import {
   ScreenSpaceEventHandler,
   ScreenSpaceEventType,
   defined,
+  NearFarScalar,
 } from 'cesium'
 import type { Viewer as CesiumViewer } from 'cesium'
 import { Viewer, Entity, PointGraphics, LabelGraphics, PolylineGraphics } from 'resium'
@@ -172,7 +173,7 @@ export function Globe3D({ data, orbitalPos, constellation, selectedSatId, onSele
         </Entity>
       )}
 
-      {/* AT-1 — primary satellite, cyan, larger, always labelled */}
+      {/* AT-1 — primary satellite, always labelled */}
       <Entity position={satPos} name="AT-1">
         <PointGraphics
           color={Color.CYAN}
@@ -185,10 +186,12 @@ export function Globe3D({ data, orbitalPos, constellation, selectedSatId, onSele
         <LabelGraphics
           text="AT-1"
           fillColor={Color.CYAN}
-          font="11px 'IBM Plex Mono', 'Courier New', monospace"
+          font="12px 'IBM Plex Mono', 'Courier New', monospace"
           pixelOffset={new Cartesian2(14, 0)}
           style={LabelStyle.FILL}
           showBackground={false}
+          disableDepthTestDistance={Number.POSITIVE_INFINITY}
+          scaleByDistance={new NearFarScalar(1e6, 1.0, 8e6, 0.8)}
         />
       </Entity>
 
@@ -208,9 +211,10 @@ export function Globe3D({ data, orbitalPos, constellation, selectedSatId, onSele
           <LabelGraphics
             text={gs.name.toUpperCase()}
             fillColor={gsColor(gs)}
-            font="9px 'IBM Plex Mono', 'Courier New', monospace"
+            font="10px 'IBM Plex Mono', 'Courier New', monospace"
             pixelOffset={new Cartesian2(12, 0)}
             style={LabelStyle.FILL}
+            disableDepthTestDistance={Number.POSITIVE_INFINITY}
           />
         </Entity>
       ))}
@@ -226,10 +230,12 @@ export function Globe3D({ data, orbitalPos, constellation, selectedSatId, onSele
         </Entity>
       ))}
 
-      {/* Constellation members AT-2 through AT-16 */}
+      {/* Constellation members — dot only by default; label only on selected satellite */}
       {constellation.filter(s => s.id !== 'AT-1').map(s => {
         const color = PLANE_COLOR[s.plane] ?? Color.WHITE.withAlpha(0.7)
         const isSelected = s.id === selectedSatId
+        // For TLE satellites, shorten the display name (e.g. "ISS (ZARYA)" → "ISS")
+        const shortName = s.id.split(' ')[0].replace(/[()]/g, '').slice(0, 8)
         return (
           <Entity
             key={s.id}
@@ -238,17 +244,19 @@ export function Globe3D({ data, orbitalPos, constellation, selectedSatId, onSele
           >
             <PointGraphics
               color={color}
-              pixelSize={isSelected ? 10 : 6}
-              outlineColor={isSelected ? Color.WHITE.withAlpha(0.9) : Color.BLACK.withAlpha(0.4)}
+              pixelSize={isSelected ? 10 : 5}
+              outlineColor={isSelected ? Color.WHITE.withAlpha(0.9) : Color.BLACK.withAlpha(0.3)}
               outlineWidth={isSelected ? 2 : 1}
             />
             <LabelGraphics
-              text={s.id}
+              text={shortName}
               fillColor={color}
-              font="9px 'IBM Plex Mono', 'Courier New', monospace"
-              pixelOffset={new Cartesian2(10, 0)}
+              font="12px 'IBM Plex Mono', 'Courier New', monospace"
+              pixelOffset={new Cartesian2(12, 0)}
               style={LabelStyle.FILL}
               showBackground={false}
+              disableDepthTestDistance={Number.POSITIVE_INFINITY}
+              scaleByDistance={new NearFarScalar(1e6, 1.0, 8e6, 0.8)}
             />
           </Entity>
         )
