@@ -100,3 +100,65 @@ func (s *service) Receive(ctx context.Context, rawFrame []byte) (zenith.Telemetr
 	return tm, nil
 }
 
+func (s *service) Latest(_ context.Context) (LatestState, error) {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	if s.latest == nil {
+		return LatestState{}, ErrNoData
+	}
+	return *s.latest, nil
+}
+
+// Subscribe registers a new telemetry subscriber. It returns a public channel
+// that the caller owns. A pipe goroutine forwards frames from an internal
+// fan-out channel to the public channel, and closes the public channel when
+// ctx is cancelled. The internal channel is removed from the broadcast list
+// before it is closed, so Receive() never sends to a closed channel.
+func (s *service) Subscribe(ctx context.Context) (<-chan zenith.Telemetry, error) {
+	s.mu.Lock()
+	if len(s.subscribers) >= s.cfg.MaxSubscribers {
+		s.mu.Unlock()
+		return nil, errors.Wrap(errors.ErrInvalidField,
+			errors.New("maximum subscriber limit reached"))
+	}
+	internal := make(chan zenith.Telemetry, 16)
+	s.subscribers = append(s.subscribers, internal)
+	s.mu.Unlock()
+
+	public := make(chan zenith.Telemetry, 16)
+
+	go func() {
+		defer func() {
+			// Remove the internal channel from the broadcast list so future
+			// Receive() snapshots do not include it.
+			s.mu.Lock()
+			for i, sub := range s.subscribers {
+				if sub == internal {
+					s.subscribers = append(s.subscribers[:i], s.subscribers[i+1:]...)
+					break
+				}
+			}
+			s.mu.Unlock()
+			// Do NOT close internal here. In-flight Receive() goroutines may
+			// have already snapshotted it; those sends are non-blocking, so
+			// they will either succeed (frames discarded into a now-unread
+			// buffer) or drop via the default branch — no concurrent-close panic.
+			// internal is garbage-collected once all snapshots release it.
+			close(public)
+		}()
+
+		for {
+			select {
+			case <-ctx.Done():
+				return
+			case tm := <-internal:
+				select {
+				case public <- tm:
+				default:
+				}
+			}
+		}
+	}()
+
+	return public, nil
+}
