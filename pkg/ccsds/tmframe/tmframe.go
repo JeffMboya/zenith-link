@@ -268,8 +268,8 @@ func ExtractSpacePackets(dataField []byte, fhp uint16, pending []byte) (pkts [][
 			}
 			totalLen := spacepacket.PrimaryHeaderSize + int(ph.PacketDataLength) + 1
 			remaining := totalLen - len(pending)
-			if remaining <= 0 {
-				return nil, nil, errors.New("tmframe: malformed pending packet: declared length less than already buffered bytes")
+			if remaining < 0 {
+				return nil, nil, errors.New("tmframe: malformed pending packet: more bytes buffered than declared length")
 			}
 			if remaining > len(dataField)-pos {
 				// Still incomplete — keep accumulating.
