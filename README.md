@@ -98,7 +98,7 @@ go test ./... -race -count=1
 
 ## Environment variables
 
-**Spacecraft (`cmd/spacecraft`)**
+**Spacecraft**
 
 | Variable             | Default               | Description                             |
 |----------------------|-----------------------|-----------------------------------------|
@@ -108,7 +108,7 @@ go test ./... -race -count=1
 | `SPACECRAFT_VCID`    | `0`                   | 6-bit Virtual Channel ID                |
 | `SPACECRAFT_APID`    | `256`                 | Telemetry Space Packet APID             |
 
-**Ground station (`cmd/groundstation`)**
+**Ground station**
 
 | Variable             | Default               | Description                             |
 |----------------------|-----------------------|-----------------------------------------|
@@ -118,7 +118,7 @@ go test ./... -race -count=1
 | `GS_LAT` / `GS_LON`  | `-1.2864` / `36.8172` | Ground station coordinates (Nairobi)    |
 | `GS_MAX_SUBSCRIBERS` | `64`                  | Max concurrent WebSocket connections    |
 
-**Relay (`cmd/relay`)**
+**Relay**
 
 | Variable             | Default               | Description                             |
 |----------------------|-----------------------|-----------------------------------------|
