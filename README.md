@@ -163,9 +163,3 @@ POST /command             → forward TC command to spacecraft
 - HMAC is truncated to 8 bytes. Fine for a simulation; not a production cryptographic boundary.
 - The AI inference is a stub — it cycles through seven hardcoded class names to simulate earth observation results. There is no actual model.
 - The frontend assumes the ground station WebSocket is at `ws://localhost:8081/ws`. There is no configuration UI.
-
----
-
-## Author
-
-Built by [Jeff Mboya](https://github.com/JeffMboya)
