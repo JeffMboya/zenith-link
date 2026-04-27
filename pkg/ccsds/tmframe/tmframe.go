@@ -235,3 +235,88 @@ func Decode(b []byte) (TransferFrame, error) {
 
 	return tf, nil
 }
+
+// ExtractSpacePackets extracts Space Packets from the data field of a
+// TM Transfer Frame, using the FirstHeaderPointer from the primary header.
+//
+// pending is a partial packet received from the previous frame (may be nil).
+// It returns the completed packets and any leftover bytes that belong to the
+// next frame.
+func ExtractSpacePackets(dataField []byte, fhp uint16, pending []byte) (pkts [][]byte, leftover []byte, err error) {
+	if fhp == FHPOnlyIdle {
+		return nil, nil, nil
+	}
+
+	pos := 0
+	// If there is a continuation from the previous frame, consume it first.
+	if len(pending) > 0 {
+		// How many bytes does the pending packet still need?
+		if len(pending) < spacepacket.PrimaryHeaderSize {
+			// We don't yet have the full primary header to know the length.
+			// Accumulate until we do.
+			needed := spacepacket.PrimaryHeaderSize - len(pending)
+			if needed > len(dataField) {
+				return nil, append(pending, dataField...), nil
+			}
+			pending = append(pending, dataField[:needed]...)
+			pos = needed
+		}
+		if len(pending) >= spacepacket.PrimaryHeaderSize {
+			ph, decErr := spacepacket.DecodePrimary(pending[:spacepacket.PrimaryHeaderSize])
+			if decErr != nil {
+				return nil, nil, decErr
+			}
+			totalLen := spacepacket.PrimaryHeaderSize + int(ph.PacketDataLength) + 1
+			remaining := totalLen - len(pending)
+			if remaining <= 0 {
+				return nil, nil, errors.New("tmframe: malformed pending packet: declared length less than already buffered bytes")
+			}
+			if remaining > len(dataField)-pos {
+				// Still incomplete — keep accumulating.
+				return nil, append(pending, dataField[pos:]...), nil
+			}
+			pending = append(pending, dataField[pos:pos+remaining]...)
+			pkts = append(pkts, pending)
+			pos += remaining
+		}
+	} else if fhp == FHPNoPacketStart {
+		// No pending data and no packet start in this frame — the entire
+		// data field is a continuation of a packet whose start was lost.
+		// Discard: we have no way to reassemble it.
+		return nil, nil, nil
+	} else {
+		// FHP points to the first new packet start; skip the tail bytes
+		// of the previous frame's last packet.
+		pos = int(fhp)
+	}
+
+	// Extract complete packets sequentially.
+	for pos < len(dataField) {
+		if len(dataField)-pos < spacepacket.PrimaryHeaderSize {
+			leftover = append(leftover, dataField[pos:]...)
+			break
+		}
+		ph, decErr := spacepacket.DecodePrimary(dataField[pos : pos+spacepacket.PrimaryHeaderSize])
+		if decErr != nil {
+			return nil, nil, decErr
+		}
+		totalLen := spacepacket.PrimaryHeaderSize + int(ph.PacketDataLength) + 1
+		if pos+totalLen > len(dataField) {
+			// Packet straddles frame boundary.
+			leftover = append(leftover, dataField[pos:]...)
+			break
+		}
+		pkts = append(pkts, dataField[pos:pos+totalLen])
+		pos += totalLen
+	}
+
+	return pkts, leftover, nil
+}
+
+func boolBit(v bool) uint16 {
+	if v {
+		return 1
+	}
+	return 0
+}
+
