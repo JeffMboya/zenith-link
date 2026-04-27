@@ -214,6 +214,7 @@ func wsHandler(svc groundstation.Service) http.HandlerFunc {
 		ctx := r.Context()
 		ch, err := svc.Subscribe(ctx)
 		if err != nil {
+			_ = conn.SetWriteDeadline(time.Now().Add(5 * time.Second))
 			_ = conn.WriteMessage(websocket.CloseMessage,
 				websocket.FormatCloseMessage(websocket.CloseInternalServerErr, err.Error()))
 			return
