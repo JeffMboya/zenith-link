@@ -54,7 +54,9 @@ function toStateUpdate(raw: RawTelemetry, track: { lat: number; lon: number; alt
     },
     ground_track: track,
     ground_stations: [
-      { name: 'Nairobi', lat: -1.2864, lon: 36.8172, inView: false },
+      { name: 'Nairobi',       lat: -1.2864, lon:  36.8172, inView: false },
+      { name: 'Svalbard',      lat: 78.2297, lon:  15.3975, inView: false },
+      { name: 'Punta Arenas',  lat: -53.163, lon: -70.9171, inView: false },
     ],
   }
 }
