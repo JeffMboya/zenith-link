@@ -1,0 +1,60 @@
+version: "3.9"
+
+x-common: &common
+  restart: unless-stopped
+  environment:
+    - ZENITH_HMAC_KEY=${ZENITH_HMAC_KEY:?ZENITH_HMAC_KEY must be set}
+
+services:
+  spacecraft:
+    <<: *common
+    build:
+      context: ..
+      dockerfile: docker/Dockerfile.spacecraft
+    ports:
+      - "8080:8080"
+    environment:
+      - ZENITH_HMAC_KEY=${ZENITH_HMAC_KEY}
+      - SPACECRAFT_ADDR=:8080
+      - SPACECRAFT_SCID=90
+      - SPACECRAFT_VCID=0
+      - SPACECRAFT_APID=256
+
+  groundstation:
+    <<: *common
+    build:
+      context: ..
+      dockerfile: docker/Dockerfile.groundstation
+    ports:
+      - "8081:8081"
+    environment:
+      - ZENITH_HMAC_KEY=${ZENITH_HMAC_KEY}
+      - GROUNDSTATION_ADDR=:8081
+      - GS_MAX_SUBSCRIBERS=64
+      - GS_LAT=-1.2864
+      - GS_LON=36.8172
+      - SC_ADDR=http://spacecraft:8080
+      - SC_SCID=90
+      - SC_VCID=0
+    depends_on:
+      - spacecraft
+
+  relay:
+    restart: unless-stopped
+    build:
+      context: ..
+      dockerfile: docker/Dockerfile.relay
+    ports:
+      - "8082:8082"
+    environment:
+      - RELAY_ADDR=:8082
+      - SC1_ADDR=http://spacecraft:8080
+      - GS_ADDR=http://groundstation:8081
+      - RELAY_SCID=91
+      - GS_LAT=-1.2864
+      - GS_LON=36.8172
+      - MIN_ELEV_DEG=5.0
+      - POLL_INTERVAL_SEC=30
+    depends_on:
+      - spacecraft
+      - groundstation
