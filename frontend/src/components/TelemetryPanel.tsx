@@ -29,7 +29,7 @@ function Section({ title, children }: { title: string; children: React.ReactNode
 export function TelemetryPanel({ state }: Props) {
   const [open, setOpen] = useState(true)
 
-  const battColor = state && state.battery_voltage > 22 ? '#00e878' : '#f0a800'
+  const battColor = state && state.battery_voltage > 7.8 ? '#00e878' : state && state.battery_voltage > 7.0 ? '#f0a800' : '#f03040'
   const rssiColor = state && state.rssi > -90 ? '#00e878' : state && state.rssi > -110 ? '#f0a800' : '#f03040'
 
   return (
@@ -82,7 +82,7 @@ export function TelemetryPanel({ state }: Props) {
 
               <Section title="POWER">
                 <div style={{ display: 'flex', justifyContent: 'space-around', marginBottom: 4 }}>
-                  <ArcGauge value={state.battery_voltage} min={18} max={30}  label="BATTERY"   unit="V" color={battColor} size={80} />
+                  <ArcGauge value={state.battery_voltage} min={6.0} max={8.4} label="BATTERY"   unit="V" color={battColor} size={80} />
                   <ArcGauge value={state.solar_voltage}   min={0}  max={35}  label="SOLAR"     unit="V" color={state.solar_voltage > 5 ? '#00e878' : '#f0a800'} size={80} />
                 </div>
               </Section>
