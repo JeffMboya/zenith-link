@@ -26,12 +26,18 @@ const GS_COLORS: Record<string, string> = {
   'Punta Arenas': '#c060f0',
 }
 
-// Plane colours for constellation members
+// Colour per orbital plane (simulated) or TLE group
 const PLANE_COLOR: Record<string, Color> = {
+  // Simulated planes
   A: Color.CYAN.withAlpha(0.9),
   B: Color.fromCssColorString('#00e878').withAlpha(0.9),
   C: Color.fromCssColorString('#f0a800').withAlpha(0.9),
   D: Color.fromCssColorString('#c060f0').withAlpha(0.9),
+  // TLE groups — single colour per group
+  stations: Color.WHITE.withAlpha(0.95),
+  starlink: Color.fromCssColorString('#00c8f0').withAlpha(0.8),
+  planet:   Color.fromCssColorString('#00e8c0').withAlpha(0.8),
+  active:   Color.fromCssColorString('#f0a800').withAlpha(0.7),
 }
 
 interface Props {

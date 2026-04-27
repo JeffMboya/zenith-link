@@ -62,16 +62,19 @@ var (
 )
 
 type constellationSatPos struct {
-	ID      string  `json:"id"`
-	Lat     float64 `json:"lat"`
-	Lon     float64 `json:"lon"`
-	AltM    float64 `json:"alt_m"`
-	PlaneID string  `json:"plane"` // A / B / C / D
+	ID     string  `json:"id"`
+	Lat    float64 `json:"lat"`
+	Lon    float64 `json:"lon"`
+	AltM   float64 `json:"alt_m"`
+	Plane  string  `json:"plane"` // A/B/C/D for simulated; group name for TLE
+	Source string  `json:"source"` // "sim" | "tle"
 }
 
 type constellationRes struct {
 	Satellites []constellationSatPos `json:"satellites"`
 	Time       string                `json:"time"`
+	Source     string                `json:"source"` // "sim" | "tle"
+	Group      string                `json:"group"`  // e.g. "starlink"
 }
 
 var satPlane = map[string]string{
@@ -88,14 +91,46 @@ func planeID(id string) string {
 	return "A"
 }
 
-// constellationHandler propagates all 16 orbital elements to the current time
-// and returns their geodetic positions. No spacecraft service dependency — pure
-// propagation from the fixed element table above.
+// constellationHandler propagates orbital elements to the current time and returns
+// geodetic positions.  When TLE data has been imported, it uses those elements;
+// otherwise it falls back to the hardcoded 16-satellite simulation.
 func constellationHandler() http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		now := time.Now().UTC()
-		positions := make([]constellationSatPos, 0, len(constellation16))
 
+		// Check if TLE data is loaded
+		tleRecs, tleGroup := tleEntries()
+
+		if len(tleRecs) > 0 {
+			// ── TLE mode ──────────────────────────────────────────────────
+			positions := make([]constellationSatPos, 0, len(tleRecs))
+			for _, rec := range tleRecs {
+				eci, err := orbital.Propagate(rec.Elements, now)
+				if err != nil {
+					continue
+				}
+				ecef := orbital.ECIToECEF(eci, now)
+				geo := orbital.ECEFToGeodetic(ecef)
+				positions = append(positions, constellationSatPos{
+					ID:     rec.Name,
+					Lat:    geo.LatitudeDeg,
+					Lon:    geo.LongitudeDeg,
+					AltM:   geo.AltitudeM,
+					Plane:  tleGroup, // group name used as plane label in frontend
+					Source: "tle",
+				})
+			}
+			writeJSON(w, http.StatusOK, constellationRes{
+				Satellites: positions,
+				Time:       now.Format(time.RFC3339),
+				Source:     "tle",
+				Group:      tleGroup,
+			})
+			return
+		}
+
+		// ── Simulation mode (default 16-satellite constellation) ──────────
+		positions := make([]constellationSatPos, 0, len(constellation16))
 		for _, s := range constellation16 {
 			elem := orbital.Elements{
 				SemiMajorAxis: s.sma,
@@ -112,19 +147,20 @@ func constellationHandler() http.HandlerFunc {
 			}
 			ecef := orbital.ECIToECEF(eci, now)
 			geo := orbital.ECEFToGeodetic(ecef)
-
 			positions = append(positions, constellationSatPos{
-				ID:      s.id,
-				Lat:     geo.LatitudeDeg,
-				Lon:     geo.LongitudeDeg,
-				AltM:    geo.AltitudeM,
-				PlaneID: planeID(s.id),
+				ID:     s.id,
+				Lat:    geo.LatitudeDeg,
+				Lon:    geo.LongitudeDeg,
+				AltM:   geo.AltitudeM,
+				Plane:  planeID(s.id),
+				Source: "sim",
 			})
 		}
-
 		writeJSON(w, http.StatusOK, constellationRes{
 			Satellites: positions,
 			Time:       now.Format(time.RFC3339),
+			Source:     "sim",
+			Group:      "",
 		})
 	}
 }

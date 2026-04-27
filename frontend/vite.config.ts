@@ -15,6 +15,7 @@ export default defineConfig({
       '/state': 'http://localhost:8080',
       '/track': 'http://localhost:8080',
       '/constellation': 'http://localhost:8080',
+      '/tle': 'http://localhost:8080',
     },
   },
 })

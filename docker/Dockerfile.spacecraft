@@ -6,7 +6,9 @@ COPY . .
 RUN CGO_ENABLED=0 GOOS=linux go build -trimpath -ldflags="-s -w" \
     -o /bin/spacecraft ./cmd/spacecraft
 
-FROM scratch
+FROM alpine:3.19
+# ca-certificates needed for outbound HTTPS (CelesTrak TLE import)
+RUN apk add --no-cache ca-certificates
 COPY --from=builder /bin/spacecraft /spacecraft
 EXPOSE 8080
 ENTRYPOINT ["/spacecraft"]

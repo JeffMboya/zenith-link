@@ -21,18 +21,25 @@ export default function App() {
     window.addEventListener('select-sat', handler)
     return () => window.removeEventListener('select-sat', handler)
   }, [])
-  const selectedSat = constellation.find(s => s.id === selectedSatId) ?? null
+  const selectedSat = constellation.satellites.find(s => s.id === selectedSatId) ?? null
 
   return (
     <>
       <Globe3D
         data={latest}
         orbitalPos={orbitalPos}
-        constellation={constellation}
+        constellation={constellation.satellites}
         selectedSatId={selectedSatId}
         onSelectSat={setSelectedSatId}
       />
-      <KPIBar metrics={latest?.metrics ?? null} connected={connected} linkLost={linkLost} />
+      <KPIBar
+        metrics={latest?.metrics ?? null}
+        connected={connected}
+        linkLost={linkLost}
+        tleSource={constellation.source}
+        tleGroup={constellation.group}
+        tleCount={constellation.satellites.length}
+      />
       <TelemetryPanel
         state={latest?.satellite ?? null}
         selectedSatId={selectedSatId}

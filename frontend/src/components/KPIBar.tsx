@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react'
 import type { LinkMetrics } from '../types'
+import { TleSelector } from './TleSelector'
 
 const LINK_COST_PER_MB = 15
 const WINDOWS_POLL_MS = 30_000
@@ -8,6 +9,9 @@ interface Props {
   metrics: LinkMetrics | null
   connected: boolean
   linkLost: boolean
+  tleSource: 'sim' | 'tle'
+  tleGroup: string
+  tleCount: number
 }
 
 interface KPI {
@@ -83,7 +87,7 @@ function kpis(m: LinkMetrics): KPI[] {
   ]
 }
 
-export function KPIBar({ metrics, connected, linkLost }: Props) {
+export function KPIBar({ metrics, connected, linkLost, tleSource, tleGroup, tleCount }: Props) {
   const { label: passLabel, color: passColor, urgent: passUrgent } = useNextPass()
 
   const offlineText = linkLost ? 'LINK LOST' : 'AWAITING LINK ACQUISITION...'
@@ -107,6 +111,11 @@ export function KPIBar({ metrics, connected, linkLost }: Props) {
         <span style={{ color: 'var(--text-dim)', fontSize: 9, letterSpacing: 2, marginTop: 2 }}>
           MISSION CONTROL
         </span>
+      </div>
+
+      {/* TLE source selector */}
+      <div style={{ padding: '0 12px', borderRight: '1px solid var(--border)' }}>
+        <TleSelector source={tleSource} group={tleGroup} count={tleCount} />
       </div>
 
       {/* KPI tiles */}
