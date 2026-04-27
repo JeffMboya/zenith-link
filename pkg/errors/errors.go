@@ -71,3 +71,20 @@ func Contains(err, target error) bool {
 func Is(err, target error) bool { return Contains(err, target) }
 
 // Sentinel errors used across the entire Zenith-Link stack.
+var (
+	ErrMalformedFrame   = New("malformed frame")
+	ErrBadMagic         = New("bad magic word")
+	ErrBadVersion       = New("unsupported protocol version")
+	ErrHMACFailure      = New("HMAC authentication failure")
+	ErrCRCMismatch      = New("CRC mismatch")
+	ErrSequenceGap      = New("sequence number gap")
+	ErrBufferTooSmall   = New("buffer too small")
+	ErrInvalidAPID      = New("invalid APID")
+	ErrInvalidSeqCount  = New("sequence count exceeds 14-bit maximum")
+	ErrDataLenMismatch  = New("packet data length field mismatch")
+	ErrFrameTooLarge    = New("frame exceeds CCSDS maximum")
+	ErrFrameTooSmall    = New("frame below CCSDS minimum")
+	ErrInvalidField     = New("invalid field value")
+	ErrOrbitalPropagate = New("orbital propagation failure")
+	ErrCommandUnknown   = New("unknown command ID")
+)
