@@ -6,6 +6,7 @@ import { Globe3D } from './components/Globe3D'
 import { KPIBar } from './components/KPIBar'
 import { TelemetryPanel } from './components/TelemetryPanel'
 import { CommandPanel } from './components/CommandPanel'
+import { AutonomyFeed } from './components/AutonomyFeed'
 
 export default function App() {
   const { latest, connected, linkLost } = useWebSocket()
@@ -34,6 +35,7 @@ export default function App() {
       />
       <KPIBar
         metrics={latest?.metrics ?? null}
+        satellite={latest?.satellite ?? null}
         connected={connected}
         linkLost={linkLost}
         tleSource={constellation.source}
@@ -46,6 +48,7 @@ export default function App() {
         selectedSat={selectedSat}
       />
       <CommandPanel />
+      <AutonomyFeed />
     </>
   )
 }

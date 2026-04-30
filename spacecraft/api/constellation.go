@@ -77,18 +77,58 @@ type constellationRes struct {
 	Group      string                `json:"group"`  // e.g. "starlink"
 }
 
+// islRelays defines the two ISL relay satellites that always appear on the globe
+// regardless of TLE mode. SC-2 matches cmd/relay/main.go orbital elements;
+// SC-3 matches cmd/relay2/main.go (550 km, 53° inclination, RAAN=180°).
+var islRelays = []constellationSat{
+	{"SC-2", 7_078_000, 0.0001, 98.0 * deg,  90 * deg, 60 * deg}, // 700 km polar, sun-sync
+	{"SC-3", 6_928_000, 0.0001, 53.0 * deg, 180 * deg, 45 * deg}, // 550 km, 53° medium-inc
+}
+
 var satPlane = map[string]string{
 	"AT-1": "A", "AT-2": "A", "AT-3": "A", "AT-4": "A",
 	"AT-5": "B", "AT-6": "B", "AT-7": "B", "AT-8": "B",
 	"AT-9": "C", "AT-10": "C", "AT-11": "C", "AT-12": "C",
 	"AT-13": "D", "AT-14": "D", "AT-15": "D", "AT-16": "D",
+	"SC-2": "ISL", "SC-3": "ISL",
 }
 
 func planeID(id string) string {
 	if p, ok := satPlane[id]; ok {
 		return p
 	}
-	return "A"
+	return ""
+}
+
+// islPositions propagates the two ISL relay satellites to now and returns their positions.
+func islPositions(now time.Time) []constellationSatPos {
+	out := make([]constellationSatPos, 0, len(islRelays))
+	for _, s := range islRelays {
+		elem := orbital.Elements{
+			SemiMajorAxis: s.sma,
+			Eccentricity:  s.ecc,
+			Inclination:   s.inc,
+			RAAN:          s.ran,
+			ArgPerigee:    0,
+			MeanAnomaly:   s.ma,
+			Epoch:         constellationEpoch,
+		}
+		eci, err := orbital.Propagate(elem, now)
+		if err != nil {
+			continue
+		}
+		ecef := orbital.ECIToECEF(eci, now)
+		geo := orbital.ECEFToGeodetic(ecef)
+		out = append(out, constellationSatPos{
+			ID:     s.id,
+			Lat:    geo.LatitudeDeg,
+			Lon:    geo.LongitudeDeg,
+			AltM:   geo.AltitudeM,
+			Plane:  "ISL",
+			Source: "sim",
+		})
+	}
+	return out
 }
 
 // constellationHandler propagates orbital elements to the current time and returns
@@ -120,6 +160,7 @@ func constellationHandler() http.HandlerFunc {
 					Source: "tle",
 				})
 			}
+			positions = append(positions, islPositions(now)...)
 			writeJSON(w, http.StatusOK, constellationRes{
 				Satellites: positions,
 				Time:       now.Format(time.RFC3339),
@@ -156,6 +197,7 @@ func constellationHandler() http.HandlerFunc {
 				Source: "sim",
 			})
 		}
+		positions = append(positions, islPositions(now)...)
 		writeJSON(w, http.StatusOK, constellationRes{
 			Satellites: positions,
 			Time:       now.Format(time.RFC3339),

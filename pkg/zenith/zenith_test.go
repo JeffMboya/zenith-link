@@ -404,15 +404,15 @@ func TestInferenceClassName(t *testing.T) {
 		class uint8
 		want  string
 	}{
-		{0, "cloud"},
-		{1, "ocean"},
-		{2, "land"},
-		{3, "urban"},
-		{4, "vegetation"},
-		{5, "ice"},
-		{6, "desert"},
-		{7, "unknown"},
-		{255, "unknown"}, // out-of-range clamps to unknown
+		{0, "NOMINAL"},
+		{1, "POWER_ANOMALY"},
+		{2, "THERMAL_EVENT"},
+		{3, "ATTITUDE_INSTABILITY"},
+		{4, "RF_DEGRADATION"},
+		{5, "ECLIPSE_ENTRY"},
+		{6, "ECLIPSE_COMPUTE"},
+		{7, "UNKNOWN"},
+		{255, "UNKNOWN"}, // out-of-range clamps to UNKNOWN
 	}
 	for _, tc := range tests {
 		t.Run(tc.want, func(t *testing.T) {

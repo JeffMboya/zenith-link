@@ -107,8 +107,8 @@ func main() {
 	// Forward buffered frames to GS when in contact.
 	go forwardLoop(ctx, client, cfg, relayElements, buf, logger)
 
-	// Minimal health endpoint so Docker can check liveness.
 	mux := http.NewServeMux()
+
 	mux.HandleFunc("/health", func(w http.ResponseWriter, _ *http.Request) {
 		frame, fetchedAt := buf.load()
 		w.Header().Set("Content-Type", "application/json")
@@ -120,6 +120,20 @@ func main() {
 			"buffer_has_data": len(frame) > 0,
 			"last_fetch_at":   fetchedAt,
 		})
+	})
+
+	// Expose buffered SC-1 frame for peer-to-peer relay routing.
+	// Relay-2 (SC-3) calls this to fetch a frame from SC-2's buffer before
+	// polling SC-1 directly, reducing load on the primary spacecraft.
+	mux.HandleFunc("/frame/zenith", func(w http.ResponseWriter, _ *http.Request) {
+		frame, _ := buf.load()
+		if len(frame) == 0 {
+			w.WriteHeader(http.StatusNoContent)
+			return
+		}
+		w.Header().Set("Content-Type", "application/octet-stream")
+		w.WriteHeader(http.StatusOK)
+		_, _ = w.Write(frame)
 	})
 
 	srv := &http.Server{

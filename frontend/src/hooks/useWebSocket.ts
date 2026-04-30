@@ -21,6 +21,10 @@ interface RawTelemetry {
   solar_v: number
   temp_c: number
   rssi: number
+  flags?: number
+  inference_class?: number
+  inference_conf?: number
+  inference_label?: string
 }
 
 function toStateUpdate(raw: RawTelemetry, track: { lat: number; lon: number; alt: number }[]): StateUpdate {
@@ -42,6 +46,10 @@ function toStateUpdate(raw: RawTelemetry, track: { lat: number; lon: number; alt
       chassis_temp: raw.temp_c / 100,
       cpu_temp: raw.temp_c / 100 + 8,          // derived: chassis + 8°C offset
       rssi: raw.rssi / 10,
+      flags: raw.flags,
+      inference_class: raw.inference_class,
+      inference_conf: raw.inference_conf,
+      inference_label: raw.inference_label,
     },
     metrics: {
       packets_received: raw.sequence,

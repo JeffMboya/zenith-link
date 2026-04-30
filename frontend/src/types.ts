@@ -13,6 +13,10 @@ export interface SatelliteState {
   chassis_temp: number
   cpu_temp: number
   rssi: number
+  inference_class?: number
+  inference_label?: string
+  inference_conf?: number
+  flags?: number
 }
 
 export interface LinkMetrics {
@@ -51,4 +55,18 @@ export interface CommandResult {
   status: 'queued' | 'error'
   seq: number
   command: string
+}
+
+export interface AutonomousEvent {
+  at: string
+  class: string
+  action: string
+}
+
+export interface DeployedPayload {
+  Name: string
+  SizeBytes: number
+  Status: string
+  DeployedAt: string
+  ExecOutput: string
 }

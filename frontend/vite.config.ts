@@ -16,6 +16,16 @@ export default defineConfig({
       '/track': 'http://localhost:8080',
       '/constellation': 'http://localhost:8080',
       '/tle': 'http://localhost:8080',
+      '/events': 'http://localhost:8080',
+      '/payload': 'http://localhost:8080',
+      '/relay/health': {
+        target: 'http://localhost:8082',
+        rewrite: (path: string) => path.replace(/^\/relay/, ''),
+      },
+      '/relay2/health': {
+        target: 'http://localhost:8083',
+        rewrite: (path: string) => path.replace(/^\/relay2/, ''),
+      },
     },
   },
 })

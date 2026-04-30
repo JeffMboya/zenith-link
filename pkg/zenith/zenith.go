@@ -64,6 +64,7 @@ const (
 	// Flag bits (Flags byte).
 	FlagStoreFwd   uint8 = 0x01 // frame was stored and forwarded
 	FlagCompressed uint8 = 0x02 // payload is delta-compressed
+	FlagPriority   uint8 = 0x04 // priority downlink — anomaly detected onboard
 
 	// Presence bitmask positions (bit 15 = MSB of the uint16).
 	PresencePosition  uint16 = 1 << 15 // LatE7 / LonE7 / AltM
@@ -77,9 +78,11 @@ const (
 )
 
 // InferenceClassNames maps an InferenceClass value to a human-readable label.
-// Values ≥ 7 are reserved; index 7 ("unknown") is the catch-all.
+// Classes are spacecraft health states — index-stable, matches inference.ClassNames.
+// Index 7 ("UNKNOWN") is the catch-all for any value ≥ 7.
 var InferenceClassNames = [8]string{
-	"cloud", "ocean", "land", "urban", "vegetation", "ice", "desert", "unknown",
+	"NOMINAL", "POWER_ANOMALY", "THERMAL_EVENT", "ATTITUDE_INSTABILITY",
+	"RF_DEGRADATION", "ECLIPSE_ENTRY", "ECLIPSE_COMPUTE", "UNKNOWN",
 }
 
 // InferenceClassName returns the label for a class byte, defaulting to "unknown"
@@ -88,7 +91,7 @@ func InferenceClassName(class uint8) string {
 	if int(class) < len(InferenceClassNames) {
 		return InferenceClassNames[class]
 	}
-	return "unknown"
+	return "UNKNOWN"
 }
 
 // Telemetry holds the decoded telemetry fields from a Zenith-Link frame.

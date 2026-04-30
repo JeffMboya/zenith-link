@@ -9,6 +9,7 @@ import (
 	"github.com/absmach/zenith-link/pkg/orbital"
 	"github.com/absmach/zenith-link/pkg/zenith"
 	"github.com/absmach/zenith-link/spacecraft"
+	"github.com/absmach/zenith-link/spacecraft/inference"
 )
 
 var _ spacecraft.Service = (*loggingMiddleware)(nil)
@@ -125,4 +126,16 @@ func (lm *loggingMiddleware) Windows(ctx context.Context, gsLat, gsLon float64, 
 		lm.logger.Debug("spacecraft.Windows", args...)
 	}(time.Now())
 	return lm.svc.Windows(ctx, gsLat, gsLon, start, end, minElevDeg)
+}
+
+func (lm *loggingMiddleware) Events() []spacecraft.AutonomousEvent {
+	return lm.svc.Events()
+}
+
+func (lm *loggingMiddleware) PayloadState() *spacecraft.DeployedPayload {
+	return lm.svc.PayloadState()
+}
+
+func (lm *loggingMiddleware) LastResult() inference.Result {
+	return lm.svc.LastResult()
 }

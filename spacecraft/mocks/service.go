@@ -7,6 +7,7 @@ import (
 	"github.com/absmach/zenith-link/pkg/orbital"
 	"github.com/absmach/zenith-link/pkg/zenith"
 	"github.com/absmach/zenith-link/spacecraft"
+	"github.com/absmach/zenith-link/spacecraft/inference"
 	"github.com/stretchr/testify/mock"
 )
 
@@ -60,4 +61,28 @@ func (m *Service) Windows(ctx context.Context, gsLat, gsLon float64, start, end 
 		return ws, args.Error(1)
 	}
 	return nil, args.Error(1)
+}
+
+func (m *Service) Events() []spacecraft.AutonomousEvent {
+	args := m.Called()
+	if ev, ok := args.Get(0).([]spacecraft.AutonomousEvent); ok {
+		return ev
+	}
+	return nil
+}
+
+func (m *Service) PayloadState() *spacecraft.DeployedPayload {
+	args := m.Called()
+	if p, ok := args.Get(0).(*spacecraft.DeployedPayload); ok {
+		return p
+	}
+	return nil
+}
+
+func (m *Service) LastResult() inference.Result {
+	args := m.Called()
+	if r, ok := args.Get(0).(inference.Result); ok {
+		return r
+	}
+	return inference.Result{}
 }

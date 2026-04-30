@@ -9,6 +9,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"log/slog"
 	"net/http"
 	"sync/atomic"
 	"time"
@@ -157,6 +158,18 @@ func receiveHandler(svc groundstation.Service) http.HandlerFunc {
 		if err != nil {
 			writeError(w, http.StatusUnprocessableEntity, err)
 			return
+		}
+
+		// Priority frames carry an onboard anomaly classification — log prominently
+		// so operators can triage before the full telemetry panel loads.
+		if tm.Flags&zenith.FlagPriority != 0 {
+			label := zenith.InferenceClassName(tm.InferenceClass)
+			slog.Warn("[PRIORITY DOWNLINK] anomaly flagged by spacecraft",
+				slog.String("class", label),
+				slog.Int("conf_pct", int(tm.InferenceConf)*100/255),
+				slog.Uint64("sequence", uint64(tm.Sequence)),
+				slog.String("relayed_by", relayedBy),
+			)
 		}
 
 		res := telemetryFromDomain(tm)

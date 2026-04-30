@@ -58,3 +58,25 @@ services:
     depends_on:
       - spacecraft
       - groundstation
+
+  relay2:
+    restart: unless-stopped
+    build:
+      context: ..
+      dockerfile: docker/Dockerfile.relay2
+    ports:
+      - "8083:8083"
+    environment:
+      - RELAY2_ADDR=:8083
+      - SC1_ADDR=http://spacecraft:8080
+      - RELAY1_ADDR=http://relay:8082
+      - GS_ADDR=http://groundstation:8081
+      - RELAY2_SCID=92
+      - GS_LAT=-1.2864
+      - GS_LON=36.8172
+      - MIN_ELEV_DEG=5.0
+      - POLL_INTERVAL_SEC=30
+    depends_on:
+      - spacecraft
+      - groundstation
+      - relay

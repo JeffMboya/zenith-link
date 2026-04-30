@@ -10,18 +10,27 @@ interface Command {
   id: string
   label: string
   description: string
-  category: 'MODE' | 'SYSTEM' | 'TELEMETRY' | 'DIAGNOSTIC'
-  payload: string
+  category: 'MODE' | 'SYSTEM' | 'TELEMETRY' | 'DIAGNOSTIC' | 'COMPUTE' | 'DEPLOY'
+  commandId: number      // CCSDS TC command ID byte
+  payloadBytes?: number[] // optional payload bytes
   destructive?: boolean   // requires CONFIRM gate before transmitting
 }
 
+// Command IDs must match spacecraft.go constants.
+// CmdInferenceRun=0x01 CmdReboot=0x02 CmdSetMode=0x03 CmdComputeJob=0x04
 const COMMANDS: Command[] = [
-  { id: 'safe_mode',  label: 'SAFE MODE',          description: 'Reduce power, halt non-essential subsystems', category: 'MODE',       payload: 'SAFE_MODE',                destructive: true },
-  { id: 'nominal',    label: 'NOMINAL',             description: 'Return to nominal operations',                category: 'MODE',       payload: 'NOMINAL' },
-  { id: 'reboot_obc', label: 'REBOOT OBC',          description: 'Soft-reset onboard computer (seq loss)',      category: 'SYSTEM',     payload: 'REBOOT_OBC',               destructive: true },
-  { id: 'dump_tlm',   label: 'DUMP TELEMETRY',      description: 'Force full telemetry frame downlink',         category: 'TELEMETRY',  payload: 'DUMP_TELEMETRY' },
-  { id: 'set_pitch',  label: 'SET PITCH THRESHOLD', description: 'Set attitude pitch deadband (0.02 default)',  category: 'DIAGNOSTIC', payload: 'SET_THRESHOLD_PITCH 0.02' },
-  { id: 'inference',  label: 'RUN INFERENCE',       description: 'Trigger onboard AI earth observation',        category: 'DIAGNOSTIC', payload: 'INFERENCE_RUN' },
+  { id: 'safe_mode',        label: 'SAFE MODE',          description: 'Reduce power, halt non-essential subsystems',          category: 'MODE',       commandId: 0x03, payloadBytes: [0x01], destructive: true },
+  { id: 'nominal',          label: 'NOMINAL',             description: 'Return to nominal operations',                        category: 'MODE',       commandId: 0x03, payloadBytes: [0x00] },
+  { id: 'reboot_obc',       label: 'REBOOT OBC',          description: 'Soft-reset onboard computer (sequence counter loss)', category: 'SYSTEM',     commandId: 0x02,                      destructive: true },
+  { id: 'dump_tlm',         label: 'DUMP TELEMETRY',      description: 'Request current health classification and state',     category: 'TELEMETRY',  commandId: 0x01 },
+  { id: 'set_pitch',        label: 'SET PITCH THRESHOLD', description: 'Set attitude deadband — mode 0x02',                   category: 'DIAGNOSTIC', commandId: 0x03, payloadBytes: [0x02] },
+  { id: 'inference',        label: 'QUERY HEALTH AI',     description: 'Return current onboard health classification',        category: 'DIAGNOSTIC', commandId: 0x01 },
+  { id: 'health_scan',      label: 'HEALTH SCAN',         description: 'Scan last 30 frames, return anomaly summary',         category: 'COMPUTE',    commandId: 0x04, payloadBytes: [0x01] },
+  { id: 'eclipse_forecast', label: 'ECLIPSE FORECAST',    description: 'Compute next eclipse entry/exit from orbital state',  category: 'COMPUTE',    commandId: 0x04, payloadBytes: [0x02] },
+  { id: 'link_budget',      label: 'LINK BUDGET',         description: 'Link margin to all ground stations from current alt', category: 'COMPUTE',    commandId: 0x04, payloadBytes: [0x03] },
+  { id: 'deploy_anomaly',   label: 'DEPLOY ANOMALY DETECTOR',     description: 'Upload 26KB health monitor · 1.3s@20KB/s · mirrors STL-01',           category: 'DEPLOY', commandId: 0x05, payloadBytes: [0x01] },
+  { id: 'deploy_compress',  label: 'DEPLOY TELEMETRY COMPRESSOR', description: 'Upload 12KB delta-compression agent · 0.6s@20KB/s',                    category: 'DEPLOY', commandId: 0x05, payloadBytes: [0x02] },
+  { id: 'deploy_inference', label: 'DEPLOY EDGE INFERENCE AGENT', description: 'Upload 8KB SLM-class edge agent · 0.4s@20KB/s · mirrors STL-02 Gemma', category: 'DEPLOY', commandId: 0x05, payloadBytes: [0x03] },
 ]
 
 const CATEGORY_COLOR: Record<Command['category'], string> = {
@@ -29,6 +38,8 @@ const CATEGORY_COLOR: Record<Command['category'], string> = {
   SYSTEM:     'var(--amber)',
   TELEMETRY:  'var(--green)',
   DIAGNOSTIC: 'var(--purple)',
+  COMPUTE:    'var(--teal)',
+  DEPLOY:     'var(--teal)',
 }
 
 const LOG_COLOR: Record<LogEntry['type'], string> = {
@@ -106,18 +117,25 @@ export function CommandPanel() {
     setLog(l => [...l, { ts: Date.now(), text: `TX  ${cmd.label}`, type: 'sent' }])
 
     try {
+      const payloadB64 = cmd.payloadBytes?.length
+        ? btoa(String.fromCharCode(...cmd.payloadBytes))
+        : undefined
+
       const res = await fetch('/command', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ command: cmd.payload }),
+        body: JSON.stringify({
+          command_id: cmd.commandId,
+          ...(payloadB64 ? { payload_b64: payloadB64 } : {}),
+        }),
       })
-      const body = await res.json() as { status: string; seq?: number; message?: string; reason?: string }
+      const body = await res.json() as { accepted?: boolean; message?: string; error?: string }
       setLog(l => [...l, {
         ts: Date.now(),
-        text: body.status === 'queued'
-          ? `ACK seq=${body.seq}${body.message ? ' · ' + body.message : ''}`
-          : `ERR ${body.reason ?? 'unknown'}`,
-        type: body.status === 'queued' ? 'ack' : 'error',
+        text: body.accepted
+          ? `ACK${body.message ? ' · ' + body.message : ''}`
+          : `ERR ${body.error ?? body.message ?? 'rejected'}`,
+        type: body.accepted ? 'ack' : 'error',
       }])
     } catch {
       setLog(l => [...l, { ts: Date.now(), text: 'SEND FAILED — link down?', type: 'error' }])
@@ -229,7 +247,7 @@ export function CommandPanel() {
                     {confirming.description}
                   </div>
                   <div style={{ color: 'var(--text-dim)', fontSize: 9, marginTop: 2, fontFamily: 'var(--font-mono)' }}>
-                    payload: <span style={{ color: 'var(--amber)' }}>{confirming.payload}</span>
+                    TC: cmd_id=0x{confirming.commandId.toString(16).padStart(2,'0')}{confirming.payloadBytes?.length ? ' payload=[' + confirming.payloadBytes.map(b => '0x'+b.toString(16).padStart(2,'0')).join(',') + ']' : ''}
                   </div>
                 </div>
                 <div style={{ padding: '12px 16px', borderBottom: '1px solid var(--bg-dark)' }}>
@@ -340,9 +358,9 @@ export function CommandPanel() {
                         <div style={{ color: 'var(--text-dim)', fontSize: 9, marginTop: 1 }}>
                           {cmd.description}
                         </div>
-                        {/* Payload preview */}
-                        <div style={{ color: 'var(--text-dim)', fontSize: 8, marginTop: 2, opacity: 0.7 }}>
-                          payload: <span style={{ fontFamily: 'var(--font-mono)', color: 'var(--text-mid)' }}>{cmd.payload}</span>
+                        {/* TC frame preview */}
+                        <div style={{ color: 'var(--text-dim)', fontSize: 8, marginTop: 2, opacity: 0.7, fontFamily: 'var(--font-mono)' }}>
+                          TC 0x{cmd.commandId.toString(16).padStart(2,'0')}{cmd.payloadBytes?.length ? ' ['+cmd.payloadBytes.map(b=>'0x'+b.toString(16).padStart(2,'0')).join(',')+']' : ''}
                         </div>
                       </span>
                       <span style={{ color: 'var(--text-dim)', fontSize: 9, paddingTop: 2 }}>

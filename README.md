@@ -1,19 +1,35 @@
 # Zenith-Link
 
-A satellite ground segment stack built from scratch in Go. Simulates an LEO spacecraft downlinking telemetry, a ground station receiving and authenticating it, an inter-satellite relay bridging contact gaps, and a 3D mission control dashboard — all wired together with a compact binary protocol and a full CCSDS implementation.
+A software-only distributed space computing stack built from scratch in Go — LEO spacecraft, ISL relay mesh, onboard edge AI, and mission control dashboard, containerized for deployment anywhere.
 
-Built to understand what a real satellite link looks like at the byte level, and why JSON is a bad idea over a constrained RF downlink.
+Demonstrates in-orbit compute orchestration: a primary spacecraft runs a continuous health anomaly detector (statistical, no external dependencies), flags priority downlinks when anomalies are detected, and executes compute jobs on demand. Two relay nodes in staggered orbits form a peer-to-peer ISL mesh, bridging contact gaps with store-and-forward routing. All framed in a compact binary protocol designed for constrained RF links — 78 bytes vs 281 bytes JSON.
 
 ---
 
-## What it does
+## Architecture
 
-- **Spacecraft service** — generates telemetry with simulated attitude (roll/pitch/yaw oscillation), power, and thermal data; encodes it into Zenith-Link v2 binary frames (HMAC-SHA256 authenticated); wraps them in CCSDS Space Packets and TM Transfer Frames; accepts TC uplink commands
-- **Ground station service** — receives frames, verifies HMAC, stores latest telemetry, streams updates over WebSocket including attitude and angular velocity fields, and exposes a `/latest` REST endpoint
-- **Relay service** — simulates a second satellite in a complementary orbit; polls the spacecraft, buffers the latest frame, and forwards it to the ground station during computed contact windows (store-and-forward ISL)
-- **Frontend** — CesiumJS 3D globe with Natural Earth II imagery, live 1Hz satellite tracking, 90-minute forward orbital track, telemetry panel with arc gauges, KPI bar with protocol efficiency metrics and next-pass countdown, and a searchable command palette (Ctrl+K)
+```
+┌──────────────────────────────────────────────────────────────┐
+│  SC-1 (400 km, 51.6°)   ←── TC uplink ───  Ground Station   │
+│  · Zenith-Link v2 frames      (Nairobi)     · Nairobi GS     │
+│  · CCSDS TM/TC stack     ──► Relay-1/2 ──► · WebSocket stream│
+│  · Onboard health AI          (ISL mesh)    · Priority logging│
+│  · In-orbit compute jobs                                      │
+├─────────────────────────────────┬────────────────────────────┤
+│  Relay-1 (SC-2)                 │  Relay-2 (SC-3)            │
+│  Sun-sync polar, 700 km, 98°    │  Med-incl, 550 km, 53°     │
+│  Store-and-forward to GS        │  Polls Relay-1 first       │
+│  SCID=91, port 8082             │  SCID=92, port 8083        │
+└─────────────────────────────────┴────────────────────────────┘
+```
 
-The orbital propagator uses Keplerian elements with a J2 oblateness correction. Contact windows are computed from elevation masks against configurable ground stations (Nairobi, Svalbard, Punta Arenas). The relay uses real orbital mechanics to decide when to forward — not a timer.
+- **SC-1 spacecraft** — telemetry generation (attitude, power, thermal), Zenith-Link v2 encoding, HMAC-SHA256 auth, CCSDS Space Packet + TM Transfer Frame wrapping, TC uplink command processing, onboard edge AI health detector, in-orbit compute jobs
+- **Onboard edge AI** — rolling 30-frame statistical anomaly detector; classes: NOMINAL, POWER_ANOMALY, THERMAL_EVENT, ATTITUDE_INSTABILITY, RF_DEGRADATION, ECLIPSE_ENTRY, ECLIPSE_COMPUTE; sets priority flag in frame header when anomaly detected; pure Go, no external ML dependencies
+- **Ground station** — frame receive, HMAC verification, WebSocket broadcast, priority-downlink logging, command forwarder
+- **ISL Relay mesh** — two nodes in complementary orbits; Relay-2 checks Relay-1 before polling SC-1 directly (peer routing); both use real Keplerian + J2 orbital mechanics for contact window decisions
+- **Mission control** — CesiumJS 3D globe, live 1Hz tracking, onboard AI status in KPI bar, ISL node status indicators, arc-gauge telemetry panel, searchable command palette with COMPUTE category (Ctrl+K)
+
+The orbital propagator uses Keplerian elements with a J2 oblateness correction. Contact windows are computed from elevation masks. All three relay/spacecraft nodes decide independently when to forward — no timers, real orbital geometry only.
 
 ---
 
@@ -55,13 +71,14 @@ The protocol is also implemented in C (`c/`) as a reference. Both implementation
 
 ## Services and ports
 
-| Service       | Port | Role                                    |
-|---------------|------|-----------------------------------------|
-| spacecraft    | 8080 | Telemetry source, TC command sink       |
-| groundstation | 8081 | Frame receiver, WebSocket stream        |
-| relay         | 8082 | ISL store-and-forward (health only)     |
+| Service       | Port | Role                                                       |
+|---------------|----|--------------------------------------------------------------|
+| spacecraft    | 8080 | Telemetry source, TC command sink, onboard edge AI         |
+| groundstation | 8081 | Frame receiver, WebSocket stream, priority-downlink logger |
+| relay         | 8082 | ISL Relay-1 (SC-2) — sun-sync polar, 700 km, 98°           |
+| relay2        | 8083 | ISL Relay-2 (SC-3) — med-incl, 550 km, 53°, peer routing  |
 
-The frontend dev server runs on port 5173 (Vite) and proxies `/ws`, `/windows`, `/state`, `/track`, `/command`, and `/health` to the appropriate backend service.
+The frontend dev server runs on port 5173 (Vite) and proxies `/ws`, `/windows`, `/state`, `/track`, `/command`, `/health`, `/relay/health`, and `/relay2/health` to the appropriate backend service.
 
 ---
 
@@ -95,10 +112,13 @@ ZENITH_HMAC_KEY=dev-key go run ./cmd/spacecraft
 # Terminal 2 — ground station
 ZENITH_HMAC_KEY=dev-key SC_ADDR=http://localhost:8080 go run ./cmd/groundstation
 
-# Terminal 3 — relay (optional)
+# Terminal 3 — ISL Relay-1 (optional)
 SC1_ADDR=http://localhost:8080 GS_ADDR=http://localhost:8081 go run ./cmd/relay
 
-# Terminal 4 — frontend
+# Terminal 4 — ISL Relay-2 (optional, requires Relay-1)
+SC1_ADDR=http://localhost:8080 RELAY1_ADDR=http://localhost:8082 GS_ADDR=http://localhost:8081 go run ./cmd/relay2
+
+# Terminal 5 — frontend
 cd frontend && npm run dev
 ```
 
@@ -220,6 +240,6 @@ The mission control dashboard runs at `http://localhost:5173` when the Vite dev 
 - Orbital propagation is Keplerian + J2 only. No drag, no solar radiation pressure.
 - The relay forwards at most once per contact window pass. Deliberate simplification.
 - HMAC is truncated to 8 bytes. Fine for simulation; not a production cryptographic boundary.
-- The AI inference is a stub — cycles through seven hardcoded class names. No real model.
+- The onboard health detector uses statistical z-scores on simulated telemetry — no real sensor hardware. Anomaly classes are deterministic from the simulated sine-wave signals.
 - Attitude data (roll/pitch/yaw) is simulated with slow sine oscillations, not from a real ADCS.
 - The frontend is desktop-only. No mobile layout.

@@ -92,14 +92,14 @@ func TestLatestHandler(t *testing.T) {
 			setupMock: func(svc *mocks.Service) {
 				st := fakeLatest()
 				st.Telemetry.Presence |= zenith.PresenceInference
-				st.Telemetry.InferenceClass = 4 // vegetation
+				st.Telemetry.InferenceClass = 4 // RF_DEGRADATION
 				st.Telemetry.InferenceConf = 200
 				svc.On("Latest", mock.Anything).Return(st, nil)
 			},
 			wantStatus: http.StatusOK,
 			check: func(t *testing.T, body map[string]any) {
 				tm := body["telemetry"].(map[string]any)
-				assert.Equal(t, "vegetation", tm["inference_label"])
+				assert.Equal(t, "RF_DEGRADATION", tm["inference_label"])
 				assert.NotNil(t, tm["inference_class"])
 			},
 		},

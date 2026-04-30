@@ -245,16 +245,18 @@ func TestExecuteCommand(t *testing.T) {
 			},
 		},
 		{
-			desc:   "CmdReboot clears inference state",
+			desc:   "CmdReboot accepted, inference still present via auto-detect",
 			tcData: []byte{0x02}, // CmdReboot
 			scid:   cfg.SCID,
 			check: func(t *testing.T, svc spacecraft.Service, res spacecraft.CommandResult) {
 				assert.True(t, res.Accepted)
 				assert.Equal(t, spacecraft.CmdReboot, res.CommandID)
-				// Telemetry must not include inference after reboot.
+				// Inference now runs on every Telemetry() call — frame includes the bit.
+				// After reboot the detector window is warm but seqCount resets to 0.
 				tm, err := svc.Telemetry(ctx, t0)
 				require.NoError(t, err)
-				assert.Zero(t, tm.Presence&zenith.PresenceInference)
+				assert.NotZero(t, tm.Presence&zenith.PresenceInference)
+				assert.Equal(t, uint16(0), tm.Sequence) // seq reset by reboot
 			},
 		},
 		{

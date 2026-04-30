@@ -1,8 +1,26 @@
-import { useState } from 'react'
-import type { SatelliteState } from '../types'
+import { useState, useEffect } from 'react'
+import type { SatelliteState, DeployedPayload } from '../types'
 import type { ConstellationSat } from '../hooks/useConstellation'
 import { ArcGauge } from './ArcGauge'
 import { SAT_META, PLANE_LABEL } from '../data/constellation'
+
+function usePayload() {
+  const [payload, setPayload] = useState<DeployedPayload | null>(null)
+  useEffect(() => {
+    let timer: ReturnType<typeof setTimeout>
+    async function poll() {
+      try {
+        const res = await fetch('/payload')
+        if (res.status === 204) { setPayload(null) }
+        else if (res.ok) { setPayload(await res.json()) }
+      } catch { /* keep last */ }
+      timer = setTimeout(poll, 5000)
+    }
+    poll()
+    return () => clearTimeout(timer)
+  }, [])
+  return payload
+}
 
 interface Props {
   state: SatelliteState | null
@@ -52,6 +70,7 @@ function Section({ title, accent = 'var(--cyan-dim)', children }: {
 
 export function TelemetryPanel({ state, selectedSatId, selectedSat }: Props) {
   const [open, setOpen] = useState(true)
+  const payload = usePayload()
   const isPrimary = selectedSatId === 'AT-1'
   const meta = SAT_META[selectedSatId]
   const planeColor = meta ? PLANE_CSS_COLOR[meta.plane] : 'var(--cyan)'
@@ -183,6 +202,14 @@ export function TelemetryPanel({ state, selectedSatId, selectedSat }: Props) {
                     <Row label="LON" value={state.longitude.toFixed(4)}         unit="°" />
                     <Row label="ALT" value={(state.altitude / 1000).toFixed(1)} unit="km" color="var(--cyan)" />
                   </Section>
+                  {payload && (
+                    <Section title="PAYLOAD" accent="var(--teal)">
+                      <Row label="NAME"   value={payload.Name}                                           unit="" color="var(--teal)" />
+                      <Row label="SIZE"   value={(payload.SizeBytes / 1024).toFixed(1)}                  unit="KB" />
+                      <Row label="STATUS" value={payload.Status}                                         unit="" color={payload.Status === 'RUNNING' ? 'var(--green)' : 'var(--red)'} />
+                      <Row label="DEPLOY" value={new Date(payload.DeployedAt).toISOString().slice(11,19)} unit="Z" />
+                    </Section>
+                  )}
                 </>
               )}
             </>

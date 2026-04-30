@@ -119,14 +119,14 @@ func TestTelemetryHandler(t *testing.T) {
 			setupMock: func(svc *mocks.Service) {
 				inf := tm
 				inf.Presence |= zenith.PresenceInference
-				inf.InferenceClass = 2 // land
+				inf.InferenceClass = 2 // THERMAL_EVENT
 				inf.InferenceConf = 200
 				svc.On("Telemetry", mock.Anything, mock.AnythingOfType("time.Time")).
 					Return(inf, nil)
 			},
 			wantStatus: http.StatusOK,
 			check: func(t *testing.T, body map[string]any) {
-				assert.Equal(t, "land", body["inference_label"])
+				assert.Equal(t, "THERMAL_EVENT", body["inference_label"])
 				assert.NotNil(t, body["inference_class"])
 				assert.NotNil(t, body["inference_conf"])
 			},

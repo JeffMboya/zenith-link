@@ -11,6 +11,7 @@ import (
 
 	"github.com/absmach/zenith-link/pkg/ccsds/tmframe"
 	"github.com/absmach/zenith-link/spacecraft"
+	"github.com/absmach/zenith-link/spacecraft/inference"
 	"github.com/go-chi/chi/v5"
 	"github.com/go-chi/chi/v5/middleware"
 )
@@ -33,6 +34,9 @@ func NewRouter(svc spacecraft.Service) http.Handler {
 	r.Post("/tle/import", tleImportHandler())
 	r.Get("/tle/status", tleStatusHandler())
 	r.Post("/tle/clear", tleClearHandler())
+	r.Get("/events", eventsHandler(svc))
+	r.Get("/payload", payloadHandler(svc))
+	r.Get("/inference/state", inferenceStateHandler(svc))
 
 	return r
 }
@@ -225,6 +229,46 @@ func trackHandler(svc spacecraft.Service) http.HandlerFunc {
 			})
 		}
 		writeJSON(w, http.StatusOK, map[string]any{"points": points, "step_s": stepSec})
+	}
+}
+
+// eventsHandler returns the autonomous event ring buffer, newest first.
+func eventsHandler(svc spacecraft.Service) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		writeJSON(w, http.StatusOK, svc.Events())
+	}
+}
+
+// payloadHandler returns the currently deployed onboard payload, or 204 if none.
+func payloadHandler(svc spacecraft.Service) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		p := svc.PayloadState()
+		if p == nil {
+			writeJSON(w, http.StatusNoContent, nil)
+			return
+		}
+		writeJSON(w, http.StatusOK, p)
+	}
+}
+
+// inferenceStateHandler returns the full inference result including per-channel z-scores
+// and pre-fault signals. Polled by the frontend for the ONBOARD AI tooltip and PRE-FAULT banner.
+func inferenceStateHandler(svc spacecraft.Service) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		res := svc.LastResult()
+		writeJSON(w, http.StatusOK, map[string]any{
+			"class":          uint8(res.Class),
+			"class_label":    inference.ClassName(res.Class),
+			"confidence":     res.Confidence,
+			"channels": map[string]any{
+				"bat_v":     map[string]any{"z": res.Channels.BatV.Z, "mean": res.Channels.BatV.Mean, "std": res.Channels.BatV.Std},
+				"chassis_c": map[string]any{"z": res.Channels.ChassisC.Z, "mean": res.Channels.ChassisC.Mean, "std": res.Channels.ChassisC.Std},
+				"rssi":      map[string]any{"z": res.Channels.RSSI.Z, "mean": res.Channels.RSSI.Mean, "std": res.Channels.RSSI.Std},
+				"att_vel":   map[string]any{"z": res.Channels.AttVel.Z, "mean": res.Channels.AttVel.Mean, "std": res.Channels.AttVel.Std},
+			},
+			"pre_fault_class": res.PreFaultClass,
+			"pre_fault_chan":  res.PreFaultChan,
+		})
 	}
 }
 

@@ -1,12 +1,14 @@
 import { useEffect, useState } from 'react'
-import type { LinkMetrics } from '../types'
+import type { LinkMetrics, SatelliteState } from '../types'
 import { TleSelector } from './TleSelector'
 
 const LINK_COST_PER_MB = 15
 const WINDOWS_POLL_MS = 30_000
+const ISL_POLL_MS = 5_000
 
 interface Props {
   metrics: LinkMetrics | null
+  satellite: SatelliteState | null
   connected: boolean
   linkLost: boolean
   tleSource: 'sim' | 'tle'
@@ -71,6 +73,54 @@ function useNextPass() {
   return { label, color, urgent }
 }
 
+interface ISLNode {
+  label: string
+  color: string
+  detail: string
+}
+
+function useISLNodes() {
+  const [nodes, setNodes] = useState<[ISLNode, ISLNode]>([
+    { label: 'RELAY-1', color: 'var(--text-dim)', detail: '...' },
+    { label: 'RELAY-2', color: 'var(--text-dim)', detail: '...' },
+  ])
+
+  useEffect(() => {
+    let timer: ReturnType<typeof setTimeout>
+
+    async function poll() {
+      const results = await Promise.allSettled([
+        fetch('/relay/health').then(r => r.ok ? r.json() : Promise.reject()),
+        fetch('/relay2/health').then(r => r.ok ? r.json() : Promise.reject()),
+      ])
+      setNodes(results.map((res, i) => {
+        const label = i === 0 ? 'RELAY-1' : 'RELAY-2'
+        if (res.status === 'rejected') return { label, color: 'var(--red)', detail: 'OFFLINE' }
+        const d = res.value as { buffer_has_data: boolean; last_fetch_at: string; upstream_node?: string }
+        const color = d.buffer_has_data ? 'var(--green)' : 'var(--amber)'
+        const detail = d.buffer_has_data ? 'BUFFERED' : 'EMPTY'
+        return { label, color, detail }
+      }) as [ISLNode, ISLNode])
+      timer = setTimeout(poll, ISL_POLL_MS)
+    }
+
+    poll()
+    return () => clearTimeout(timer)
+  }, [])
+
+  return nodes
+}
+
+const ANOMALY_COLOR: Record<string, string> = {
+  NOMINAL: 'var(--green)',
+  ECLIPSE_ENTRY: 'var(--cyan)',
+  ECLIPSE_COMPUTE: 'var(--purple)',
+  POWER_ANOMALY: 'var(--red)',
+  THERMAL_EVENT: 'var(--amber)',
+  ATTITUDE_INSTABILITY: 'var(--amber)',
+  RF_DEGRADATION: 'var(--amber)',
+}
+
 function kpis(m: LinkMetrics): KPI[] {
   const zenithMB = m.bytes_received_zenith / 1e6
   const jsonMB = m.bytes_equivalent_json / 1e6
@@ -87,8 +137,32 @@ function kpis(m: LinkMetrics): KPI[] {
   ]
 }
 
-export function KPIBar({ metrics, connected, linkLost, tleSource, tleGroup, tleCount }: Props) {
+export function KPIBar({ metrics, satellite, connected, linkLost, tleSource, tleGroup, tleCount }: Props) {
   const { label: passLabel, color: passColor, urgent: passUrgent } = useNextPass()
+  const islNodes = useISLNodes()
+
+  const inferenceLabel = satellite?.inference_label ?? 'NOMINAL'
+  const inferenceColor = ANOMALY_COLOR[inferenceLabel] ?? 'var(--text-dim)'
+
+  const [eclipseStart, setEclipseStart] = useState<number | null>(null)
+  const [eclipseElapsed, setEclipseElapsed] = useState(0)
+
+  useEffect(() => {
+    if (inferenceLabel === 'ECLIPSE_COMPUTE') {
+      if (eclipseStart === null) setEclipseStart(Date.now())
+    } else {
+      setEclipseStart(null)
+      setEclipseElapsed(0)
+    }
+  }, [inferenceLabel, eclipseStart])
+
+  useEffect(() => {
+    if (eclipseStart === null) return
+    const id = setInterval(() => {
+      setEclipseElapsed(Math.floor((Date.now() - eclipseStart) / 1000))
+    }, 1000)
+    return () => clearInterval(id)
+  }, [eclipseStart])
 
   const offlineText = linkLost ? 'LINK LOST' : 'AWAITING LINK ACQUISITION...'
   const offlineColor = linkLost ? 'var(--red)' : 'var(--text-dim)'
@@ -134,6 +208,44 @@ export function KPIBar({ metrics, connected, linkLost, tleSource, tleGroup, tleC
               {offlineText}
             </div>
         }
+      </div>
+
+      {/* Onboard health — anomaly class from inference engine */}
+      <div style={{
+        padding: '6px 14px', borderLeft: '1px solid var(--border)',
+        display: 'flex', flexDirection: 'column', alignItems: 'center', minWidth: 130,
+        background: inferenceLabel !== 'NOMINAL' ? `color-mix(in srgb, ${inferenceColor} 8%, transparent)` : 'transparent',
+        borderTop: inferenceLabel !== 'NOMINAL' ? `2px solid ${inferenceColor}` : '2px solid transparent',
+      }}>
+        <span style={{ color: inferenceColor, fontSize: 11, fontWeight: 700, lineHeight: 1.2, letterSpacing: 1 }}>
+          {inferenceLabel}
+        </span>
+        {inferenceLabel === 'ECLIPSE_COMPUTE' && eclipseStart !== null && (
+          <span style={{ color: 'var(--purple)', fontSize: 8, letterSpacing: 1, marginTop: 1 }}>
+            +{String(Math.floor(eclipseElapsed / 60)).padStart(2, '0')}:{String(eclipseElapsed % 60).padStart(2, '0')} compute
+          </span>
+        )}
+        <span style={{ color: 'var(--text-dim)', fontSize: 9, letterSpacing: 2, marginTop: 2 }}>ONBOARD AI</span>
+      </div>
+
+      {/* ISL mesh nodes */}
+      <div style={{
+        padding: '4px 12px', borderLeft: '1px solid var(--border)',
+        display: 'flex', flexDirection: 'column', gap: 2, justifyContent: 'center',
+      }}>
+        {islNodes.map(node => (
+          <div key={node.label} style={{ display: 'flex', alignItems: 'center', gap: 5 }}>
+            <div style={{
+              width: 5, height: 5, borderRadius: '50%',
+              background: node.color,
+              boxShadow: node.color !== 'var(--text-dim)' ? `0 0 4px ${node.color}` : 'none',
+              flexShrink: 0,
+            }} />
+            <span style={{ color: node.color, fontSize: 8, letterSpacing: 1, fontWeight: 600 }}>{node.label}</span>
+            <span style={{ color: 'var(--text-dim)', fontSize: 7, letterSpacing: 1 }}>{node.detail}</span>
+          </div>
+        ))}
+        <span style={{ color: 'var(--text-dim)', fontSize: 7, letterSpacing: 2 }}>ISL MESH</span>
       </div>
 
       {/* NEXT PASS — elevated tile */}
