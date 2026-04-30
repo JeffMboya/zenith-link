@@ -57,6 +57,9 @@ var deploymentProfiles = map[uint8]DeploymentProfile{
 	0x01: {0x01, "anomaly-detector-v1", 26112, "Statistical health monitor — 26KB Python-equivalent, mirrors Satlyt STL-01 deployment"},
 	0x02: {0x02, "telemetry-compressor-v1", 12288, "Delta-compression module for constrained RF downlink"},
 	0x03: {0x03, "edge-inference-agent-v1", 8192, "Statistical behavioral classifier — autonomous diagnostic agent, same contract as STL-02 Gemma deployment"},
+	0x04: {0x04, "orbit-predictor-v1", 18432, "Autonomous orbit event scheduler — eclipse, perigee, apogee; drives ECLIPSE_COMPUTE windows"},
+	0x05: {0x05, "federated-learner-v1", 40960, "Federated gradient accumulator — distributed model updates across satellite network, matches Satlyt federated mesh"},
+	0x06: {0x06, "link-optimizer-v1", 15360, "Dynamic downlink scheduler — prioritizes frames by anomaly class and link margin; mirrors STL-01 downlink prioritization"},
 }
 
 // DeployedPayload tracks what's currently running on the spacecraft.

@@ -30,15 +30,29 @@ const GS_COLORS: Record<string, string> = {
 // Colour per orbital plane (simulated) or TLE group
 const PLANE_COLOR: Record<string, Color> = {
   // Simulated planes
-  A: Color.CYAN.withAlpha(0.9),
-  B: Color.fromCssColorString('#00e878').withAlpha(0.9),
-  C: Color.fromCssColorString('#f0a800').withAlpha(0.9),
-  D: Color.fromCssColorString('#c060f0').withAlpha(0.9),
+  A:   Color.CYAN.withAlpha(0.9),
+  B:   Color.fromCssColorString('#00e878').withAlpha(0.9),
+  C:   Color.fromCssColorString('#f0a800').withAlpha(0.9),
+  D:   Color.fromCssColorString('#c060f0').withAlpha(0.9),
+  ISL: Color.fromCssColorString('#f06040').withAlpha(0.9), // relay satellites — orange-red
   // TLE groups — single colour per group
   stations: Color.WHITE.withAlpha(0.95),
   starlink: Color.fromCssColorString('#00c8f0').withAlpha(0.8),
   planet:   Color.fromCssColorString('#00e8c0').withAlpha(0.8),
   active:   Color.fromCssColorString('#f0a800').withAlpha(0.7),
+}
+
+export interface RelayHealth {
+  online: boolean
+  bufferHasData: boolean
+  lastFetchAt: string | null
+  upstreamNode?: string
+}
+
+function islBeamColor(health: RelayHealth | null | undefined): Color {
+  if (!health || !health.online) return Color.WHITE.withAlpha(0.08)
+  if (health.bufferHasData) return Color.fromCssColorString('#00e878').withAlpha(0.5)
+  return Color.fromCssColorString('#f0a800').withAlpha(0.3)
 }
 
 interface Props {
@@ -47,6 +61,8 @@ interface Props {
   constellation: ConstellationSat[]
   selectedSatId: string
   onSelectSat: (id: string) => void
+  relay1Health?: RelayHealth | null
+  relay2Health?: RelayHealth | null
 }
 
 function gsColor(gs: GroundStation): Color {
@@ -54,7 +70,7 @@ function gsColor(gs: GroundStation): Color {
   return Color.fromCssColorString(hex).withAlpha(gs.inView ? 1.0 : 0.4)
 }
 
-export function Globe3D({ data, orbitalPos, constellation, selectedSatId, onSelectSat }: Props) {
+export function Globe3D({ data, orbitalPos, constellation, selectedSatId, onSelectSat, relay1Health, relay2Health }: Props) {
   const viewerRef = useRef<{ cesiumElement: CesiumViewer } | null>(null)
   const flew = useRef(false)
   const imageryInit = useRef(false)
@@ -229,6 +245,46 @@ export function Globe3D({ data, orbitalPos, constellation, selectedSatId, onSele
           />
         </Entity>
       ))}
+
+      {/* ISL mesh beams — AT-1 ↔ SC-2 ↔ SC-3 */}
+      {(() => {
+        const sc2 = constellation.find(s => s.id === 'SC-2')
+        const sc3 = constellation.find(s => s.id === 'SC-3')
+        return (
+          <>
+            {sc2 && (
+              <Entity name="isl-at1-sc2">
+                <PolylineGraphics
+                  positions={[satPos, Cartesian3.fromDegrees(sc2.lon, sc2.lat, sc2.alt_m)]}
+                  width={1.5}
+                  material={islBeamColor(relay1Health)}
+                />
+              </Entity>
+            )}
+            {sc3 && (
+              <Entity name="isl-at1-sc3">
+                <PolylineGraphics
+                  positions={[satPos, Cartesian3.fromDegrees(sc3.lon, sc3.lat, sc3.alt_m)]}
+                  width={1.5}
+                  material={islBeamColor(relay2Health)}
+                />
+              </Entity>
+            )}
+            {sc2 && sc3 && (
+              <Entity name="isl-sc2-sc3">
+                <PolylineGraphics
+                  positions={[
+                    Cartesian3.fromDegrees(sc2.lon, sc2.lat, sc2.alt_m),
+                    Cartesian3.fromDegrees(sc3.lon, sc3.lat, sc3.alt_m),
+                  ]}
+                  width={1}
+                  material={Color.fromCssColorString('#f06040').withAlpha(0.2)}
+                />
+              </Entity>
+            )}
+          </>
+        )
+      })()}
 
       {/* Constellation members — dot only by default; label only on selected satellite */}
       {constellation.filter(s => s.id !== 'AT-1').map(s => {

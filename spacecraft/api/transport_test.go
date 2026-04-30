@@ -14,6 +14,7 @@ import (
 	"github.com/absmach/zenith-link/pkg/zenith"
 	"github.com/absmach/zenith-link/spacecraft"
 	"github.com/absmach/zenith-link/spacecraft/api"
+	"github.com/absmach/zenith-link/spacecraft/inference"
 	"github.com/absmach/zenith-link/spacecraft/mocks"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/mock"
@@ -461,6 +462,91 @@ func TestWindowsHandler(t *testing.T) {
 			tc.setupMock(svc)
 
 			req := httptest.NewRequest(http.MethodGet, tc.url, nil)
+			rec := httptest.NewRecorder()
+			router.ServeHTTP(rec, req)
+
+			assert.Equal(t, tc.wantStatus, rec.Code)
+			if tc.check != nil {
+				var body map[string]any
+				require.NoError(t, json.NewDecoder(rec.Body).Decode(&body))
+				tc.check(t, body)
+			}
+			svc.AssertExpectations(t)
+		})
+	}
+}
+
+// ─── GET /inference/state ───────────────────────────────────────────────────
+
+func TestInferenceStateHandler(t *testing.T) {
+	tests := []struct {
+		desc       string
+		setupMock  func(svc *mocks.Service)
+		wantStatus int
+		check      func(t *testing.T, body map[string]any)
+	}{
+		{
+			desc: "NOMINAL result — all fields present",
+			setupMock: func(svc *mocks.Service) {
+				svc.On("LastResult").Return(inference.Result{
+					Class:      inference.NOMINAL,
+					Confidence: 230,
+					Channels: inference.ResultChannels{
+						BatV:     inference.ChannelDetail{Z: 0.1, Mean: 7500, Std: 50},
+						ChassisC: inference.ChannelDetail{Z: 0.2, Mean: 20, Std: 1},
+						RSSI:     inference.ChannelDetail{Z: -0.3, Mean: -75, Std: 3},
+						AttVel:   inference.ChannelDetail{Z: 0.05, Mean: 0.05, Std: 1},
+					},
+				})
+			},
+			wantStatus: http.StatusOK,
+			check: func(t *testing.T, body map[string]any) {
+				assert.Equal(t, "NOMINAL", body["class_label"])
+				assert.Equal(t, float64(0), body["class"])
+				assert.Equal(t, float64(230), body["confidence"])
+				channels, ok := body["channels"].(map[string]any)
+				require.True(t, ok)
+				batV, ok := channels["bat_v"].(map[string]any)
+				require.True(t, ok)
+				assert.InDelta(t, 0.1, batV["z"], 0.001)
+				assert.InDelta(t, 7500.0, batV["mean"], 0.1)
+				assert.InDelta(t, 50.0, batV["std"], 0.1)
+				assert.Equal(t, "", body["pre_fault_class"])
+				assert.Equal(t, "", body["pre_fault_chan"])
+			},
+		},
+		{
+			desc: "POWER_ANOMALY result with pre-fault signal",
+			setupMock: func(svc *mocks.Service) {
+				svc.On("LastResult").Return(inference.Result{
+					Class:         inference.POWER_ANOMALY,
+					Confidence:    210,
+					PreFaultClass: "POWER_ANOMALY",
+					PreFaultChan:  "bat_v",
+					Channels: inference.ResultChannels{
+						BatV: inference.ChannelDetail{Z: -2.5, Mean: 7500, Std: 50},
+					},
+				})
+			},
+			wantStatus: http.StatusOK,
+			check: func(t *testing.T, body map[string]any) {
+				assert.Equal(t, "POWER_ANOMALY", body["class_label"])
+				assert.Equal(t, float64(1), body["class"])
+				assert.Equal(t, "POWER_ANOMALY", body["pre_fault_class"])
+				assert.Equal(t, "bat_v", body["pre_fault_chan"])
+				channels := body["channels"].(map[string]any)
+				batV := channels["bat_v"].(map[string]any)
+				assert.InDelta(t, -2.5, batV["z"], 0.001)
+			},
+		},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.desc, func(t *testing.T) {
+			svc, router := makeRouter()
+			tc.setupMock(svc)
+
+			req := httptest.NewRequest(http.MethodGet, "/inference/state", nil)
 			rec := httptest.NewRecorder()
 			router.ServeHTTP(rec, req)
 

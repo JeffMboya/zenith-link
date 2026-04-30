@@ -18,6 +18,7 @@ export default defineConfig({
       '/tle': 'http://localhost:8080',
       '/events': 'http://localhost:8080',
       '/payload': 'http://localhost:8080',
+      '/inference': 'http://localhost:8080',
       '/relay/health': {
         target: 'http://localhost:8082',
         rewrite: (path: string) => path.replace(/^\/relay/, ''),

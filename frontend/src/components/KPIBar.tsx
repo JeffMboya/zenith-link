@@ -1,10 +1,11 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useState, useRef } from 'react'
 import type { LinkMetrics, SatelliteState } from '../types'
 import { TleSelector } from './TleSelector'
 
 const LINK_COST_PER_MB = 15
 const WINDOWS_POLL_MS = 30_000
 const ISL_POLL_MS = 5_000
+const INFERENCE_POLL_MS = 2_000
 
 interface Props {
   metrics: LinkMetrics | null
@@ -111,6 +112,38 @@ function useISLNodes() {
   return nodes
 }
 
+interface ChannelDetail { z: number; mean: number; std: number }
+
+interface InferenceDetail {
+  class_label: string
+  confidence: number
+  channels: {
+    bat_v: ChannelDetail
+    chassis_c: ChannelDetail
+    rssi: ChannelDetail
+    att_vel: ChannelDetail
+  }
+  pre_fault_class: string
+  pre_fault_chan: string
+}
+
+function useInferenceDetail() {
+  const [detail, setDetail] = useState<InferenceDetail | null>(null)
+  useEffect(() => {
+    let timer: ReturnType<typeof setTimeout>
+    async function poll() {
+      try {
+        const res = await fetch('/inference/state')
+        if (res.ok) setDetail(await res.json() as InferenceDetail)
+      } catch { /* keep last */ }
+      timer = setTimeout(poll, INFERENCE_POLL_MS)
+    }
+    poll()
+    return () => clearTimeout(timer)
+  }, [])
+  return detail
+}
+
 const ANOMALY_COLOR: Record<string, string> = {
   NOMINAL: 'var(--green)',
   ECLIPSE_ENTRY: 'var(--cyan)',
@@ -140,9 +173,15 @@ function kpis(m: LinkMetrics): KPI[] {
 export function KPIBar({ metrics, satellite, connected, linkLost, tleSource, tleGroup, tleCount }: Props) {
   const { label: passLabel, color: passColor, urgent: passUrgent } = useNextPass()
   const islNodes = useISLNodes()
+  const inferenceDetail = useInferenceDetail()
+  const aiTileRef = useRef<HTMLDivElement>(null)
+  const [aiHover, setAiHover] = useState(false)
 
   const inferenceLabel = satellite?.inference_label ?? 'NOMINAL'
   const inferenceColor = ANOMALY_COLOR[inferenceLabel] ?? 'var(--text-dim)'
+  const preFaultClass = inferenceDetail?.pre_fault_class ?? ''
+  const preFaultChan = inferenceDetail?.pre_fault_chan ?? ''
+  const preFaultColor = ANOMALY_COLOR[preFaultClass] ?? 'var(--amber)'
 
   const [eclipseStart, setEclipseStart] = useState<number | null>(null)
   const [eclipseElapsed, setEclipseElapsed] = useState(0)
@@ -168,8 +207,25 @@ export function KPIBar({ metrics, satellite, connected, linkLost, tleSource, tle
   const offlineColor = linkLost ? 'var(--red)' : 'var(--text-dim)'
 
   return (
+    <div style={{ position: 'fixed', top: 0, left: 0, right: 0, zIndex: 100 }}>
+    {/* PRE-FAULT warning banner — appears above KPI bar when a channel is trending toward anomaly */}
+    {preFaultClass && (
+      <div style={{
+        background: `color-mix(in srgb, ${preFaultColor} 15%, rgba(4,13,28,0.95))`,
+        borderBottom: `1px solid ${preFaultColor}`,
+        padding: '2px 20px',
+        display: 'flex', alignItems: 'center', gap: 10,
+        animation: 'kpi-pulse 2s ease-in-out infinite',
+      }}>
+        <span style={{ color: preFaultColor, fontSize: 9, fontWeight: 700, letterSpacing: 2 }}>
+          ▲ PRE-FAULT
+        </span>
+        <span style={{ color: 'var(--text-dim)', fontSize: 9, letterSpacing: 1 }}>
+          {preFaultClass} trend detected on {preFaultChan} — z-score rising toward threshold
+        </span>
+      </div>
+    )}
     <div style={{
-      position: 'fixed', top: 0, left: 0, right: 0, zIndex: 100,
       display: 'flex', alignItems: 'center', gap: 1,
       background: 'rgba(4,13,28,0.92)', borderBottom: '1px solid var(--border)',
       backdropFilter: 'blur(6px)',
@@ -211,12 +267,18 @@ export function KPIBar({ metrics, satellite, connected, linkLost, tleSource, tle
       </div>
 
       {/* Onboard health — anomaly class from inference engine */}
-      <div style={{
-        padding: '6px 14px', borderLeft: '1px solid var(--border)',
-        display: 'flex', flexDirection: 'column', alignItems: 'center', minWidth: 130,
-        background: inferenceLabel !== 'NOMINAL' ? `color-mix(in srgb, ${inferenceColor} 8%, transparent)` : 'transparent',
-        borderTop: inferenceLabel !== 'NOMINAL' ? `2px solid ${inferenceColor}` : '2px solid transparent',
-      }}>
+      <div
+        ref={aiTileRef}
+        onMouseEnter={() => setAiHover(true)}
+        onMouseLeave={() => setAiHover(false)}
+        style={{
+          position: 'relative',
+          padding: '6px 14px', borderLeft: '1px solid var(--border)',
+          display: 'flex', flexDirection: 'column', alignItems: 'center', minWidth: 130,
+          background: inferenceLabel !== 'NOMINAL' ? `color-mix(in srgb, ${inferenceColor} 8%, transparent)` : 'transparent',
+          borderTop: inferenceLabel !== 'NOMINAL' ? `2px solid ${inferenceColor}` : '2px solid transparent',
+          cursor: 'default',
+        }}>
         <span style={{ color: inferenceColor, fontSize: 11, fontWeight: 700, lineHeight: 1.2, letterSpacing: 1 }}>
           {inferenceLabel}
         </span>
@@ -226,6 +288,39 @@ export function KPIBar({ metrics, satellite, connected, linkLost, tleSource, tle
           </span>
         )}
         <span style={{ color: 'var(--text-dim)', fontSize: 9, letterSpacing: 2, marginTop: 2 }}>ONBOARD AI</span>
+        {/* Z-score tooltip */}
+        {aiHover && inferenceDetail?.channels && (
+          <div style={{
+            position: 'absolute', top: '100%', right: 0, zIndex: 200,
+            background: 'rgba(4,13,28,0.97)', border: '1px solid var(--border)',
+            padding: '8px 12px', minWidth: 220,
+            backdropFilter: 'blur(8px)',
+          }}>
+            <div style={{ color: 'var(--text-dim)', fontSize: 8, letterSpacing: 2, marginBottom: 6 }}>Z-SCORES vs 30-FRAME BASELINE</div>
+            {([
+              ['bat_v',     'BAT V',    inferenceDetail.channels.bat_v],
+              ['chassis_c', 'CHASSIS T', inferenceDetail.channels.chassis_c],
+              ['rssi',      'RSSI',     inferenceDetail.channels.rssi],
+              ['att_vel',   'ATT VEL',  inferenceDetail.channels.att_vel],
+            ] as [string, string, ChannelDetail][]).map(([key, label, ch]) => {
+              const zAbs = Math.abs(ch.z)
+              const zColor = zAbs > 2 ? 'var(--red)' : zAbs > 1 ? 'var(--amber)' : 'var(--green)'
+              return (
+                <div key={key} style={{ display: 'flex', justifyContent: 'space-between', gap: 12, marginBottom: 3 }}>
+                  <span style={{ color: 'var(--text-dim)', fontSize: 9, letterSpacing: 1 }}>{label}</span>
+                  <span style={{ color: zColor, fontSize: 9, fontWeight: 700, fontVariantNumeric: 'tabular-nums' }}>
+                    z={ch.z >= 0 ? '+' : ''}{ch.z.toFixed(2)}
+                  </span>
+                </div>
+              )
+            })}
+            {preFaultChan && (
+              <div style={{ marginTop: 6, borderTop: '1px solid var(--border)', paddingTop: 5, color: preFaultColor, fontSize: 8, letterSpacing: 1 }}>
+                ▲ {preFaultChan} trending → {preFaultClass}
+              </div>
+            )}
+          </div>
+        )}
       </div>
 
       {/* ISL mesh nodes */}
@@ -275,6 +370,7 @@ export function KPIBar({ metrics, satellite, connected, linkLost, tleSource, tle
           {connected ? 'LIVE' : 'OFFLINE'}
         </span>
       </div>
+    </div>
     </div>
   )
 }

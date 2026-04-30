@@ -394,3 +394,118 @@ func TestTMFrame(t *testing.T) {
 		})
 	}
 }
+
+// ─── CmdComputeJob ──────────────────────────────────────────────────────────
+
+func TestCmdComputeJob(t *testing.T) {
+	cfg := issConfig()
+	ctx := context.Background()
+	t0 := cfg.Elements.Epoch
+
+	t.Run("JobHealthScan returns HEALTH_SCAN prefix", func(t *testing.T) {
+		svc := spacecraft.New(cfg)
+		rawTC := buildTC(t, cfg.SCID, 0, []byte{0x04, 0x01}) // CmdComputeJob, JobHealthScan
+		res, err := svc.ExecuteCommand(ctx, rawTC)
+		require.NoError(t, err)
+		assert.True(t, res.Accepted)
+		assert.Contains(t, res.Message, "HEALTH_SCAN")
+		assert.Contains(t, res.Message, "status=")
+	})
+
+	t.Run("JobEclipseForecast returns ECLIPSE_FORECAST prefix", func(t *testing.T) {
+		svc := spacecraft.New(cfg)
+		rawTC := buildTC(t, cfg.SCID, 0, []byte{0x04, 0x02}) // CmdComputeJob, JobEclipseForecast
+		res, err := svc.ExecuteCommand(ctx, rawTC)
+		require.NoError(t, err)
+		assert.True(t, res.Accepted)
+		assert.Contains(t, res.Message, "ECLIPSE_FORECAST")
+	})
+
+	t.Run("JobLinkBudget returns LINK_BUDGET prefix with margins", func(t *testing.T) {
+		svc := spacecraft.New(cfg)
+		// Prime state so orbital propagation has a valid position.
+		_, err := svc.State(ctx, t0)
+		require.NoError(t, err)
+
+		rawTC := buildTC(t, cfg.SCID, 0, []byte{0x04, 0x03}) // CmdComputeJob, JobLinkBudget
+		res, err := svc.ExecuteCommand(ctx, rawTC)
+		require.NoError(t, err)
+		assert.True(t, res.Accepted)
+		assert.Contains(t, res.Message, "LINK_BUDGET")
+		assert.Contains(t, res.Message, "best=")
+	})
+
+	t.Run("missing payload rejected", func(t *testing.T) {
+		svc := spacecraft.New(cfg)
+		rawTC := buildTC(t, cfg.SCID, 0, []byte{0x04}) // CmdComputeJob, no job type
+		res, err := svc.ExecuteCommand(ctx, rawTC)
+		require.NoError(t, err)
+		assert.False(t, res.Accepted)
+		assert.Contains(t, res.Message, "requires 1-byte")
+	})
+
+	t.Run("unknown job type rejected gracefully", func(t *testing.T) {
+		svc := spacecraft.New(cfg)
+		rawTC := buildTC(t, cfg.SCID, 0, []byte{0x04, 0xFF})
+		res, err := svc.ExecuteCommand(ctx, rawTC)
+		require.NoError(t, err)
+		assert.False(t, res.Accepted)
+		assert.Contains(t, res.Message, "unknown job type")
+	})
+}
+
+// ─── CmdDeployPayload ───────────────────────────────────────────────────────
+
+func TestCmdDeployPayload(t *testing.T) {
+	cfg := issConfig()
+	ctx := context.Background()
+
+	t.Run("valid profile 0x01 accepted", func(t *testing.T) {
+		svc := spacecraft.New(cfg)
+		rawTC := buildTC(t, cfg.SCID, 0, []byte{0x05, 0x01})
+		res, err := svc.ExecuteCommand(ctx, rawTC)
+		require.NoError(t, err)
+		assert.True(t, res.Accepted)
+		assert.Contains(t, res.Message, "anomaly-detector-v1")
+		assert.Contains(t, res.Message, "RUNNING")
+	})
+
+	t.Run("valid profile 0x02 accepted", func(t *testing.T) {
+		svc := spacecraft.New(cfg)
+		rawTC := buildTC(t, cfg.SCID, 0, []byte{0x05, 0x02})
+		res, err := svc.ExecuteCommand(ctx, rawTC)
+		require.NoError(t, err)
+		assert.True(t, res.Accepted)
+		assert.Contains(t, res.Message, "telemetry-compressor-v1")
+	})
+
+	t.Run("unknown profile rejected with valid ID list", func(t *testing.T) {
+		svc := spacecraft.New(cfg)
+		rawTC := buildTC(t, cfg.SCID, 0, []byte{0x05, 0xFF})
+		res, err := svc.ExecuteCommand(ctx, rawTC)
+		require.NoError(t, err)
+		assert.False(t, res.Accepted)
+		assert.Contains(t, res.Message, "unknown profile")
+		assert.Contains(t, res.Message, "0x01=")
+	})
+
+	t.Run("missing payload rejected", func(t *testing.T) {
+		svc := spacecraft.New(cfg)
+		rawTC := buildTC(t, cfg.SCID, 0, []byte{0x05})
+		res, err := svc.ExecuteCommand(ctx, rawTC)
+		require.NoError(t, err)
+		assert.False(t, res.Accepted)
+	})
+
+	t.Run("PayloadState reflects deployed payload", func(t *testing.T) {
+		svc := spacecraft.New(cfg)
+		assert.Nil(t, svc.PayloadState())
+		rawTC := buildTC(t, cfg.SCID, 0, []byte{0x05, 0x01})
+		_, err := svc.ExecuteCommand(ctx, rawTC)
+		require.NoError(t, err)
+		p := svc.PayloadState()
+		require.NotNil(t, p)
+		assert.Equal(t, "anomaly-detector-v1", p.Name)
+		assert.Equal(t, "RUNNING", p.Status)
+	})
+}
