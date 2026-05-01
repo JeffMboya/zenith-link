@@ -96,15 +96,17 @@ func main() {
 	// Medium-inclination orbit at 550 km, 53°, RAAN=π (180° offset from SC-1).
 	// Fills the coverage gap between ISS-like SC-1 (400 km, 51.6°) and polar
 	// Relay-1 (700 km, 98°), giving the constellation three distinct ground tracks.
-	sc3Elements := orbital.Elements{
-		SemiMajorAxis: 6_921_000,         // 550 km altitude
+	// MeanAnomaly is adjusted at startup so the first Nairobi contact window
+	// opens within ~90 seconds (offset from Relay-1 by targetLeadSec+30s to stagger).
+	sc3Elements := adjustForEarlyContact(orbital.Elements{
+		SemiMajorAxis: 6_921_000, // 550 km altitude
 		Eccentricity:  0.0001,
 		Inclination:   53.0 * math.Pi / 180,
-		RAAN:          math.Pi,           // 180° from SC-1, maximising coverage gap fill
+		RAAN:          math.Pi, // 180° from SC-1, maximising coverage gap fill
 		ArgPerigee:    0.0,
-		MeanAnomaly:   math.Pi * 5 / 6,  // start offset to avoid SC-1 conjunction
+		MeanAnomaly:   0.0,
 		Epoch:         time.Now().UTC(),
-	}
+	}, cfg.GSLat, cfg.GSLon, cfg.MinElevDeg, 120, logger) // 120s lead: staggered after Relay-1
 
 	buf := &relayBuffer{}
 	client := &http.Client{Timeout: 10 * time.Second}
@@ -130,6 +132,9 @@ func main() {
 			"upstream_node":   upstream,
 		})
 	})
+
+	// /windows returns upcoming ground-station contact windows for SC-3 (Relay-2).
+	mux.HandleFunc("/windows", relayWindowsHandler(sc3Elements, cfg.GSLat, cfg.GSLon, cfg.MinElevDeg))
 
 	// /telemetry returns a live simulated health snapshot of this relay node (SC-3).
 	// Orbital state is propagated from sc3Elements; power and thermal values
@@ -262,7 +267,7 @@ func forwardLoop(ctx context.Context, client *http.Client, cfg config, elem orbi
 			if !inContact {
 				continue
 			}
-			if time.Since(lastForwarded) < time.Minute {
+			if time.Since(lastForwarded) < 5*time.Second {
 				continue
 			}
 			if err := forwardFrame(ctx, client, cfg, frame); err != nil {
@@ -319,6 +324,72 @@ func relay2TelemetryHandler(elem orbital.Elements, scid uint16) http.HandlerFunc
 			"ts":            time.Now().UTC(),
 		})
 	}
+}
+
+// relayWindowsHandler returns upcoming Nairobi contact windows for this relay.
+func relayWindowsHandler(elem orbital.Elements, gsLat, gsLon, minElevDeg float64) http.HandlerFunc {
+	type winRes struct {
+		AOS         time.Time `json:"aos"`
+		LOS         time.Time `json:"los"`
+		DurationSec float64   `json:"duration_sec"`
+		MaxElevDeg  float64   `json:"max_elevation_deg"`
+	}
+	return func(w http.ResponseWriter, _ *http.Request) {
+		now := time.Now().UTC()
+		inContact, _ := orbital.IsInContact(elem, gsLat, gsLon, now, minElevDeg)
+		windows, err := orbital.ContactWindows(elem, gsLat, gsLon, now, now.Add(2*time.Hour), minElevDeg)
+		var wins []winRes
+		if err == nil {
+			for _, cw := range windows {
+				wins = append(wins, winRes{
+					AOS:         cw.AOS,
+					LOS:         cw.LOS,
+					DurationSec: cw.Duration().Seconds(),
+					MaxElevDeg:  cw.MaxElevationDeg,
+				})
+			}
+		}
+		if wins == nil {
+			wins = []winRes{}
+		}
+		w.Header().Set("Content-Type", "application/json")
+		_ = json.NewEncoder(w).Encode(map[string]any{
+			"count":      len(wins),
+			"windows":    wins,
+			"in_contact": inContact,
+		})
+	}
+}
+
+// adjustForEarlyContact advances the mean anomaly so the first Nairobi contact
+// window opens within targetLeadSec seconds of startup. Orbital shape is unchanged.
+func adjustForEarlyContact(elem orbital.Elements, gsLat, gsLon, minElevDeg, targetLeadSec float64, logger *slog.Logger) orbital.Elements {
+	now := time.Now().UTC()
+	windows, err := orbital.ContactWindows(elem, gsLat, gsLon, now, now.Add(120*time.Minute), minElevDeg)
+	if err != nil || len(windows) == 0 {
+		logger.Warn("relay-2: startup contact scan failed — using default mean anomaly", slog.Any("error", err))
+		return elem
+	}
+
+	timeToAOS := windows[0].AOS.Sub(now).Seconds()
+	if timeToAOS <= targetLeadSec {
+		logger.Info("relay-2: first contact window within target lead — no adjustment needed",
+			slog.Float64("time_to_aos_sec", timeToAOS))
+		return elem
+	}
+
+	const mu = 3.986004418e14
+	a := elem.SemiMajorAxis
+	T := 2 * math.Pi * math.Sqrt(a*a*a/mu)
+	advance := timeToAOS - targetLeadSec
+	elem.MeanAnomaly = math.Mod(elem.MeanAnomaly+2*math.Pi*advance/T, 2*math.Pi)
+
+	logger.Info("relay-2: mean anomaly adjusted for early startup contact window",
+		slog.Float64("original_aos_sec", timeToAOS),
+		slog.Float64("target_lead_sec", targetLeadSec),
+		slog.Float64("advance_sec", advance))
+
+	return elem
 }
 
 func forwardFrame(ctx context.Context, client *http.Client, cfg config, frame []byte) error {

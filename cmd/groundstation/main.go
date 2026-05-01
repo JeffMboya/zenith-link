@@ -17,7 +17,6 @@ package main
 
 import (
 	"context"
-	"io"
 	"log/slog"
 	"net/http"
 	"os"
@@ -40,10 +39,9 @@ type config struct {
 	SCAddr         string  `env:"SC_ADDR" envDefault:"http://spacecraft:8080"`
 	SCSCID         uint16  `env:"SC_SCID" envDefault:"90"`
 	SCVCID         uint8   `env:"SC_VCID" envDefault:"0"`
-	StaticDir      string `env:"STATIC_DIR"        envDefault:""`
-	Relay1Addr     string `env:"RELAY1_ADDR"       envDefault:"http://relay:8082"`
-	Relay2Addr     string `env:"RELAY2_ADDR"       envDefault:"http://relay2:8083"`
-	PollSCInterval int    `env:"POLL_SC_INTERVAL_SEC" envDefault:"0"`
+	StaticDir      string  `env:"STATIC_DIR"   envDefault:""`
+	Relay1Addr     string  `env:"RELAY1_ADDR"  envDefault:"http://relay:8082"`
+	Relay2Addr     string  `env:"RELAY2_ADDR"  envDefault:"http://relay2:8083"`
 }
 
 func main() {
@@ -80,10 +78,6 @@ func main() {
 	svc := gsmiddleware.NewLogging(groundstation.New(svcCfg), logger)
 	router := gsapi.NewRouter(svc, routerCfg)
 
-	if cfg.PollSCInterval > 0 {
-		go pollSpacecraft(ctx, svc, cfg.SCAddr, cfg.PollSCInterval, logger)
-	}
-
 	srv := &http.Server{
 		Addr:         cfg.Addr,
 		Handler:      router,
@@ -111,46 +105,5 @@ func main() {
 	defer cancel()
 	if err := srv.Shutdown(shutdownCtx); err != nil {
 		logger.Error("shutdown error", slog.Any("error", err))
-	}
-}
-
-// pollSpacecraft fetches raw Zenith-Link frames from the spacecraft's
-// /frame/zenith endpoint on the given interval and delivers them to the
-// groundstation service directly. This guarantees data flows to WebSocket
-// clients without waiting for a relay contact window.
-func pollSpacecraft(ctx context.Context, svc groundstation.Service, scAddr string, intervalSec int, logger *slog.Logger) {
-	client := &http.Client{Timeout: 5 * time.Second}
-	ticker := time.NewTicker(time.Duration(intervalSec) * time.Second)
-	defer ticker.Stop()
-
-	endpoint := scAddr + "/frame/zenith"
-	for {
-		select {
-		case <-ctx.Done():
-			return
-		case <-ticker.C:
-			func() {
-				req, err := http.NewRequestWithContext(ctx, http.MethodGet, endpoint, nil)
-				if err != nil {
-					return
-				}
-				resp, err := client.Do(req)
-				if err != nil {
-					logger.Debug("gs direct poll: spacecraft unreachable", slog.Any("error", err))
-					return
-				}
-				defer resp.Body.Close()
-				if resp.StatusCode != http.StatusOK {
-					return
-				}
-				frame, err := io.ReadAll(io.LimitReader(resp.Body, 4096))
-				if err != nil || len(frame) == 0 {
-					return
-				}
-				if _, err := svc.Receive(ctx, frame); err != nil {
-					logger.Debug("gs direct poll: frame rejected", slog.Any("error", err))
-				}
-			}()
-		}
 	}
 }

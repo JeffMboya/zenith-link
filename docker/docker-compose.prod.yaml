@@ -53,7 +53,6 @@ services:
       - SC_ADDR=http://spacecraft:8080
       - SC_SCID=90
       - SC_VCID=0
-      - POLL_SC_INTERVAL_SEC=2
     depends_on:
       - spacecraft
 

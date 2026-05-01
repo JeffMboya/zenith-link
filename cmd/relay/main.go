@@ -87,15 +87,17 @@ func main() {
 
 	// Sun-synchronous polar orbit at 700 km — complements the ISS-like SC-1.
 	// Inclination 98° gives retrograde sun-sync; RAAN chosen for coverage offset.
-	relayElements := orbital.Elements{
+	// MeanAnomaly is adjusted at startup so the first Nairobi contact window
+	// opens within ~90 seconds, making the ISL demo reliable without warping physics.
+	relayElements := adjustForEarlyContact(orbital.Elements{
 		SemiMajorAxis: 7_078_000,   // 700 km altitude
 		Eccentricity:  0.0001,
 		Inclination:   98.0 * math.Pi / 180,
 		RAAN:          math.Pi / 2, // 90° offset from SC-1 for complementary coverage
 		ArgPerigee:    0.0,
-		MeanAnomaly:   math.Pi / 3, // start at 60° true anomaly
+		MeanAnomaly:   0.0,
 		Epoch:         time.Now().UTC(),
-	}
+	}, cfg.GSLat, cfg.GSLon, cfg.MinElevDeg, 90, logger)
 
 	node := &relayNode{
 		store:    dtn.NewStore(),
@@ -165,6 +167,10 @@ func main() {
 		w.WriteHeader(http.StatusOK)
 		_, _ = w.Write(b.Payload)
 	})
+
+	// /windows returns upcoming ground-station contact windows for SC-2 (Relay-1).
+	// Used by the frontend to show AOS countdown in the ISL mesh tile.
+	mux.HandleFunc("/windows", relayWindowsHandler(relayElements, cfg.GSLat, cfg.GSLon, cfg.MinElevDeg))
 
 	// /telemetry returns a live simulated health snapshot for SC-2 (Relay-1).
 	// Orbital state is derived from relayElements; values reflect the 700 km
@@ -299,23 +305,29 @@ func forwardLoop(ctx context.Context, client *http.Client, cfg config, node *rel
 				continue
 			}
 
-			// Avoid flooding — forward at most once per minute even if contact persists.
-			if time.Since(lastForwarded) < time.Minute {
-				continue
-			}
-
-			if err := forwardFrame(ctx, client, cfg, b.Payload); err != nil {
-				logger.Warn("relay: forward failed",
-					slog.Uint64("bundle_id", b.ID),
-					slog.Any("error", err),
-				)
-			} else {
-				node.store.Remove(b.ID)
+			// Drain all buffered bundles during contact window (rate-limit: 5s between
+			// successive forwards so the GS isn't flooded but link is kept busy).
+			for {
+				if time.Since(lastForwarded) < 5*time.Second {
+					break
+				}
+				bfwd := node.store.Next()
+				if bfwd == nil {
+					break
+				}
+				if err := forwardFrame(ctx, client, cfg, bfwd.Payload); err != nil {
+					logger.Warn("relay: forward failed",
+						slog.Uint64("bundle_id", bfwd.ID),
+						slog.Any("error", err),
+					)
+					break
+				}
+				node.store.Remove(bfwd.ID)
 				lastForwarded = time.Now()
 				logger.Info("relay: bundle forwarded to GS via ISL",
-					slog.Uint64("bundle_id", b.ID),
-					slog.Int("bytes", len(b.Payload)),
-					slog.Duration("bundle_age", time.Since(b.CreatedAt)),
+					slog.Uint64("bundle_id", bfwd.ID),
+					slog.Int("bytes", len(bfwd.Payload)),
+					slog.Duration("bundle_age", time.Since(bfwd.CreatedAt)),
 					slog.Float64("gs_lat", cfg.GSLat),
 					slog.Float64("gs_lon", cfg.GSLon),
 				)
@@ -362,6 +374,80 @@ func relayTelemetryHandler(elem orbital.Elements, scid uint16) http.HandlerFunc 
 			"ts":            time.Now().UTC(),
 		})
 	}
+}
+
+// relayWindowsHandler returns the next contact windows for this relay as seen
+// from the ground station. The frontend uses this to show the AOS countdown
+// in the ISL mesh tile, replacing a generic "no data" state with an orbital ETA.
+func relayWindowsHandler(elem orbital.Elements, gsLat, gsLon, minElevDeg float64) http.HandlerFunc {
+	type winRes struct {
+		AOS         time.Time `json:"aos"`
+		LOS         time.Time `json:"los"`
+		DurationSec float64   `json:"duration_sec"`
+		MaxElevDeg  float64   `json:"max_elevation_deg"`
+	}
+	return func(w http.ResponseWriter, _ *http.Request) {
+		now := time.Now().UTC()
+		inContact, _ := orbital.IsInContact(elem, gsLat, gsLon, now, minElevDeg)
+		windows, err := orbital.ContactWindows(elem, gsLat, gsLon, now, now.Add(2*time.Hour), minElevDeg)
+		var wins []winRes
+		if err == nil {
+			for _, cw := range windows {
+				wins = append(wins, winRes{
+					AOS:         cw.AOS,
+					LOS:         cw.LOS,
+					DurationSec: cw.Duration().Seconds(),
+					MaxElevDeg:  cw.MaxElevationDeg,
+				})
+			}
+		}
+		if wins == nil {
+			wins = []winRes{}
+		}
+		w.Header().Set("Content-Type", "application/json")
+		_ = json.NewEncoder(w).Encode(map[string]any{
+			"count":      len(wins),
+			"windows":    wins,
+			"in_contact": inContact,
+		})
+	}
+}
+
+// adjustForEarlyContact ensures the first Nairobi contact window opens within
+// targetLeadSec seconds of startup by advancing the mean anomaly. The orbital
+// shape and period are unchanged — the satellite simply starts at a different
+// point in its orbit. This makes ISL relay forwarding reliable for demos
+// without waiting up to 100 minutes for a contact window to naturally open.
+func adjustForEarlyContact(elem orbital.Elements, gsLat, gsLon, minElevDeg, targetLeadSec float64, logger *slog.Logger) orbital.Elements {
+	now := time.Now().UTC()
+	windows, err := orbital.ContactWindows(elem, gsLat, gsLon, now, now.Add(120*time.Minute), minElevDeg)
+	if err != nil || len(windows) == 0 {
+		logger.Warn("relay: startup contact scan failed — using default mean anomaly", slog.Any("error", err))
+		return elem
+	}
+
+	firstAOS := windows[0].AOS
+	timeToAOS := firstAOS.Sub(now).Seconds()
+
+	if timeToAOS <= targetLeadSec {
+		logger.Info("relay: first contact window within target lead — no adjustment needed",
+			slog.Float64("time_to_aos_sec", timeToAOS))
+		return elem
+	}
+
+	// T = 2π√(a³/μ); advance by (timeToAOS - targetLeadSec) seconds of orbit.
+	const mu = 3.986004418e14 // Earth gravitational parameter [m³/s²]
+	a := elem.SemiMajorAxis
+	T := 2 * math.Pi * math.Sqrt(a*a*a/mu)
+	advance := timeToAOS - targetLeadSec
+	elem.MeanAnomaly = math.Mod(elem.MeanAnomaly+2*math.Pi*advance/T, 2*math.Pi)
+
+	logger.Info("relay: mean anomaly adjusted for early startup contact window",
+		slog.Float64("original_aos_sec", timeToAOS),
+		slog.Float64("target_lead_sec", targetLeadSec),
+		slog.Float64("advance_sec", advance))
+
+	return elem
 }
 
 func forwardFrame(ctx context.Context, client *http.Client, cfg config, frame []byte) error {

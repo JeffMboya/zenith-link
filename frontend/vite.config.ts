@@ -27,11 +27,19 @@ export default defineConfig({
         target: 'http://localhost:8082',
         rewrite: (path: string) => path.replace(/^\/relay/, ''),
       },
+      '/relay/windows': {
+        target: 'http://localhost:8082',
+        rewrite: (path: string) => path.replace(/^\/relay/, ''),
+      },
       '/relay2/health': {
         target: 'http://localhost:8083',
         rewrite: (path: string) => path.replace(/^\/relay2/, ''),
       },
       '/relay2/telemetry': {
+        target: 'http://localhost:8083',
+        rewrite: (path: string) => path.replace(/^\/relay2/, ''),
+      },
+      '/relay2/windows': {
         target: 'http://localhost:8083',
         rewrite: (path: string) => path.replace(/^\/relay2/, ''),
       },

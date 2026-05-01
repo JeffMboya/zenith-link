@@ -78,30 +78,60 @@ interface ISLNode {
   label: string
   color: string
   detail: string
+  aosSec: number | null   // seconds to next AOS; null = currently in contact
+  inContact: boolean
+}
+
+function fmtAOS(sec: number): string {
+  const m = Math.floor(sec / 60)
+  const s = sec % 60
+  return m > 0 ? `${m}m ${s}s` : `${s}s`
 }
 
 function useISLNodes() {
   const [nodes, setNodes] = useState<[ISLNode, ISLNode]>([
-    { label: 'RELAY-1', color: 'var(--text-dim)', detail: '...' },
-    { label: 'RELAY-2', color: 'var(--text-dim)', detail: '...' },
+    { label: 'RELAY-1', color: 'var(--text-dim)', detail: '...', aosSec: null, inContact: false },
+    { label: 'RELAY-2', color: 'var(--text-dim)', detail: '...', aosSec: null, inContact: false },
   ])
 
   useEffect(() => {
     let timer: ReturnType<typeof setTimeout>
 
     async function poll() {
-      const results = await Promise.allSettled([
-        fetch('/relay/health').then(r => r.ok ? r.json() : Promise.reject()),
-        fetch('/relay2/health').then(r => r.ok ? r.json() : Promise.reject()),
+      const [healthResults, windowResults] = await Promise.all([
+        Promise.allSettled([
+          fetch('/relay/health').then(r => r.ok ? r.json() : Promise.reject()),
+          fetch('/relay2/health').then(r => r.ok ? r.json() : Promise.reject()),
+        ]),
+        Promise.allSettled([
+          fetch('/relay/windows').then(r => r.ok ? r.json() : Promise.reject()),
+          fetch('/relay2/windows').then(r => r.ok ? r.json() : Promise.reject()),
+        ]),
       ])
-      setNodes(results.map((res, i) => {
+
+      setNodes(healthResults.map((res, i) => {
         const label = i === 0 ? 'RELAY-1' : 'RELAY-2'
-        if (res.status === 'rejected') return { label, color: 'var(--red)', detail: 'OFFLINE' }
-        const d = res.value as { buffer_has_data: boolean; last_fetch_at: string; upstream_node?: string }
-        const color = d.buffer_has_data ? 'var(--green)' : 'var(--amber)'
-        const detail = d.buffer_has_data ? 'BUFFERED' : 'EMPTY'
-        return { label, color, detail }
+
+        // Parse windows for AOS countdown
+        let aosSec: number | null = null
+        let inContact = false
+        const wr = windowResults[i]
+        if (wr.status === 'fulfilled') {
+          const wd = wr.value as { windows: { aos: string }[]; in_contact: boolean }
+          inContact = wd.in_contact ?? false
+          if (!inContact && wd.windows?.length) {
+            const diffSec = Math.max(0, Math.round((new Date(wd.windows[0].aos).getTime() - Date.now()) / 1000))
+            aosSec = diffSec
+          }
+        }
+
+        if (res.status === 'rejected') return { label, color: 'var(--red)', detail: 'OFFLINE', aosSec: null, inContact: false }
+        const d = res.value as { buffer_has_data: boolean }
+        const color = inContact ? 'var(--green)' : d.buffer_has_data ? 'var(--cyan)' : 'var(--amber)'
+        const detail = inContact ? 'IN CONTACT' : d.buffer_has_data ? 'BUFFERED' : 'EMPTY'
+        return { label, color, detail, aosSec, inContact }
       }) as [ISLNode, ISLNode])
+
       timer = setTimeout(poll, ISL_POLL_MS)
     }
 
@@ -205,8 +235,17 @@ export function KPIBar({ metrics, satellite, connected, linkLost, tleSource, tle
     return () => clearInterval(id)
   }, [eclipseStart])
 
-  const offlineText = linkLost ? 'LINK LOST' : 'AWAITING LINK ACQUISITION...'
-  const offlineColor = linkLost ? 'var(--red)' : 'var(--text-dim)'
+  const nearestRelay = !linkLost
+    ? islNodes
+        .filter(n => !n.inContact && n.aosSec !== null)
+        .sort((a, b) => (a.aosSec ?? 0) - (b.aosSec ?? 0))[0]
+    : null
+  const offlineText = linkLost
+    ? 'LINK LOST'
+    : nearestRelay?.aosSec != null
+      ? `RELAY CONTACT IN ${fmtAOS(nearestRelay.aosSec)} · ${nearestRelay.label}`
+      : 'AWAITING LINK ACQUISITION...'
+  const offlineColor = linkLost ? 'var(--red)' : nearestRelay ? 'var(--cyan)' : 'var(--text-dim)'
 
   return (
     <div style={{ position: 'fixed', top: 0, left: 0, right: 0, zIndex: 100 }}>
@@ -340,6 +379,11 @@ export function KPIBar({ metrics, satellite, connected, linkLost, tleSource, tle
             }} />
             <span style={{ color: node.color, fontSize: 8, letterSpacing: 1, fontWeight: 600 }}>{node.label}</span>
             <span style={{ color: 'var(--text-dim)', fontSize: 7, letterSpacing: 1 }}>{node.detail}</span>
+            {node.aosSec !== null && (
+              <span style={{ color: 'var(--cyan)', fontSize: 7, letterSpacing: 1 }}>
+                · AOS {fmtAOS(node.aosSec)}
+              </span>
+            )}
           </div>
         ))}
         <span style={{ color: 'var(--text-dim)', fontSize: 7, letterSpacing: 2 }}>ISL MESH</span>
