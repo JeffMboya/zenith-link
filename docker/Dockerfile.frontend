@@ -5,6 +5,9 @@ RUN npm ci --prefer-offline
 COPY frontend/ ./
 ARG VITE_CESIUM_TOKEN=""
 ENV VITE_CESIUM_TOKEN=$VITE_CESIUM_TOKEN
+# Cap Node heap at 400 MB so the build doesn't OOM on a 512 MB Droplet.
+# The 2 GB swapfile added by deploy-do.sh handles any temporary spikes.
+ENV NODE_OPTIONS="--max-old-space-size=400"
 RUN npm run build
 
 FROM nginx:1.27-alpine
