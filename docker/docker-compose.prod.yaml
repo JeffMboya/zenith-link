@@ -1,0 +1,95 @@
+version: "3.9"
+
+# Production compose for DigitalOcean Droplet.
+# Only nginx (port 80) is exposed publicly — all Go services communicate
+# on the internal Docker network. Set ZENITH_HMAC_KEY in .env before starting.
+#
+# Quick start:
+#   cp .env.example .env && nano .env   # set ZENITH_HMAC_KEY
+#   docker compose -f docker/docker-compose.prod.yaml up -d --build
+
+x-common: &common
+  restart: unless-stopped
+
+services:
+  frontend:
+    <<: *common
+    build:
+      context: ..
+      dockerfile: docker/Dockerfile.frontend
+      args:
+        VITE_CESIUM_TOKEN: ${VITE_CESIUM_TOKEN:-}
+    ports:
+      - "80:80"
+    depends_on:
+      - groundstation
+      - spacecraft
+      - relay
+      - relay2
+
+  spacecraft:
+    <<: *common
+    build:
+      context: ..
+      dockerfile: docker/Dockerfile.spacecraft
+    environment:
+      - ZENITH_HMAC_KEY=${ZENITH_HMAC_KEY:?ZENITH_HMAC_KEY must be set in .env}
+      - SPACECRAFT_ADDR=:8080
+      - SPACECRAFT_SCID=90
+      - SPACECRAFT_VCID=0
+      - SPACECRAFT_APID=256
+
+  groundstation:
+    <<: *common
+    build:
+      context: ..
+      dockerfile: docker/Dockerfile.groundstation
+    environment:
+      - ZENITH_HMAC_KEY=${ZENITH_HMAC_KEY:?ZENITH_HMAC_KEY must be set in .env}
+      - GROUNDSTATION_ADDR=:8081
+      - GS_MAX_SUBSCRIBERS=64
+      - GS_LAT=-1.2864
+      - GS_LON=36.8172
+      - SC_ADDR=http://spacecraft:8080
+      - SC_SCID=90
+      - SC_VCID=0
+    depends_on:
+      - spacecraft
+
+  relay:
+    <<: *common
+    build:
+      context: ..
+      dockerfile: docker/Dockerfile.relay
+    environment:
+      - RELAY_ADDR=:8082
+      - SC1_ADDR=http://spacecraft:8080
+      - GS_ADDR=http://groundstation:8081
+      - RELAY_SCID=91
+      - GS_LAT=-1.2864
+      - GS_LON=36.8172
+      - MIN_ELEV_DEG=5.0
+      - POLL_INTERVAL_SEC=30
+    depends_on:
+      - spacecraft
+      - groundstation
+
+  relay2:
+    <<: *common
+    build:
+      context: ..
+      dockerfile: docker/Dockerfile.relay2
+    environment:
+      - RELAY2_ADDR=:8083
+      - SC1_ADDR=http://spacecraft:8080
+      - RELAY1_ADDR=http://relay:8082
+      - GS_ADDR=http://groundstation:8081
+      - RELAY2_SCID=92
+      - GS_LAT=-1.2864
+      - GS_LON=36.8172
+      - MIN_ELEV_DEG=5.0
+      - POLL_INTERVAL_SEC=30
+    depends_on:
+      - spacecraft
+      - groundstation
+      - relay
