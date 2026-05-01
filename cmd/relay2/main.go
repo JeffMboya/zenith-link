@@ -38,6 +38,7 @@ import (
 	"syscall"
 	"time"
 
+	"github.com/absmach/zenith-link/pkg/link"
 	"github.com/absmach/zenith-link/pkg/orbital"
 	"github.com/caarlos0/env/v11"
 )
@@ -129,6 +130,11 @@ func main() {
 			"upstream_node":   upstream,
 		})
 	})
+
+	// /telemetry returns a live simulated health snapshot of this relay node (SC-3).
+	// Orbital state is propagated from sc3Elements; power and thermal values
+	// reflect the 550 km medium-inclination orbit.
+	mux.HandleFunc("/telemetry", relay2TelemetryHandler(sc3Elements, cfg.RelaySCID))
 
 	srv := &http.Server{
 		Addr:         cfg.Addr,
@@ -222,7 +228,8 @@ func fetchFrom(ctx context.Context, client *http.Client, url, node string, buf *
 	if resp.StatusCode != http.StatusOK {
 		return false
 	}
-	frame, err := io.ReadAll(io.LimitReader(resp.Body, 8192))
+	throttled := link.NewThrottle(io.LimitReader(resp.Body, 8192), 20480) // 20 KB/s ISL link budget
+	frame, err := io.ReadAll(throttled)
 	if err != nil || len(frame) == 0 {
 		return false
 	}
@@ -269,6 +276,48 @@ func forwardLoop(ctx context.Context, client *http.Client, cfg config, elem orbi
 				)
 			}
 		}
+	}
+}
+
+// relay2TelemetryHandler returns a handler that emits a live telemetry snapshot
+// for SC-3, derived from orbital phase at request time. Lets Globe3D and the
+// satellite selector show realistic SC-3 health data without a dedicated radio.
+func relay2TelemetryHandler(elem orbital.Elements, scid uint16) http.HandlerFunc {
+	const orbitalPeriodSec = 5700.0 // 550 km → ~95-min period
+
+	return func(w http.ResponseWriter, _ *http.Request) {
+		elapsed := time.Since(elem.Epoch).Seconds()
+		phase := math.Mod(elapsed/orbitalPeriodSec, 1.0)
+
+		// ~35% of orbit in eclipse for 550 km altitude
+		inEclipse := phase > 0.65
+
+		var batV, solarV, tempC float64
+		if inEclipse {
+			solarV = 0
+			// slight discharge and cooling during eclipse shadow
+			shadowFrac := (phase - 0.65) / 0.35
+			batV = 7500 - 300*shadowFrac
+			tempC = 18 - 12*shadowFrac
+		} else {
+			solarV = 5100 + 200*math.Sin(2*math.Pi*phase)
+			batV = 7500
+			tempC = 22 + 8*math.Sin(2*math.Pi*phase)
+		}
+
+		w.Header().Set("Content-Type", "application/json")
+		_ = json.NewEncoder(w).Encode(map[string]any{
+			"scid":          scid,
+			"name":          "SC-3 (Relay-2)",
+			"orbit":         "550km/53deg/RAAN=180deg",
+			"bat_mv":        batV,
+			"solar_mv":      solarV,
+			"temp_c":        tempC,
+			"rssi_dbm":      -72.0,
+			"in_eclipse":    inEclipse,
+			"orbital_phase": phase,
+			"ts":            time.Now().UTC(),
+		})
 	}
 }
 

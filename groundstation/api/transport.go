@@ -11,6 +11,9 @@ import (
 	"io"
 	"log/slog"
 	"net/http"
+	"net/http/httputil"
+	"net/url"
+	"os"
 	"sync/atomic"
 	"time"
 
@@ -29,7 +32,7 @@ var upgrader = websocket.Upgrader{
 // RouterConfig holds transport-level configuration for the groundstation router.
 type RouterConfig struct {
 	// SpacecraftAddr is the base URL of the spacecraft service (e.g. "http://spacecraft:8080").
-	// Required for command forwarding. If empty, POST /command returns 503.
+	// Required for command forwarding and proxy. If empty, POST /command returns 503.
 	SpacecraftAddr string
 	// SCID is the spacecraft's 10-bit CCSDS ID — embedded in forwarded TC frames.
 	SCID uint16
@@ -39,6 +42,17 @@ type RouterConfig struct {
 	GSLat float64
 	// GSLon is the ground station geodetic longitude [degrees] used in log output.
 	GSLon float64
+	// StaticDir is the path to the compiled frontend dist directory. When non-empty,
+	// the router serves the frontend and acts as a single-origin entry point for
+	// production deployments (e.g. Fly.io). Spacecraft and relay endpoints are
+	// reverse-proxied so the frontend can reach them via a single port.
+	StaticDir string
+	// Relay1Addr is the base URL of the ISL Relay-1 service (port 8082).
+	// Only used when StaticDir is set (production mode).
+	Relay1Addr string
+	// Relay2Addr is the base URL of the ISL Relay-2 service (port 8083).
+	// Only used when StaticDir is set (production mode).
+	Relay2Addr string
 }
 
 // commandForwarder encodes JSON commands into TC Transfer Frames and POSTs
@@ -116,7 +130,66 @@ func NewRouter(svc groundstation.Service, cfg RouterConfig) http.Handler {
 	r.Get("/ws", wsHandler(svc))
 	r.Post("/command", commandHandler(fwd))
 
+	// Production mode: serve the compiled frontend and reverse-proxy spacecraft /
+	// relay endpoints so everything is reachable from a single port.
+	if cfg.StaticDir != "" {
+		// Spacecraft endpoints
+		if cfg.SpacecraftAddr != "" {
+			scProxy := mustReverseProxy(cfg.SpacecraftAddr)
+			for _, prefix := range []string{"/windows", "/state", "/track", "/constellation", "/tle", "/events", "/payload", "/inference"} {
+				r.Handle(prefix, scProxy)
+				r.Handle(prefix+"/*", scProxy)
+			}
+		}
+		// Relay-1 endpoints
+		if cfg.Relay1Addr != "" {
+			r1Proxy := mustReverseProxyStrip(cfg.Relay1Addr, "/relay")
+			r.Handle("/relay/*", r1Proxy)
+		}
+		// Relay-2 endpoints
+		if cfg.Relay2Addr != "" {
+			r2Proxy := mustReverseProxyStrip(cfg.Relay2Addr, "/relay2")
+			r.Handle("/relay2/*", r2Proxy)
+		}
+		// Frontend: serve dist/ for all remaining paths (SPA catch-all).
+		fs := http.FileServer(http.Dir(cfg.StaticDir))
+		r.Handle("/*", spaHandler(fs, cfg.StaticDir))
+	}
+
 	return r
+}
+
+// mustReverseProxy creates a reverse proxy targeting baseURL. Panics on bad URL.
+func mustReverseProxy(baseURL string) http.Handler {
+	u, err := url.Parse(baseURL)
+	if err != nil {
+		panic("invalid proxy target: " + baseURL)
+	}
+	return httputil.NewSingleHostReverseProxy(u)
+}
+
+// mustReverseProxyStrip creates a reverse proxy that strips the given path prefix
+// before forwarding. E.g. /relay/health → /health on the target.
+func mustReverseProxyStrip(baseURL, stripPrefix string) http.Handler {
+	u, err := url.Parse(baseURL)
+	if err != nil {
+		panic("invalid proxy target: " + baseURL)
+	}
+	proxy := httputil.NewSingleHostReverseProxy(u)
+	return http.StripPrefix(stripPrefix, proxy)
+}
+
+// spaHandler serves static files from dir, falling back to index.html for
+// paths that don't match a file — standard SPA routing behaviour.
+func spaHandler(fs http.Handler, dir string) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		path := dir + r.URL.Path
+		if _, err := os.Stat(path); os.IsNotExist(err) {
+			http.ServeFile(w, r, dir+"/index.html")
+			return
+		}
+		fs.ServeHTTP(w, r)
+	}
 }
 
 func healthHandler(w http.ResponseWriter, _ *http.Request) {

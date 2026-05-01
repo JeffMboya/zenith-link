@@ -139,3 +139,11 @@ func (lm *loggingMiddleware) PayloadState() *spacecraft.DeployedPayload {
 func (lm *loggingMiddleware) LastResult() inference.Result {
 	return lm.svc.LastResult()
 }
+
+func (lm *loggingMiddleware) StormLevel() string {
+	return lm.svc.StormLevel()
+}
+
+func (lm *loggingMiddleware) KpIndex() float64 {
+	return lm.svc.KpIndex()
+}

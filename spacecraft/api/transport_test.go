@@ -486,7 +486,7 @@ func TestInferenceStateHandler(t *testing.T) {
 		check      func(t *testing.T, body map[string]any)
 	}{
 		{
-			desc: "NOMINAL result — all fields present",
+			desc: "NOMINAL result — all fields present including space weather",
 			setupMock: func(svc *mocks.Service) {
 				svc.On("LastResult").Return(inference.Result{
 					Class:      inference.NOMINAL,
@@ -498,6 +498,8 @@ func TestInferenceStateHandler(t *testing.T) {
 						AttVel:   inference.ChannelDetail{Z: 0.05, Mean: 0.05, Std: 1},
 					},
 				})
+				svc.On("StormLevel").Return("QUIET")
+				svc.On("KpIndex").Return(1.0)
 			},
 			wantStatus: http.StatusOK,
 			check: func(t *testing.T, body map[string]any) {
@@ -513,10 +515,12 @@ func TestInferenceStateHandler(t *testing.T) {
 				assert.InDelta(t, 50.0, batV["std"], 0.1)
 				assert.Equal(t, "", body["pre_fault_class"])
 				assert.Equal(t, "", body["pre_fault_chan"])
+				assert.Equal(t, "QUIET", body["storm_level"])
+				assert.InDelta(t, 1.0, body["kp_index"], 0.001)
 			},
 		},
 		{
-			desc: "POWER_ANOMALY result with pre-fault signal",
+			desc: "POWER_ANOMALY result with pre-fault signal and space weather",
 			setupMock: func(svc *mocks.Service) {
 				svc.On("LastResult").Return(inference.Result{
 					Class:         inference.POWER_ANOMALY,
@@ -527,6 +531,8 @@ func TestInferenceStateHandler(t *testing.T) {
 						BatV: inference.ChannelDetail{Z: -2.5, Mean: 7500, Std: 50},
 					},
 				})
+				svc.On("StormLevel").Return("QUIET")
+				svc.On("KpIndex").Return(1.0)
 			},
 			wantStatus: http.StatusOK,
 			check: func(t *testing.T, body map[string]any) {
@@ -537,6 +543,8 @@ func TestInferenceStateHandler(t *testing.T) {
 				channels := body["channels"].(map[string]any)
 				batV := channels["bat_v"].(map[string]any)
 				assert.InDelta(t, -2.5, batV["z"], 0.001)
+				assert.Equal(t, "QUIET", body["storm_level"])
+				assert.InDelta(t, 1.0, body["kp_index"], 0.001)
 			},
 		},
 	}

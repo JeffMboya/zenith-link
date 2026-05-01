@@ -75,11 +75,13 @@ type ResultChannels struct {
 
 // Result is the detector output for one frame.
 type Result struct {
-	Class        Class
-	Confidence   uint8 // 0–255 (255 ≈ 100%)
-	Channels     ResultChannels
-	PreFaultClass string // non-empty when a channel is trending toward threshold
-	PreFaultChan  string // which channel is trending ("bat_v", "chassis_c", etc.)
+	Class          Class
+	Confidence     uint8 // 0–255 (255 ≈ 100%)
+	Channels       ResultChannels
+	PreFaultClass  string  // non-empty when a channel is trending toward threshold
+	PreFaultChan   string  // which channel is trending ("bat_v", "chassis_c", etc.)
+	ModelError     float64 // autoencoder reconstruction MSE (0 until warmed)
+	ModelThreshold float64 // calibrated MSE threshold (0 until warmup complete)
 }
 
 const (
@@ -116,6 +118,13 @@ type Detector struct {
 	lastResult    Result
 	zHistory      [4][zHistLen]float64 // ring buffer: [channel][frame], oldest first
 	zHead         int                  // next write slot in zHistory ring
+	ae            *Autoencoder         // onboard neural-net anomaly supplement
+}
+
+// NewDetector creates a Detector with a freshly initialised Autoencoder.
+// Use this instead of a bare struct literal so the autoencoder is ready to train.
+func NewDetector() *Detector {
+	return &Detector{ae: newAutoencoder()}
 }
 
 // Push adds a telemetry frame to the rolling window and returns the health classification.
@@ -166,12 +175,26 @@ func (d *Detector) Latest() Result {
 }
 
 func (d *Detector) classify(f Frame) Result {
+	// Train the autoencoder on every frame — including eclipse frames — to maintain
+	// training continuity across all operating modes.
+	var aeMSE float64
+	if d.ae != nil {
+		aeMSE, _ = d.ae.Push(f.BatV, f.TempC, f.RSSI, f.AngVelMag)
+	}
+
 	// Eclipse is detected from SolarV — unambiguous and avoids BatV transition noise.
 	if f.SolarV < 100 {
+		var res Result
 		if d.eclipseStreak >= eclipseSettle {
-			return Result{Class: ECLIPSE_COMPUTE, Confidence: 220}
+			res = Result{Class: ECLIPSE_COMPUTE, Confidence: 220}
+		} else {
+			res = Result{Class: ECLIPSE_ENTRY, Confidence: 200}
 		}
-		return Result{Class: ECLIPSE_ENTRY, Confidence: 200}
+		if d.ae != nil {
+			res.ModelError = aeMSE
+			res.ModelThreshold = d.ae.Threshold()
+		}
+		return res
 	}
 
 	batSt  := d.rollingStats(func(fr Frame) float64 { return fr.BatV }, stdFloorBatV)
@@ -219,6 +242,19 @@ func (d *Detector) classify(f Frame) Result {
 	res.Channels = channels
 	res.PreFaultClass = preFaultClass
 	res.PreFaultChan = preFaultChan
+
+	// Autoencoder supplement: if the network is warmed and reconstruction error
+	// exceeds the calibrated threshold, flag MODEL_ANOMALY on an otherwise-NOMINAL frame.
+	// This catches correlated multi-channel drift that the per-channel z-score misses.
+	if d.ae != nil {
+		res.ModelError = aeMSE
+		res.ModelThreshold = d.ae.Threshold()
+		if d.ae.Warmed() && aeMSE > d.ae.Threshold() && res.Class == NOMINAL {
+			res.PreFaultClass = "MODEL_ANOMALY"
+			res.PreFaultChan = "autoencoder"
+		}
+	}
+
 	return res
 }
 

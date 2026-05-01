@@ -86,3 +86,13 @@ func (m *Service) LastResult() inference.Result {
 	}
 	return inference.Result{}
 }
+
+func (m *Service) StormLevel() string {
+	args := m.Called()
+	return args.String(0)
+}
+
+func (m *Service) KpIndex() float64 {
+	args := m.Called()
+	return args.Get(0).(float64)
+}

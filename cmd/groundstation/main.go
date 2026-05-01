@@ -10,6 +10,9 @@
 //	SC_ADDR               Spacecraft service base URL for command forwarding (default: http://spacecraft:8080)
 //	SC_SCID               Spacecraft CCSDS SCID used in forwarded TC frames (default: 90)
 //	SC_VCID               Spacecraft virtual channel ID used in TC frames (default: 0)
+//	STATIC_DIR            Path to compiled frontend dist (enables prod mode with proxying)
+//	RELAY1_ADDR           Relay-1 base URL (used in prod mode, default: http://relay:8082)
+//	RELAY2_ADDR           Relay-2 base URL (used in prod mode, default: http://relay2:8083)
 package main
 
 import (
@@ -36,6 +39,9 @@ type config struct {
 	SCAddr         string  `env:"SC_ADDR" envDefault:"http://spacecraft:8080"`
 	SCSCID         uint16  `env:"SC_SCID" envDefault:"90"`
 	SCVCID         uint8   `env:"SC_VCID" envDefault:"0"`
+	StaticDir      string  `env:"STATIC_DIR"   envDefault:""`
+	Relay1Addr     string  `env:"RELAY1_ADDR"  envDefault:"http://relay:8082"`
+	Relay2Addr     string  `env:"RELAY2_ADDR"  envDefault:"http://relay2:8083"`
 }
 
 func main() {
@@ -61,6 +67,9 @@ func main() {
 		VCID:           cfg.SCVCID,
 		GSLat:          cfg.GSLat,
 		GSLon:          cfg.GSLon,
+		StaticDir:      cfg.StaticDir,
+		Relay1Addr:     cfg.Relay1Addr,
+		Relay2Addr:     cfg.Relay2Addr,
 	}
 
 	svc := gsmiddleware.NewLogging(groundstation.New(svcCfg), logger)

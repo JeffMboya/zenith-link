@@ -1,9 +1,10 @@
 // Command relay runs the Zenith-Link ISL (Inter-Satellite Link) relay service.
 //
 // The relay satellite polls a primary spacecraft (SC-1) for its latest Zenith-Link
-// telemetry frame, buffers it, and forwards it to a ground station when the relay
-// is within a contact window of the ground station. Forwarded frames carry the
-// X-Relayed-By header so the ground station can log the relay source.
+// telemetry frame, wraps it in a DTN bundle, buffers it in the DTN store, and
+// forwards it to a ground station when the relay is within a contact window of
+// the ground station. Forwarded frames carry the X-Relayed-By header so the
+// ground station can log the relay source.
 //
 // This demonstrates the store-and-forward relay concept at the heart of
 // inter-satellite networking: SC-1 may not be visible to the ground; SC-2
@@ -32,11 +33,12 @@ import (
 	"net/http"
 	"os"
 	"os/signal"
-	"sync"
 	"syscall"
 	"time"
 
+	"github.com/absmach/zenith-link/pkg/dtn"
 	"github.com/absmach/zenith-link/pkg/orbital"
+	"github.com/absmach/zenith-link/pkg/zenith"
 	"github.com/caarlos0/env/v11"
 )
 
@@ -51,24 +53,24 @@ type config struct {
 	PollIntervalSec int     `env:"POLL_INTERVAL_SEC"  envDefault:"30"`
 }
 
-// relayBuffer holds the most recently fetched SC-1 Zenith-Link frame.
-type relayBuffer struct {
-	mu        sync.RWMutex
-	frame     []byte
-	fetchedAt time.Time
+// relayNode holds the DTN bundle store and orbital parameters for this relay.
+type relayNode struct {
+	store    *dtn.Store
+	elements orbital.Elements
+	scid     uint16
 }
 
-func (b *relayBuffer) store(frame []byte) {
-	b.mu.Lock()
-	b.frame = frame
-	b.fetchedAt = time.Now().UTC()
-	b.mu.Unlock()
-}
-
-func (b *relayBuffer) load() ([]byte, time.Time) {
-	b.mu.RLock()
-	defer b.mu.RUnlock()
-	return b.frame, b.fetchedAt
+// extractPriority reads the Zenith-Link v2 Flags byte (offset 3 per the wire
+// format) and returns 2 if FlagPriority (0x04) is set, else 1 (normal).
+func extractPriority(frame []byte) uint8 {
+	if len(frame) < zenith.HeaderSize {
+		return 1
+	}
+	// Wire layout: Magic[0:2] | Version[2] | Flags[3] | Sequence[4:6] | Timestamp[6:10]
+	if frame[3]&zenith.FlagPriority != 0 {
+		return 2 // expedited
+	}
+	return 1 // normal
 }
 
 func main() {
@@ -86,55 +88,88 @@ func main() {
 	// Sun-synchronous polar orbit at 700 km — complements the ISS-like SC-1.
 	// Inclination 98° gives retrograde sun-sync; RAAN chosen for coverage offset.
 	relayElements := orbital.Elements{
-		SemiMajorAxis: 7_078_000,         // 700 km altitude
+		SemiMajorAxis: 7_078_000,   // 700 km altitude
 		Eccentricity:  0.0001,
 		Inclination:   98.0 * math.Pi / 180,
-		RAAN:          math.Pi / 2,        // 90° offset from SC-1 for complementary coverage
+		RAAN:          math.Pi / 2, // 90° offset from SC-1 for complementary coverage
 		ArgPerigee:    0.0,
-		MeanAnomaly:   math.Pi / 3,        // start at 60° true anomaly
+		MeanAnomaly:   math.Pi / 3, // start at 60° true anomaly
 		Epoch:         time.Now().UTC(),
 	}
 
-	buf := &relayBuffer{}
+	node := &relayNode{
+		store:    dtn.NewStore(),
+		elements: relayElements,
+		scid:     cfg.RelaySCID,
+	}
+
 	client := &http.Client{Timeout: 10 * time.Second}
 
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer stop()
 
-	// Poll SC-1 for its latest Zenith-Link frame.
-	go pollSC1(ctx, client, cfg, buf, logger)
+	// Poll SC-1 for its latest Zenith-Link frame and wrap it in a DTN bundle.
+	go pollSC1(ctx, client, cfg, node, logger)
 
-	// Forward buffered frames to GS when in contact.
-	go forwardLoop(ctx, client, cfg, relayElements, buf, logger)
+	// Forward bundles to GS when in contact.
+	go forwardLoop(ctx, client, cfg, node, logger)
+
+	// Periodically prune expired bundles from the store.
+	go func() {
+		ticker := time.NewTicker(time.Minute)
+		defer ticker.Stop()
+		for {
+			select {
+			case <-ctx.Done():
+				return
+			case <-ticker.C:
+				n := node.store.PruneExpired()
+				if n > 0 {
+					logger.Info("relay: pruned expired bundles", slog.Int("count", n))
+				}
+			}
+		}
+	}()
 
 	mux := http.NewServeMux()
 
 	mux.HandleFunc("/health", func(w http.ResponseWriter, _ *http.Request) {
-		frame, fetchedAt := buf.load()
+		bundleCount := node.store.Len()
+		hasData := node.store.HasData()
+		oldestAgeSec := int64(node.store.OldestAge().Seconds())
+
 		w.Header().Set("Content-Type", "application/json")
 		_ = json.NewEncoder(w).Encode(map[string]any{
-			"status":          "ok",
-			"relay_scid":      cfg.RelaySCID,
-			"sc1_addr":        cfg.SC1Addr,
-			"gs_addr":         cfg.GSAddr,
-			"buffer_has_data": len(frame) > 0,
-			"last_fetch_at":   fetchedAt,
+			"status":                "ok",
+			"relay_scid":            cfg.RelaySCID,
+			"sc1_addr":              cfg.SC1Addr,
+			"gs_addr":               cfg.GSAddr,
+			"buffer_has_data":       hasData,
+			"bundle_count":          bundleCount,
+			"oldest_bundle_age_sec": oldestAgeSec,
+			"bundle_ttl_sec":        7200,
+			"hop_count_max":         8,
 		})
 	})
 
-	// Expose buffered SC-1 frame for peer-to-peer relay routing.
-	// Relay-2 (SC-3) calls this to fetch a frame from SC-2's buffer before
+	// Expose the payload of the next queued bundle for peer-to-peer relay routing.
+	// Relay-2 (SC-3) calls this to fetch a frame from SC-2's DTN store before
 	// polling SC-1 directly, reducing load on the primary spacecraft.
 	mux.HandleFunc("/frame/zenith", func(w http.ResponseWriter, _ *http.Request) {
-		frame, _ := buf.load()
-		if len(frame) == 0 {
+		b := node.store.Next()
+		if b == nil {
 			w.WriteHeader(http.StatusNoContent)
 			return
 		}
 		w.Header().Set("Content-Type", "application/octet-stream")
 		w.WriteHeader(http.StatusOK)
-		_, _ = w.Write(frame)
+		_, _ = w.Write(b.Payload)
 	})
+
+	// /telemetry returns a live simulated health snapshot for SC-2 (Relay-1).
+	// Orbital state is derived from relayElements; values reflect the 700 km
+	// sun-synchronous polar orbit.
+	mux.HandleFunc("/telemetry", relayTelemetryHandler(relayElements, cfg.RelaySCID))
 
 	srv := &http.Server{
 		Addr:         cfg.Addr,
@@ -166,26 +201,26 @@ func main() {
 	_ = srv.Shutdown(shutdownCtx)
 }
 
-// pollSC1 fetches SC-1's raw Zenith-Link frame every PollIntervalSec seconds
-// and stores it in the relay buffer.
-func pollSC1(ctx context.Context, client *http.Client, cfg config, buf *relayBuffer, logger *slog.Logger) {
+// pollSC1 fetches SC-1's raw Zenith-Link frame every PollIntervalSec seconds,
+// wraps it in a DTN bundle, and places it in the node's DTN store.
+func pollSC1(ctx context.Context, client *http.Client, cfg config, node *relayNode, logger *slog.Logger) {
 	ticker := time.NewTicker(time.Duration(cfg.PollIntervalSec) * time.Second)
 	defer ticker.Stop()
 
 	// Fetch immediately on startup.
-	fetchAndStore(ctx, client, cfg, buf, logger)
+	fetchAndStore(ctx, client, cfg, node, logger)
 
 	for {
 		select {
 		case <-ctx.Done():
 			return
 		case <-ticker.C:
-			fetchAndStore(ctx, client, cfg, buf, logger)
+			fetchAndStore(ctx, client, cfg, node, logger)
 		}
 	}
 }
 
-func fetchAndStore(ctx context.Context, client *http.Client, cfg config, buf *relayBuffer, logger *slog.Logger) {
+func fetchAndStore(ctx context.Context, client *http.Client, cfg config, node *relayNode, logger *slog.Logger) {
 	url := cfg.SC1Addr + "/frame/zenith"
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, url, nil)
 	if err != nil {
@@ -214,13 +249,27 @@ func fetchAndStore(ctx context.Context, client *http.Client, cfg config, buf *re
 		return
 	}
 
-	buf.store(frame)
-	logger.Info("relay poll: SC-1 frame buffered", slog.Int("bytes", len(frame)))
+	b := &dtn.Bundle{
+		ID:          uint64(time.Now().UnixNano()),
+		Source:      dtn.EID{Node: 1, Service: 1}, // SC-1, telemetry
+		Destination: dtn.EID{Node: 0, Service: 1}, // Ground station, telemetry
+		CreatedAt:   time.Now().UTC(),
+		Lifetime:    2 * time.Hour,
+		Payload:     frame,
+		Priority:    extractPriority(frame),
+	}
+	node.store.Put(b)
+	logger.Info("relay poll: SC-1 frame wrapped in DTN bundle and stored",
+		slog.Int("bytes", len(frame)),
+		slog.Uint64("bundle_id", b.ID),
+		slog.Uint64("priority", uint64(b.Priority)),
+		slog.Int("bundle_count", node.store.Len()),
+	)
 }
 
-// forwardLoop checks contact windows every 10 seconds and forwards the buffered
-// SC-1 frame to the ground station when the relay is in view.
-func forwardLoop(ctx context.Context, client *http.Client, cfg config, elem orbital.Elements, buf *relayBuffer, logger *slog.Logger) {
+// forwardLoop checks contact windows every 10 seconds and forwards the highest-
+// priority bundle in the DTN store to the ground station when the relay is in view.
+func forwardLoop(ctx context.Context, client *http.Client, cfg config, node *relayNode, logger *slog.Logger) {
 	ticker := time.NewTicker(10 * time.Second)
 	defer ticker.Stop()
 
@@ -231,20 +280,22 @@ func forwardLoop(ctx context.Context, client *http.Client, cfg config, elem orbi
 		case <-ctx.Done():
 			return
 		case <-ticker.C:
-			frame, fetchedAt := buf.load()
-			if len(frame) == 0 {
+			b := node.store.Next()
+			if b == nil {
 				continue
 			}
 
-			inContact, err := orbital.IsInContact(elem, cfg.GSLat, cfg.GSLon, time.Now().UTC(), cfg.MinElevDeg)
+			inContact, err := orbital.IsInContact(node.elements, cfg.GSLat, cfg.GSLon, time.Now().UTC(), cfg.MinElevDeg)
 			if err != nil {
 				logger.Warn("relay: contact check failed", slog.Any("error", err))
 				continue
 			}
 
 			if !inContact {
-				logger.Debug("relay: not in contact — frame buffered",
-					slog.Time("buffered_at", fetchedAt))
+				logger.Debug("relay: not in contact — bundle buffered",
+					slog.Uint64("bundle_id", b.ID),
+					slog.Int("bundle_count", node.store.Len()),
+				)
 				continue
 			}
 
@@ -253,18 +304,63 @@ func forwardLoop(ctx context.Context, client *http.Client, cfg config, elem orbi
 				continue
 			}
 
-			if err := forwardFrame(ctx, client, cfg, frame); err != nil {
-				logger.Warn("relay: forward failed", slog.Any("error", err))
+			if err := forwardFrame(ctx, client, cfg, b.Payload); err != nil {
+				logger.Warn("relay: forward failed",
+					slog.Uint64("bundle_id", b.ID),
+					slog.Any("error", err),
+				)
 			} else {
+				node.store.Remove(b.ID)
 				lastForwarded = time.Now()
-				logger.Info("relay: SC-1 frame forwarded to GS via ISL",
-					slog.Int("bytes", len(frame)),
-					slog.Duration("frame_age", time.Since(fetchedAt)),
+				logger.Info("relay: bundle forwarded to GS via ISL",
+					slog.Uint64("bundle_id", b.ID),
+					slog.Int("bytes", len(b.Payload)),
+					slog.Duration("bundle_age", time.Since(b.CreatedAt)),
 					slog.Float64("gs_lat", cfg.GSLat),
 					slog.Float64("gs_lon", cfg.GSLon),
 				)
 			}
 		}
+	}
+}
+
+// relayTelemetryHandler returns a handler that emits a live telemetry snapshot
+// for SC-2 (Relay-1). Values are derived from orbital phase at request time.
+func relayTelemetryHandler(elem orbital.Elements, scid uint16) http.HandlerFunc {
+	const orbitalPeriodSec = 5913.0 // 700 km sun-sync → ~98.5-min period
+
+	return func(w http.ResponseWriter, _ *http.Request) {
+		elapsed := time.Since(elem.Epoch).Seconds()
+		phase := math.Mod(elapsed/orbitalPeriodSec, 1.0)
+
+		// Sun-sync at 700 km: ~38% of orbit in eclipse
+		inEclipse := phase > 0.62
+
+		var batV, solarV, tempC float64
+		if inEclipse {
+			solarV = 0
+			shadowFrac := (phase - 0.62) / 0.38
+			batV = 7450 - 280*shadowFrac
+			tempC = 16 - 14*shadowFrac
+		} else {
+			solarV = 5200 + 150*math.Sin(2*math.Pi*phase)
+			batV = 7480
+			tempC = 20 + 6*math.Sin(2*math.Pi*phase)
+		}
+
+		w.Header().Set("Content-Type", "application/json")
+		_ = json.NewEncoder(w).Encode(map[string]any{
+			"scid":          scid,
+			"name":          "SC-2 (Relay-1)",
+			"orbit":         "700km/98deg/sun-sync",
+			"bat_mv":        batV,
+			"solar_mv":      solarV,
+			"temp_c":        tempC,
+			"rssi_dbm":      -74.0,
+			"in_eclipse":    inEclipse,
+			"orbital_phase": phase,
+			"ts":            time.Now().UTC(),
+		})
 	}
 }
 
@@ -291,4 +387,3 @@ func forwardFrame(ctx context.Context, client *http.Client, cfg config, frame []
 	}
 	return nil
 }
-

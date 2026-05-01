@@ -27,6 +27,7 @@ import (
 	"github.com/absmach/zenith-link/pkg/ccsds/tmframe"
 	"github.com/absmach/zenith-link/pkg/errors"
 	"github.com/absmach/zenith-link/pkg/orbital"
+	"github.com/absmach/zenith-link/pkg/spaceweather"
 	"github.com/absmach/zenith-link/pkg/zenith"
 	"github.com/absmach/zenith-link/spacecraft/inference"
 )
@@ -134,6 +135,13 @@ type Service interface {
 	// LastResult returns the cached inference result from the most recent telemetry frame.
 	// Used by the /inference/state endpoint for per-channel z-scores and pre-fault signals.
 	LastResult() inference.Result
+
+	// StormLevel returns the current geomagnetic storm level from NOAA space weather data.
+	// "QUIET" | "MINOR" | "MODERATE" | "STRONG" | "SEVERE"
+	StormLevel() string
+
+	// KpIndex returns the latest planetary K-index from NOAA space weather data.
+	KpIndex() float64
 }
 
 // State captures the combined orbital and telemetry state.
@@ -170,6 +178,7 @@ type service struct {
 	cfg      Config
 	mu       sync.Mutex
 	detector *inference.Detector
+	sw       *spaceweather.Monitor
 
 	seqCount uint16
 	frameSeq uint16
@@ -177,7 +186,7 @@ type service struct {
 	vcfc     uint8
 	mode     uint8
 
-	lastInference *inferenceState
+	lastInference   *inferenceState
 	deployedPayload *DeployedPayload
 
 	autonomousEvents []AutonomousEvent // newest-first ring, capped at maxAutonomousEvents
@@ -188,10 +197,12 @@ type service struct {
 
 // New creates a new spacecraft Service.
 func New(cfg Config) Service {
+	sw := spaceweather.NewMonitor()
 	return &service{
 		cfg:      cfg,
 		seqCount: cfg.SequenceCount,
-		detector: &inference.Detector{},
+		detector: inference.NewDetector(),
+		sw:       sw,
 	}
 }
 
@@ -257,7 +268,12 @@ func (s *service) Telemetry(ctx context.Context, t time.Time) (zenith.Telemetry,
 	bgNoise := math.Sin(float64(unix)*1.61803) * math.Sin(float64(unix)*2.71828)
 	batV = uint16(int(batV) + int(math.Round(bgNoise*12)))   // ±12 mV background
 	chassisC += int16(math.Round(bgNoise * 20))               // ±0.20°C background
-	rssiBase := -85.0 + bgNoise*1.2                           // ±1.2 dBm background
+	rssiBase := -85.0 + bgNoise*1.2 // ±1.2 dBm background
+
+	// Apply real-time NOAA space weather adjustment to the RF link margin.
+	// Elevated Kp → ionospheric scintillation → reduced RSSI, matching
+	// Satlyt STL-01's RF degradation and downlink prioritisation behaviour.
+	rssiBase += s.sw.RSSIAdjustmentDB()
 
 	// Periodic fault injections — each anomaly class fires for ~20 s every N min.
 	// Only inject during sunlight to keep eclipse and power anomalies separate.
@@ -697,6 +713,17 @@ func (s *service) Events() []AutonomousEvent {
 // Telemetry() call — matching Satlyt STL-02's "system interpreted inputs,
 // responded to conditions, adapted in real time" behaviour.
 func (s *service) autonomyLoop() {
+	// Derive a context from the process lifetime. The loop runs indefinitely
+	// while the spacecraft service is alive; the context is used only for clean
+	// shutdown propagation to the space weather monitor goroutine.
+	ctx := context.Background()
+
+	// Start NOAA space weather background polling. Real Kp and F10.7 data
+	// modulates RSSI in Telemetry() and surfaces storm-level events here.
+	s.sw.Start(ctx)
+
+	prevStormLevel := "QUIET"
+
 	ticker := time.NewTicker(2 * time.Second)
 	defer ticker.Stop()
 	for range ticker.C {
@@ -705,20 +732,24 @@ func (s *service) autonomyLoop() {
 		prev := s.prevClass
 		s.mu.Unlock()
 
-		if inf == nil {
-			continue
-		}
-		curr := inference.Class(inf.class)
-		if curr == prev {
-			continue
+		if inf != nil {
+			curr := inference.Class(inf.class)
+			if curr != prev {
+				// Inference class changed — dispatch autonomous response.
+				s.handleClassTransition(prev, curr)
+				s.mu.Lock()
+				s.prevClass = curr
+				s.mu.Unlock()
+			}
 		}
 
-		// Class has changed — dispatch autonomous response.
-		s.handleClassTransition(prev, curr)
-
-		s.mu.Lock()
-		s.prevClass = curr
-		s.mu.Unlock()
+		// Check for space weather storm level transitions.
+		// Emit an autonomous event when the storm level moves to non-QUIET.
+		currStorm := s.sw.StormLevel()
+		if currStorm != prevStormLevel && currStorm != "QUIET" {
+			s.pushEvent(currStorm, "space weather event")
+		}
+		prevStormLevel = currStorm
 	}
 }
 
@@ -819,6 +850,12 @@ func (s *service) pushEvent(class, action string) {
 	}
 	s.mu.Unlock()
 }
+
+// StormLevel returns the current geomagnetic storm level from the space weather monitor.
+func (s *service) StormLevel() string { return s.sw.StormLevel() }
+
+// KpIndex returns the latest planetary K-index from the space weather monitor.
+func (s *service) KpIndex() float64 { return s.sw.Current().Kp }
 
 // ─── locked sequence helpers ─────────────────────────────────────────────────
 // All callers must hold s.mu.

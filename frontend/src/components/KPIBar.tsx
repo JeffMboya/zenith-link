@@ -125,6 +125,8 @@ interface InferenceDetail {
   }
   pre_fault_class: string
   pre_fault_chan: string
+  storm_level?: string
+  kp_index?: number
 }
 
 function useInferenceDetail() {
@@ -342,6 +344,33 @@ export function KPIBar({ metrics, satellite, connected, linkLost, tleSource, tle
         ))}
         <span style={{ color: 'var(--text-dim)', fontSize: 7, letterSpacing: 2 }}>ISL MESH</span>
       </div>
+
+      {/* Space weather — NOAA Kp index + storm level */}
+      {(() => {
+        const stormLevel = inferenceDetail?.storm_level ?? 'QUIET'
+        const kp = inferenceDetail?.kp_index ?? 0
+        const stormColor =
+          stormLevel === 'SEVERE' || stormLevel === 'STRONG' ? 'var(--red)'
+          : stormLevel === 'MODERATE' ? 'var(--amber)'
+          : stormLevel === 'MINOR' ? 'var(--cyan)'
+          : 'var(--green)'
+        return (
+          <div style={{
+            padding: '6px 12px', borderLeft: '1px solid var(--border)',
+            display: 'flex', flexDirection: 'column', alignItems: 'center', minWidth: 96,
+            background: stormLevel !== 'QUIET' ? `color-mix(in srgb, ${stormColor} 8%, transparent)` : 'transparent',
+            borderTop: stormLevel !== 'QUIET' ? `2px solid ${stormColor}` : '2px solid transparent',
+          }}>
+            <span style={{ color: stormColor, fontSize: 10, fontWeight: 700, lineHeight: 1.2, letterSpacing: 1 }}>
+              {stormLevel}
+            </span>
+            <span style={{ color: 'var(--text-dim)', fontSize: 8, letterSpacing: 1, marginTop: 1 }}>
+              Kp {kp.toFixed(1)}
+            </span>
+            <span style={{ color: 'var(--text-dim)', fontSize: 7, letterSpacing: 2, marginTop: 1 }}>SPACE WX</span>
+          </div>
+        )
+      })()}
 
       {/* NEXT PASS — elevated tile */}
       <div style={{

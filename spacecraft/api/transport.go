@@ -251,15 +251,16 @@ func payloadHandler(svc spacecraft.Service) http.HandlerFunc {
 	}
 }
 
-// inferenceStateHandler returns the full inference result including per-channel z-scores
-// and pre-fault signals. Polled by the frontend for the ONBOARD AI tooltip and PRE-FAULT banner.
+// inferenceStateHandler returns the full inference result including per-channel z-scores,
+// pre-fault signals, and real-time NOAA space weather conditions.
+// Polled by the frontend for the ONBOARD AI tooltip, PRE-FAULT banner, and storm level indicator.
 func inferenceStateHandler(svc spacecraft.Service) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		res := svc.LastResult()
 		writeJSON(w, http.StatusOK, map[string]any{
-			"class":          uint8(res.Class),
-			"class_label":    inference.ClassName(res.Class),
-			"confidence":     res.Confidence,
+			"class":       uint8(res.Class),
+			"class_label": inference.ClassName(res.Class),
+			"confidence":  res.Confidence,
 			"channels": map[string]any{
 				"bat_v":     map[string]any{"z": res.Channels.BatV.Z, "mean": res.Channels.BatV.Mean, "std": res.Channels.BatV.Std},
 				"chassis_c": map[string]any{"z": res.Channels.ChassisC.Z, "mean": res.Channels.ChassisC.Mean, "std": res.Channels.ChassisC.Std},
@@ -268,6 +269,8 @@ func inferenceStateHandler(svc spacecraft.Service) http.HandlerFunc {
 			},
 			"pre_fault_class": res.PreFaultClass,
 			"pre_fault_chan":  res.PreFaultChan,
+			"storm_level":     svc.StormLevel(),
+			"kp_index":        svc.KpIndex(),
 		})
 	}
 }
