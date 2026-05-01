@@ -79,7 +79,7 @@ fi
 #    so the heap stays under the 2 GB swap ceiling.
 # ------------------------------------------------------------------
 echo "==> Building images (this takes ~2-3 min on a 2-vCPU Droplet)..."
-docker compose --project-directory . -f docker/docker-compose.prod.yaml --env-file .env up -d --build
+docker compose -f docker/docker-compose.prod.yaml --env-file "$APP_DIR/.env" up -d --build
 
 DROPLET_IP=$(curl -s http://checkip.amazonaws.com 2>/dev/null || hostname -I | awk '{print $1}')
 echo ""
@@ -88,10 +88,10 @@ echo "  Zenith-Link is live at: http://${DROPLET_IP}"
 echo "================================================================"
 echo ""
 echo "Useful commands (run from $APP_DIR):"
-echo "  docker compose --project-directory . -f docker/docker-compose.prod.yaml --env-file .env logs -f"
-echo "  docker compose --project-directory . -f docker/docker-compose.prod.yaml --env-file .env ps"
-echo "  docker compose --project-directory . -f docker/docker-compose.prod.yaml --env-file .env restart"
-echo "  docker compose --project-directory . -f docker/docker-compose.prod.yaml --env-file .env down"
+echo "  docker compose -f $APP_DIR/docker/docker-compose.prod.yaml --env-file $APP_DIR/.env logs -f"
+echo "  docker compose -f $APP_DIR/docker/docker-compose.prod.yaml --env-file $APP_DIR/.env ps"
+echo "  docker compose -f $APP_DIR/docker/docker-compose.prod.yaml --env-file $APP_DIR/.env restart"
+echo "  docker compose -f $APP_DIR/docker/docker-compose.prod.yaml --env-file $APP_DIR/.env down"
 echo ""
 echo "To update after a git push:"
-echo "  cd $APP_DIR && git pull && docker compose --project-directory . -f docker/docker-compose.prod.yaml --env-file .env up -d --build"
+echo "  cd $APP_DIR && git pull && docker compose -f docker/docker-compose.prod.yaml --env-file "$APP_DIR/.env" up -d --build"
