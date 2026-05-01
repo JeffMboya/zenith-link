@@ -28,9 +28,12 @@ const COMMANDS: Command[] = [
   { id: 'health_scan',      label: 'HEALTH SCAN',         description: 'Scan last 30 frames, return anomaly summary',         category: 'COMPUTE',    commandId: 0x04, payloadBytes: [0x01] },
   { id: 'eclipse_forecast', label: 'ECLIPSE FORECAST',    description: 'Compute next eclipse entry/exit from orbital state',  category: 'COMPUTE',    commandId: 0x04, payloadBytes: [0x02] },
   { id: 'link_budget',      label: 'LINK BUDGET',         description: 'Link margin to all ground stations from current alt', category: 'COMPUTE',    commandId: 0x04, payloadBytes: [0x03] },
-  { id: 'deploy_anomaly',   label: 'DEPLOY ANOMALY DETECTOR',     description: 'Upload 26KB health monitor · 1.3s@20KB/s · mirrors STL-01',           category: 'DEPLOY', commandId: 0x05, payloadBytes: [0x01] },
-  { id: 'deploy_compress',  label: 'DEPLOY TELEMETRY COMPRESSOR', description: 'Upload 12KB delta-compression agent · 0.6s@20KB/s',                    category: 'DEPLOY', commandId: 0x05, payloadBytes: [0x02] },
-  { id: 'deploy_inference', label: 'DEPLOY EDGE INFERENCE AGENT', description: 'Upload 8KB SLM-class edge agent · 0.4s@20KB/s · mirrors STL-02 Gemma', category: 'DEPLOY', commandId: 0x05, payloadBytes: [0x03] },
+  { id: 'deploy_anomaly',   label: 'DEPLOY ANOMALY DETECTOR',      description: 'Upload 26KB health monitor · 1.3s@20KB/s · mirrors STL-01',                     category: 'DEPLOY', commandId: 0x05, payloadBytes: [0x01] },
+  { id: 'deploy_compress',  label: 'DEPLOY TELEMETRY COMPRESSOR', description: 'Upload 12KB delta-compression agent · 0.6s@20KB/s',                              category: 'DEPLOY', commandId: 0x05, payloadBytes: [0x02] },
+  { id: 'deploy_inference', label: 'DEPLOY EDGE INFERENCE AGENT', description: 'Upload 8KB SLM-class edge agent · 0.4s@20KB/s · mirrors STL-02 Gemma',          category: 'DEPLOY', commandId: 0x05, payloadBytes: [0x03] },
+  { id: 'deploy_orbit',     label: 'DEPLOY ORBIT PREDICTOR',      description: 'Upload 18KB orbit event scheduler · 0.9s@20KB/s · drives ECLIPSE_COMPUTE',       category: 'DEPLOY', commandId: 0x05, payloadBytes: [0x04] },
+  { id: 'deploy_fedlearn',  label: 'DEPLOY FEDERATED LEARNER',    description: 'Upload 40KB federated gradient accumulator · 2.0s@20KB/s · distributed model',   category: 'DEPLOY', commandId: 0x05, payloadBytes: [0x05] },
+  { id: 'deploy_linkopt',   label: 'DEPLOY LINK OPTIMIZER',       description: 'Upload 15KB dynamic downlink scheduler · 0.75s@20KB/s · mirrors STL-01 priority', category: 'DEPLOY', commandId: 0x05, payloadBytes: [0x06] },
 ]
 
 const CATEGORY_COLOR: Record<Command['category'], string> = {

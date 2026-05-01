@@ -5,3 +5,8 @@ c/test_zenith_link
 .gstack/
 DESIGN.md
 TODOS.md
+# Go build artifacts
+/spacecraft
+/groundstation
+/relay
+/relay2
