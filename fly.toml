@@ -1,4 +1,4 @@
-app = "zenith-link"
+app            = "zenith-link"
 primary_region = "jnb"
 
 [build]
@@ -6,15 +6,6 @@ primary_region = "jnb"
 
 [env]
   GROUNDSTATION_ADDR = ":8080"
-  SC_ADDR            = "http://localhost:8090"
-  RELAY1_ADDR        = "http://localhost:8082"
-  RELAY2_ADDR        = "http://localhost:8083"
-  RELAY_ADDR         = ":8082"
-  RELAY2_ADDR_BIND   = ":8083"
-  SC1_ADDR           = "http://localhost:8090"
-  RELAY1_PEER_ADDR   = "http://localhost:8082"
-  GS_ADDR            = "http://localhost:8080"
-  SPACECRAFT_ADDR    = ":8090"
   SPACECRAFT_SCID    = "90"
   SPACECRAFT_VCID    = "0"
   SPACECRAFT_APID    = "256"
@@ -26,19 +17,14 @@ primary_region = "jnb"
   POLL_INTERVAL_SEC  = "30"
   STATIC_DIR         = "/app/dist"
 
-[[services]]
-  internal_port = 8080
-  protocol      = "tcp"
+[http_service]
+  internal_port        = 8080
+  force_https          = true
+  auto_stop_machines   = "off"
+  auto_start_machines  = true
+  min_machines_running = 1
 
-  [[services.ports]]
-    port     = 80
-    handlers = ["http"]
-
-  [[services.ports]]
-    port     = 443
-    handlers = ["tls", "http"]
-
-  [services.concurrency]
+  [http_service.concurrency]
     type       = "connections"
     hard_limit = 100
     soft_limit = 80

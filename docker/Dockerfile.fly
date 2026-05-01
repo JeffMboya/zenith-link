@@ -8,6 +8,11 @@ WORKDIR /src/frontend
 COPY frontend/package.json frontend/package-lock.json* ./
 RUN npm ci --prefer-offline
 COPY frontend/ ./
+# VITE_CESIUM_TOKEN is baked into the JS bundle at build time by Vite.
+# Pass it via: fly deploy --build-arg VITE_CESIUM_TOKEN=<your-token>
+# Without it the globe still works — terrain/imagery tiles just won't load.
+ARG VITE_CESIUM_TOKEN=""
+ENV VITE_CESIUM_TOKEN=$VITE_CESIUM_TOKEN
 RUN npm run build
 
 FROM golang:1.22-alpine AS gobuilder
