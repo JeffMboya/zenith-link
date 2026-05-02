@@ -23,47 +23,64 @@ interface ContactWindow {
   max_elevation_deg: number
 }
 
+interface NextPassWindow { aosMs: number; durationMs: number; elevDeg: number }
+
 function useNextPass() {
-  const [label, setLabel] = useState<string | null>(null)
+  const [window, setWindow] = useState<NextPassWindow | null>(null)
+  const [label, setLabel] = useState<string>('—')
   const [color, setColor] = useState('var(--text-dim)')
   const [urgent, setUrgent] = useState(false)
 
+  // Poll server every 30s — just stores the raw window timestamps
   useEffect(() => {
     let timer: ReturnType<typeof setTimeout>
-
     async function poll() {
       try {
         const res = await fetch('/windows')
         if (!res.ok) return
         const data = await res.json() as { windows: ContactWindow[] }
-        if (!data.windows?.length) { setLabel('NO PASS'); setColor('var(--text-dim)'); setUrgent(false); return }
-
-        const w = data.windows[0]
-        const aosMs = new Date(w.aos).getTime()
-        const now = Date.now()
-        const diffSec = Math.round((aosMs - now) / 1000)
-
-        if (diffSec < 0) {
-          const losSec = Math.round((aosMs + w.duration_sec * 1000 - now) / 1000)
-          if (losSec > 0) { setLabel(`IN PASS ${losSec}s`); setColor('var(--green)'); setUrgent(true) }
-          else { setLabel('PASS DONE'); setColor('var(--text-dim)'); setUrgent(false) }
+        if (data.windows?.length) {
+          const w = data.windows[0]
+          setWindow({ aosMs: new Date(w.aos).getTime(), durationMs: w.duration_sec * 1000, elevDeg: w.max_elevation_deg })
         } else {
-          const h = Math.floor(diffSec / 3600)
-          const m = Math.floor((diffSec % 3600) / 60)
-          const s = diffSec % 60
-          const elev = w.max_elevation_deg.toFixed(0)
-          setLabel(h > 0 ? `${h}h ${m}m · ${elev}°` : m > 0 ? `${m}m ${s}s · ${elev}°` : `${s}s · ${elev}°`)
-          const isUrgent = diffSec < 300
-          setColor(isUrgent ? 'var(--amber)' : 'var(--cyan)')
-          setUrgent(isUrgent)
+          setWindow(null)
         }
       } catch { /* keep last */ }
       timer = setTimeout(poll, WINDOWS_POLL_MS)
     }
-
     poll()
     return () => clearTimeout(timer)
   }, [])
+
+  // Tick every second — recomputes label from stored window data
+  useEffect(() => {
+    function tick() {
+      if (!window) { setLabel('—'); setColor('var(--text-dim)'); setUrgent(false); return }
+      const now = Date.now()
+      const diffSec = Math.round((window.aosMs - now) / 1000)
+      if (diffSec < 0) {
+        const losSec = Math.round((window.aosMs + window.durationMs - now) / 1000)
+        if (losSec > 0) { setLabel(`IN PASS ${losSec}s`); setColor('var(--green)'); setUrgent(true) }
+        else { setLabel('PASS DONE'); setColor('var(--text-dim)'); setUrgent(false) }
+      } else {
+        const h = Math.floor(diffSec / 3600)
+        const m = Math.floor((diffSec % 3600) / 60)
+        const s = diffSec % 60
+        const elev = window.elevDeg.toFixed(0)
+        const t = h > 0
+          ? `${h}h ${m}m ${String(s).padStart(2, '0')}s`
+          : m > 0
+            ? `${m}m ${String(s).padStart(2, '0')}s`
+            : `${s}s`
+        setLabel(`${t} · ${elev}°`)
+        setColor(diffSec < 300 ? 'var(--amber)' : 'var(--cyan)')
+        setUrgent(diffSec < 300)
+      }
+    }
+    tick()
+    const id = setInterval(tick, 1000)
+    return () => clearInterval(id)
+  }, [window])
 
   return { label, color, urgent }
 }
@@ -283,7 +300,7 @@ export function KPIBar({ metrics, satellite, connected, linkLost, tleSource, tle
       </div>
 
       {/* KPI tiles — 3 tiles: PACKETS (with NACK badge), EFFICIENCY, BYTES SAVED */}
-      <div style={{ display: 'flex' }}>
+      <div style={{ flex: 1, display: 'flex' }}>
         {metrics
           ? kpis(metrics).map(({ label, value, color, nacks }) => (
               <div key={label} style={{
@@ -408,7 +425,7 @@ export function KPIBar({ metrics, satellite, connected, linkLost, tleSource, tle
         borderTop: passUrgent ? '2px solid var(--amber)' : '2px solid transparent',
       }}>
         <span style={{ color: passColor, fontSize: 14, fontWeight: 700, lineHeight: 1.2, letterSpacing: 1 }}>
-          {passLabel ?? '—'}
+          {passLabel}
         </span>
         <span style={{ color: 'var(--text-dim)', fontSize: 9, letterSpacing: 2, marginTop: 2 }}>NEXT PASS</span>
       </div>
