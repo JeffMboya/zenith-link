@@ -1,71 +1,7 @@
-import { useState, useCallback, useEffect } from 'react'
+import { useState, useEffect } from 'react'
 import type { AutonomousEvent } from '../types'
 
-type Tab = 'FLEET' | 'MARKET' | 'EVENTS'
-
-interface WorkloadCard {
-  profileId: number
-  name: string
-  description: string
-  sizeBytes: number
-  cpuPct: number
-  memMB: number
-  badge?: string
-}
-
-const WORKLOADS: WorkloadCard[] = [
-  {
-    profileId: 0x01,
-    name: 'anomaly-detector-v1',
-    description: '26KB statistical health monitor. Rolling z-score baseline, downlink prioritization by class.',
-    sizeBytes: 26112,
-    cpuPct: 4,
-    memMB: 3,
-    badge: 'STL-01',
-  },
-  {
-    profileId: 0x02,
-    name: 'telemetry-compressor-v1',
-    description: '12KB delta-compression agent. Reduces downlink bandwidth on constrained RF links. 72% compression vs raw JSON.',
-    sizeBytes: 12288,
-    cpuPct: 2,
-    memMB: 2,
-  },
-  {
-    profileId: 0x03,
-    name: 'edge-inference-agent-v1',
-    description: '8KB SLM-class behavioral classifier. Autonomous diagnostics — interprets inputs, responds to conditions.',
-    sizeBytes: 8192,
-    cpuPct: 6,
-    memMB: 4,
-    badge: 'STL-02',
-  },
-  {
-    profileId: 0x04,
-    name: 'orbit-predictor-v1',
-    description: '18KB autonomous orbit event scheduler. Predicts eclipse, perigee, and apogee windows. Drives ECLIPSE_COMPUTE mode.',
-    sizeBytes: 18432,
-    cpuPct: 3,
-    memMB: 2,
-  },
-  {
-    profileId: 0x05,
-    name: 'federated-learner-v1',
-    description: '40KB federated gradient accumulator. Distributed model updates across satellite network.',
-    sizeBytes: 40960,
-    cpuPct: 12,
-    memMB: 8,
-    badge: 'FEDERATED',
-  },
-  {
-    profileId: 0x06,
-    name: 'link-optimizer-v1',
-    description: '15KB dynamic downlink scheduler. Prioritizes frames by anomaly class and link margin.',
-    sizeBytes: 15360,
-    cpuPct: 3,
-    memMB: 2,
-  },
-]
+type Tab = 'FLEET' | 'EVENTS'
 
 const CLASS_COLOR: Record<string, string> = {
   NOMINAL: 'var(--green)',
@@ -118,15 +54,6 @@ function useRelayStatus(path: string, windowsPath: string): RelayStatus {
   return status
 }
 
-function Meter({ value, max, color }: { value: number; max: number; color: string }) {
-  const pct = Math.min(100, (value / max) * 100)
-  return (
-    <div style={{ width: 40, height: 3, background: 'var(--bg-dark)', borderRadius: 2, overflow: 'hidden' }}>
-      <div style={{ width: `${pct}%`, height: '100%', background: color, borderRadius: 2 }} />
-    </div>
-  )
-}
-
 function StatusDot({ online, active }: { online: boolean; active?: boolean }) {
   const color = !online ? 'var(--red)' : active ? 'var(--green)' : 'var(--amber)'
   return (
@@ -153,8 +80,6 @@ interface Props {
 export function OperatorPanel({ primaryOnline, primarySatId, tleSource }: Props) {
   const [open, setOpen] = useState(true)
   const [tab, setTab] = useState<Tab>('FLEET')
-  const [deployLog, setDeployLog] = useState<{ profileId: number; msg: string; ok: boolean } | null>(null)
-  const [deploying, setDeploying] = useState<number | null>(null)
   const [events, setEvents] = useState<AutonomousEvent[]>([])
 
   const relay1 = useRelayStatus('/relay/health', '/relay/windows')
@@ -177,32 +102,6 @@ export function OperatorPanel({ primaryOnline, primarySatId, tleSource }: Props)
     return () => clearTimeout(timer)
   }, [])
 
-  const deploy = useCallback(async (card: WorkloadCard) => {
-    if (deploying !== null) return
-    setDeploying(card.profileId)
-    setDeployLog(null)
-    try {
-      const payloadB64 = btoa(String.fromCharCode(card.profileId))
-      const res = await fetch('/command', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ command_id: 0x05, payload_b64: payloadB64 }),
-      })
-      const body = await res.json() as { accepted?: boolean; message?: string; error?: string }
-      setDeployLog({
-        profileId: card.profileId,
-        msg: body.accepted ? (body.message ?? 'DEPLOYED') : (body.error ?? body.message ?? 'REJECTED'),
-        ok: !!body.accepted,
-      })
-    } catch {
-      setDeployLog({ profileId: card.profileId, msg: 'SEND FAILED — link down?', ok: false })
-    } finally {
-      setDeploying(null)
-    }
-  }, [deploying])
-
-  const linkSec = (bytes: number) => (bytes / (20 * 1024)).toFixed(1)
-
   const nonNominalCount = events.filter(e => e.class !== 'NOMINAL').length
 
   const relayDetail = (r: RelayStatus) => {
@@ -221,7 +120,7 @@ export function OperatorPanel({ primaryOnline, primarySatId, tleSource }: Props)
   const r1 = relayDetail(relay1)
   const r2 = relayDetail(relay2)
 
-  const TABS: Tab[] = ['FLEET', 'MARKET', 'EVENTS']
+  const TABS: Tab[] = ['FLEET', 'EVENTS']
 
   return (
     <div style={{
@@ -381,85 +280,6 @@ export function OperatorPanel({ primaryOnline, primarySatId, tleSource }: Props)
                   }
                 </div>
               </div>
-            </div>
-          )}
-
-          {/* ── MARKET ── */}
-          {tab === 'MARKET' && (
-            <div>
-              <div style={{ padding: '0 14px 8px', color: 'var(--text-dim)', fontSize: 7, letterSpacing: 2 }}>
-                IN-ORBIT WORKLOADS · {WORKLOADS.length} AVAILABLE
-              </div>
-              {deployLog && (
-                <div style={{
-                  margin: '0 14px 10px',
-                  padding: '6px 10px',
-                  background: deployLog.ok ? 'rgba(0,232,120,0.08)' : 'rgba(240,80,60,0.08)',
-                  border: `1px solid ${deployLog.ok ? 'var(--green)' : 'var(--red)'}`,
-                  borderRadius: 3,
-                }}>
-                  <span style={{ color: deployLog.ok ? 'var(--green)' : 'var(--red)', fontSize: 8, letterSpacing: 1 }}>
-                    {deployLog.msg}
-                  </span>
-                </div>
-              )}
-              {WORKLOADS.map(card => (
-                <div key={card.profileId} style={{ padding: '10px 14px', borderBottom: '1px solid var(--bg-dark)' }}>
-                  <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 3 }}>
-                    <span style={{ color: 'var(--cyan)', fontSize: 9, fontWeight: 700, letterSpacing: 0.5 }}>
-                      {card.name}
-                    </span>
-                    {card.badge && (
-                      <span style={{
-                        color: 'var(--amber)', fontSize: 7, letterSpacing: 1.5,
-                        border: '1px solid var(--amber)', padding: '0 3px', borderRadius: 2,
-                      }}>
-                        {card.badge}
-                      </span>
-                    )}
-                  </div>
-                  <div style={{ color: 'var(--text-dim)', fontSize: 8, lineHeight: 1.4, marginBottom: 6 }}>
-                    {card.description}
-                  </div>
-                  <div style={{ display: 'flex', gap: 12, marginBottom: 6, alignItems: 'center' }}>
-                    <div>
-                      <div style={{ color: 'var(--text-dim)', fontSize: 7, letterSpacing: 1, marginBottom: 2 }}>CPU</div>
-                      <div style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
-                        <Meter value={card.cpuPct} max={20} color="var(--cyan)" />
-                        <span style={{ color: 'var(--text-dim)', fontSize: 7 }}>{card.cpuPct}%</span>
-                      </div>
-                    </div>
-                    <div>
-                      <div style={{ color: 'var(--text-dim)', fontSize: 7, letterSpacing: 1, marginBottom: 2 }}>MEM</div>
-                      <div style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
-                        <Meter value={card.memMB} max={16} color="var(--teal)" />
-                        <span style={{ color: 'var(--text-dim)', fontSize: 7 }}>{card.memMB}MB</span>
-                      </div>
-                    </div>
-                    <div>
-                      <div style={{ color: 'var(--text-dim)', fontSize: 7, letterSpacing: 1, marginBottom: 2 }}>LINK</div>
-                      <span style={{ color: 'var(--text-dim)', fontSize: 7 }}>
-                        {(card.sizeBytes / 1024).toFixed(0)}KB · {linkSec(card.sizeBytes)}s
-                      </span>
-                    </div>
-                  </div>
-                  <button
-                    onClick={() => deploy(card)}
-                    disabled={deploying !== null}
-                    style={{
-                      width: '100%', padding: '5px 0',
-                      background: deploying === card.profileId ? 'rgba(0,200,240,0.08)' : 'rgba(0,200,240,0.05)',
-                      border: '1px solid var(--cyan)',
-                      borderRadius: 3, cursor: deploying !== null ? 'not-allowed' : 'pointer',
-                      color: deploying === card.profileId ? 'var(--text-dim)' : 'var(--cyan)',
-                      fontSize: 9, letterSpacing: 2, fontFamily: 'inherit',
-                      opacity: deploying !== null && deploying !== card.profileId ? 0.4 : 1,
-                    }}
-                  >
-                    {deploying === card.profileId ? 'UPLOADING...' : `DEPLOY TO ${tleSource === 'tle' ? primarySatId.split(' ')[0] : 'AT-1'}`}
-                  </button>
-                </div>
-              ))}
             </div>
           )}
 
