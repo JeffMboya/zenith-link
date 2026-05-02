@@ -1,4 +1,4 @@
-# Zenith-Link
+# Satlyt Demo
 
 A software-only distributed space computing stack built from scratch in Go — LEO spacecraft, ISL relay mesh, onboard edge AI, and mission control dashboard, containerized for deployment anywhere.
 
@@ -11,7 +11,7 @@ Demonstrates in-orbit compute orchestration: a primary spacecraft runs a continu
 ```
 ┌──────────────────────────────────────────────────────────────┐
 │  SC-1 (400 km, 51.6°)   ←── TC uplink ───  Ground Station   │
-│  · Zenith-Link v2 frames      (Nairobi)     · Nairobi GS     │
+│  · Satlyt Demo frames      (Nairobi)     · Nairobi GS     │
 │  · CCSDS TM/TC stack     ──► Relay-1/2 ──► · WebSocket stream│
 │  · Onboard health AI          (ISL mesh)    · Priority logging│
 │  · In-orbit compute jobs                                      │
@@ -23,7 +23,7 @@ Demonstrates in-orbit compute orchestration: a primary spacecraft runs a continu
 └─────────────────────────────────┴────────────────────────────┘
 ```
 
-- **SC-1 spacecraft** — telemetry generation (attitude, power, thermal), Zenith-Link v2 encoding, HMAC-SHA256 auth, CCSDS Space Packet + TM Transfer Frame wrapping, TC uplink command processing, onboard edge AI health detector, in-orbit compute jobs
+- **SC-1 spacecraft** — telemetry generation (attitude, power, thermal), Satlyt Demo encoding, HMAC-SHA256 auth, CCSDS Space Packet + TM Transfer Frame wrapping, TC uplink command processing, onboard edge AI health detector, in-orbit compute jobs
 - **Onboard edge AI** — rolling 30-frame statistical anomaly detector; classes: NOMINAL, POWER_ANOMALY, THERMAL_EVENT, ATTITUDE_INSTABILITY, RF_DEGRADATION, ECLIPSE_ENTRY, ECLIPSE_COMPUTE; sets priority flag in frame header when anomaly detected; pure Go, no external ML dependencies
 - **Ground station** — frame receive, HMAC verification, WebSocket broadcast, priority-downlink logging, command forwarder
 - **ISL Relay mesh** — two nodes in complementary orbits; Relay-2 checks Relay-1 before polling SC-1 directly (peer routing); both use real Keplerian + J2 orbital mechanics for contact window decisions
@@ -35,7 +35,7 @@ The orbital propagator uses Keplerian elements with a J2 oblateness correction. 
 
 ## Protocol
 
-Zenith-Link v2 is a presence-bitmask binary protocol. A full telemetry frame is ~78 bytes; a delta (position + power only) is ~60 bytes. The JSON equivalent is ~281 bytes — 72% larger.
+Satlyt Demo is a presence-bitmask binary protocol. A full telemetry frame is ~78 bytes; a delta (position + power only) is ~60 bytes. The JSON equivalent is ~281 bytes — 72% larger.
 
 ```
 ┌─────────────────────────────────────────────────────────┐
@@ -50,7 +50,7 @@ The presence field is a bitmask — only fields whose bit is set are included in
 Run the benchmark:
 
 ```bash
-go test ./pkg/zenith -bench=. -benchmem -run TestFrameSize
+go test ./pkg/satlyt -bench=. -benchmem -run TestFrameSize
 ```
 
 The protocol is also implemented in C (`c/`) as a reference. Both implementations share the same test vectors.
@@ -87,7 +87,7 @@ The frontend dev server runs on port 5173 (Vite) and proxies `/ws`, `/windows`, 
 ### With Docker (backend only)
 
 ```bash
-export ZENITH_HMAC_KEY=your-secret-key-here
+export SATLYT_HMAC_KEY=your-secret-key-here
 docker compose -f docker/docker-compose.yaml up --build
 ```
 
@@ -107,10 +107,10 @@ You need Go 1.22+ and Node 18+.
 
 ```bash
 # Terminal 1 — spacecraft
-ZENITH_HMAC_KEY=dev-key go run ./cmd/spacecraft
+SATLYT_HMAC_KEY=dev-key go run ./cmd/spacecraft
 
 # Terminal 2 — ground station
-ZENITH_HMAC_KEY=dev-key SC_ADDR=http://localhost:8080 go run ./cmd/groundstation
+SATLYT_HMAC_KEY=dev-key SC_ADDR=http://localhost:8080 go run ./cmd/groundstation
 
 # Terminal 3 — ISL Relay-1 (optional)
 SC1_ADDR=http://localhost:8080 GS_ADDR=http://localhost:8081 go run ./cmd/relay
@@ -128,7 +128,7 @@ The ground station only receives frames when something sends them. The relay for
 
 ```bash
 while true; do
-  curl -s http://localhost:8080/frame/zenith -o /tmp/f.bin
+  curl -s http://localhost:8080/frame/satlyt -o /tmp/f.bin
   curl -s -X POST http://localhost:8081/receive \
     -H "Content-Type: application/octet-stream" --data-binary @/tmp/f.bin > /dev/null
   sleep 5
@@ -180,7 +180,7 @@ The mission control dashboard runs at `http://localhost:5173` when the Vite dev 
 
 | Variable             | Default               | Description                             |
 |----------------------|-----------------------|-----------------------------------------|
-| `ZENITH_HMAC_KEY`    | required              | Shared HMAC key                         |
+| `SATLYT_HMAC_KEY`    | required              | Shared HMAC key                         |
 | `SPACECRAFT_ADDR`    | `:8080`               | Listen address                          |
 | `SPACECRAFT_SCID`    | `90`                  | 10-bit CCSDS Spacecraft ID              |
 | `SPACECRAFT_VCID`    | `0`                   | 6-bit Virtual Channel ID                |
@@ -190,7 +190,7 @@ The mission control dashboard runs at `http://localhost:5173` when the Vite dev 
 
 | Variable             | Default               | Description                             |
 |----------------------|-----------------------|-----------------------------------------|
-| `ZENITH_HMAC_KEY`    | required              | Shared HMAC key — must match spacecraft |
+| `SATLYT_HMAC_KEY`    | required              | Shared HMAC key — must match spacecraft |
 | `GROUNDSTATION_ADDR` | `:8081`               | Listen address                          |
 | `SC_ADDR`            | required              | Spacecraft base URL for TC forwarding   |
 | `GS_LAT` / `GS_LON`  | `-1.2864` / `36.8172` | Ground station coordinates (Nairobi)    |
@@ -219,7 +219,7 @@ The mission control dashboard runs at `http://localhost:5173` when the Vite dev 
 | GET    | `/state`        |                                           | Orbital state — ECI + geodetic    |
 | GET    | `/track`        | `?minutes=90&step_s=30`                   | Predicted ground track points     |
 | GET    | `/frame`        |                                           | Raw CCSDS TM Transfer Frame       |
-| GET    | `/frame/zenith` |                                           | Raw Zenith-Link v2 frame          |
+| GET    | `/frame/satlyt` |                                           | Raw Satlyt Demo frame          |
 | GET    | `/windows`      |                                           | Computed contact windows for GS   |
 | POST   | `/command`      | CCSDS TC Transfer Frame (`octet-stream`)  | `{"accepted":true,...}`           |
 
@@ -229,7 +229,7 @@ The mission control dashboard runs at `http://localhost:5173` when the Vite dev 
 |--------|------------|----------------------------------------------------------------|----------------------------------|
 | GET    | `/health`  |                                                                | `{"status":"ok"}`                |
 | GET    | `/latest`  |                                                                | Latest received telemetry + meta |
-| POST   | `/receive` | Raw Zenith-Link frame (`octet-stream`); relay sets `X-Relayed-By` header | Decoded telemetry      |
+| POST   | `/receive` | Raw Satlyt Demo frame (`octet-stream`); relay sets `X-Relayed-By` header | Decoded telemetry      |
 | GET    | `/ws`      | Upgrades to WebSocket                                          | Stream of telemetry updates      |
 | POST   | `/command` | `{"command_id":1,"payload_b64":"..."}` — forwarded to spacecraft as TC frame | `{"accepted":true,...}` |
 
