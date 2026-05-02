@@ -3,7 +3,7 @@ package inference_test
 import (
 	"testing"
 
-	"github.com/absmach/zenith-link/spacecraft/inference"
+	"github.com/absmach/satlyt-demo/spacecraft/inference"
 	"github.com/stretchr/testify/assert"
 )
 

@@ -1,23 +1,23 @@
-package zenith_test
+package satlyt_test
 
 import (
 	"encoding/json"
 	"testing"
 
-	"github.com/absmach/zenith-link/pkg/zenith"
+	"github.com/absmach/satlyt-demo/pkg/satlyt"
 )
 
-var fullFrame = zenith.Telemetry{
+var fullFrame = satlyt.Telemetry{
 	Sequence:  1024,
 	Timestamp: 1_750_000_000,
-	Presence: zenith.PresencePosition |
-		zenith.PresenceAttitude |
-		zenith.PresenceAngVel |
-		zenith.PresenceBatV |
-		zenith.PresenceSolarV |
-		zenith.PresenceTempC |
-		zenith.PresenceRSSI |
-		zenith.PresenceInference,
+	Presence: satlyt.PresencePosition |
+		satlyt.PresenceAttitude |
+		satlyt.PresenceAngVel |
+		satlyt.PresenceBatV |
+		satlyt.PresenceSolarV |
+		satlyt.PresenceTempC |
+		satlyt.PresenceRSSI |
+		satlyt.PresenceInference,
 	LatE7:          -12864000,
 	LonE7:          368172000,
 	AltM:           410_000,
@@ -35,10 +35,10 @@ var fullFrame = zenith.Telemetry{
 	InferenceConf:  236,
 }
 
-var deltaFrame = zenith.Telemetry{
+var deltaFrame = satlyt.Telemetry{
 	Sequence:  1025,
 	Timestamp: 1_750_000_001,
-	Presence:  zenith.PresencePosition | zenith.PresenceBatV | zenith.PresenceSolarV,
+	Presence:  satlyt.PresencePosition | satlyt.PresenceBatV | satlyt.PresenceSolarV,
 	LatE7:     -12870000,
 	LonE7:     368180000,
 	AltM:      410_050,
@@ -51,32 +51,32 @@ var benchKey = []byte("benchmark-key-32-bytes-xxxxxxxxxxx")
 func BenchmarkZenithEncode_Full(b *testing.B) {
 	b.ReportAllocs()
 	for i := 0; i < b.N; i++ {
-		_, _ = zenith.Encode(fullFrame, benchKey)
+		_, _ = satlyt.Encode(fullFrame, benchKey)
 	}
 }
 
 func BenchmarkZenithEncode_Delta(b *testing.B) {
 	b.ReportAllocs()
 	for i := 0; i < b.N; i++ {
-		_, _ = zenith.Encode(deltaFrame, benchKey)
+		_, _ = satlyt.Encode(deltaFrame, benchKey)
 	}
 }
 
 func BenchmarkZenithDecode_Full(b *testing.B) {
-	frame, _ := zenith.Encode(fullFrame, benchKey)
+	frame, _ := satlyt.Encode(fullFrame, benchKey)
 	b.ReportAllocs()
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
-		_, _ = zenith.Decode(frame, benchKey)
+		_, _ = satlyt.Decode(frame, benchKey)
 	}
 }
 
 func BenchmarkZenithDecode_Delta(b *testing.B) {
-	frame, _ := zenith.Encode(deltaFrame, benchKey)
+	frame, _ := satlyt.Encode(deltaFrame, benchKey)
 	b.ReportAllocs()
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
-		_, _ = zenith.Decode(frame, benchKey)
+		_, _ = satlyt.Decode(frame, benchKey)
 	}
 }
 
@@ -131,8 +131,8 @@ func BenchmarkJSONUnmarshal_Full(b *testing.B) {
 }
 
 func TestFrameSizeComparison(t *testing.T) {
-	zenithFull, _ := zenith.Encode(fullFrame, benchKey)
-	zenithDelta, _ := zenith.Encode(deltaFrame, benchKey)
+	zenithFull, _ := satlyt.Encode(fullFrame, benchKey)
+	zenithDelta, _ := satlyt.Encode(deltaFrame, benchKey)
 	jsonFull, _ := json.Marshal(makeJSONFrame())
 
 	t.Logf("")
@@ -141,8 +141,8 @@ func TestFrameSizeComparison(t *testing.T) {
 	t.Logf("├─────────────────────────┬────────────────────┤")
 	t.Logf("│  Format                 │  Bytes / frame     │")
 	t.Logf("├─────────────────────────┼────────────────────┤")
-	t.Logf("│  Zenith-Link v2 (full)  │  %3d               │", len(zenithFull))
-	t.Logf("│  Zenith-Link v2 (delta) │  %3d               │", len(zenithDelta))
+	t.Logf("│  Satlyt Demo v2 (full)  │  %3d               │", len(zenithFull))
+	t.Logf("│  Satlyt Demo v2 (delta) │  %3d               │", len(zenithDelta))
 	t.Logf("│  JSON (stdlib, full)    │  %3d               │", len(jsonFull))
 	t.Logf("├─────────────────────────┼────────────────────┤")
 	t.Logf("│  Savings vs JSON        │  %.0f%%              │", float64(len(jsonFull)-len(zenithFull))/float64(len(jsonFull))*100)

@@ -3,7 +3,7 @@ package crc_test
 import (
 	"testing"
 
-	"github.com/absmach/zenith-link/pkg/ccsds/crc"
+	"github.com/absmach/satlyt-demo/pkg/ccsds/crc"
 	"github.com/stretchr/testify/assert"
 )
 

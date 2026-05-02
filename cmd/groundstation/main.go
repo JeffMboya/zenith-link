@@ -1,9 +1,9 @@
-// Command groundstation runs the Zenith-Link ground station service.
+// Command groundstation runs the Satlyt Demo ground station service.
 //
 // Configuration is read from environment variables:
 //
 //	GROUNDSTATION_ADDR    HTTP listen address (default: :8081)
-//	ZENITH_HMAC_KEY       HMAC-SHA256 shared key (required, must match spacecraft)
+//	SATLYT_HMAC_KEY       HMAC-SHA256 shared key (required, must match spacecraft)
 //	GS_MAX_SUBSCRIBERS    Maximum concurrent WebSocket subscribers (default: 64)
 //	GS_LAT                Ground station geodetic latitude  [degrees] (default: -1.2864, Nairobi)
 //	GS_LON                Ground station geodetic longitude [degrees] (default: 36.8172, Nairobi)
@@ -24,15 +24,15 @@ import (
 	"syscall"
 	"time"
 
-	"github.com/absmach/zenith-link/groundstation"
-	gsapi "github.com/absmach/zenith-link/groundstation/api"
-	gsmiddleware "github.com/absmach/zenith-link/groundstation/middleware"
+	"github.com/absmach/satlyt-demo/groundstation"
+	gsapi "github.com/absmach/satlyt-demo/groundstation/api"
+	gsmiddleware "github.com/absmach/satlyt-demo/groundstation/middleware"
 	"github.com/caarlos0/env/v11"
 )
 
 type config struct {
 	Addr           string  `env:"GROUNDSTATION_ADDR" envDefault:":8081"`
-	HMACKey        string  `env:"ZENITH_HMAC_KEY,required"`
+	HMACKey        string  `env:"SATLYT_HMAC_KEY,required"`
 	MaxSubscribers int     `env:"GS_MAX_SUBSCRIBERS" envDefault:"64"`
 	GSLat          float64 `env:"GS_LAT"  envDefault:"-1.2864"`
 	GSLon          float64 `env:"GS_LON"  envDefault:"36.8172"`

@@ -5,7 +5,7 @@ import (
 	"net/http"
 	"time"
 
-	"github.com/absmach/zenith-link/pkg/orbital"
+	"github.com/absmach/satlyt-demo/pkg/orbital"
 )
 
 const deg = math.Pi / 180

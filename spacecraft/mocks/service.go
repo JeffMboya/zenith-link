@@ -4,10 +4,10 @@ import (
 	"context"
 	"time"
 
-	"github.com/absmach/zenith-link/pkg/orbital"
-	"github.com/absmach/zenith-link/pkg/zenith"
-	"github.com/absmach/zenith-link/spacecraft"
-	"github.com/absmach/zenith-link/spacecraft/inference"
+	"github.com/absmach/satlyt-demo/pkg/orbital"
+	"github.com/absmach/satlyt-demo/pkg/satlyt"
+	"github.com/absmach/satlyt-demo/spacecraft"
+	"github.com/absmach/satlyt-demo/spacecraft/inference"
 	"github.com/stretchr/testify/mock"
 )
 
@@ -17,9 +17,9 @@ type Service struct {
 	mock.Mock
 }
 
-func (m *Service) Telemetry(ctx context.Context, t time.Time) (zenith.Telemetry, error) {
+func (m *Service) Telemetry(ctx context.Context, t time.Time) (satlyt.Telemetry, error) {
 	args := m.Called(ctx, t)
-	return args.Get(0).(zenith.Telemetry), args.Error(1)
+	return args.Get(0).(satlyt.Telemetry), args.Error(1)
 }
 
 func (m *Service) TelemetryFrame(ctx context.Context, t time.Time) ([]byte, error) {

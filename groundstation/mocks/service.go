@@ -3,8 +3,8 @@ package mocks
 import (
 	"context"
 
-	"github.com/absmach/zenith-link/groundstation"
-	"github.com/absmach/zenith-link/pkg/zenith"
+	"github.com/absmach/satlyt-demo/groundstation"
+	"github.com/absmach/satlyt-demo/pkg/satlyt"
 	"github.com/stretchr/testify/mock"
 )
 
@@ -14,12 +14,12 @@ type Service struct {
 	mock.Mock
 }
 
-func (m *Service) Receive(ctx context.Context, rawFrame []byte) (zenith.Telemetry, error) {
+func (m *Service) Receive(ctx context.Context, rawFrame []byte) (satlyt.Telemetry, error) {
 	args := m.Called(ctx, rawFrame)
-	if tm, ok := args.Get(0).(zenith.Telemetry); ok {
+	if tm, ok := args.Get(0).(satlyt.Telemetry); ok {
 		return tm, args.Error(1)
 	}
-	return zenith.Telemetry{}, args.Error(1)
+	return satlyt.Telemetry{}, args.Error(1)
 }
 
 func (m *Service) Latest(ctx context.Context) (groundstation.LatestState, error) {
@@ -30,9 +30,9 @@ func (m *Service) Latest(ctx context.Context) (groundstation.LatestState, error)
 	return groundstation.LatestState{}, args.Error(1)
 }
 
-func (m *Service) Subscribe(ctx context.Context) (<-chan zenith.Telemetry, error) {
+func (m *Service) Subscribe(ctx context.Context) (<-chan satlyt.Telemetry, error) {
 	args := m.Called(ctx)
-	if ch, ok := args.Get(0).(<-chan zenith.Telemetry); ok {
+	if ch, ok := args.Get(0).(<-chan satlyt.Telemetry); ok {
 		return ch, args.Error(1)
 	}
 	return nil, args.Error(1)

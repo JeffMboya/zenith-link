@@ -1,7 +1,7 @@
-// Package groundstation implements the Zenith-Link ground station service.
+// Package groundstation implements the Satlyt Demo ground station service.
 //
 // The ground station service:
-//   - Receives raw Zenith-Link v2 binary frames (over UDP or WebSocket)
+//   - Receives raw Satlyt Demo v2 binary frames (over UDP or WebSocket)
 //   - Verifies HMAC-SHA256 and decodes the frame
 //   - Maintains the latest telemetry state for each spacecraft (by SCID)
 //   - Broadcasts decoded telemetry to connected WebSocket clients
@@ -13,20 +13,20 @@ import (
 	"sync"
 	"time"
 
-	"github.com/absmach/zenith-link/pkg/errors"
-	"github.com/absmach/zenith-link/pkg/zenith"
+	"github.com/absmach/satlyt-demo/pkg/errors"
+	"github.com/absmach/satlyt-demo/pkg/satlyt"
 )
 
 type Service interface {
-	Receive(ctx context.Context, rawFrame []byte) (zenith.Telemetry, error)
+	Receive(ctx context.Context, rawFrame []byte) (satlyt.Telemetry, error)
 
 	Latest(ctx context.Context) (LatestState, error)
 
-	Subscribe(ctx context.Context) (<-chan zenith.Telemetry, error)
+	Subscribe(ctx context.Context) (<-chan satlyt.Telemetry, error)
 }
 
 type LatestState struct {
-	Telemetry   zenith.Telemetry
+	Telemetry   satlyt.Telemetry
 	ReceivedAt  time.Time
 	FrameNumber uint64
 }
@@ -45,7 +45,7 @@ type service struct {
 	latest     *LatestState
 	frameCount uint64
 
-	subscribers []chan zenith.Telemetry
+	subscribers []chan satlyt.Telemetry
 }
 
 func New(cfg Config) Service {
@@ -55,10 +55,10 @@ func New(cfg Config) Service {
 	return &service{cfg: cfg}
 }
 
-func (s *service) Receive(ctx context.Context, rawFrame []byte) (zenith.Telemetry, error) {
-	tm, err := zenith.Decode(rawFrame, s.cfg.HMACKey)
+func (s *service) Receive(ctx context.Context, rawFrame []byte) (satlyt.Telemetry, error) {
+	tm, err := satlyt.Decode(rawFrame, s.cfg.HMACKey)
 	if err != nil {
-		return zenith.Telemetry{}, err
+		return satlyt.Telemetry{}, err
 	}
 
 	s.mu.Lock()
@@ -68,7 +68,7 @@ func (s *service) Receive(ctx context.Context, rawFrame []byte) (zenith.Telemetr
 		ReceivedAt:  time.Now().UTC(),
 		FrameNumber: s.frameCount,
 	}
-	subs := make([]chan zenith.Telemetry, len(s.subscribers))
+	subs := make([]chan satlyt.Telemetry, len(s.subscribers))
 	copy(subs, s.subscribers)
 	s.mu.Unlock()
 
@@ -92,18 +92,18 @@ func (s *service) Latest(_ context.Context) (LatestState, error) {
 	return *s.latest, nil
 }
 
-func (s *service) Subscribe(ctx context.Context) (<-chan zenith.Telemetry, error) {
+func (s *service) Subscribe(ctx context.Context) (<-chan satlyt.Telemetry, error) {
 	s.mu.Lock()
 	if len(s.subscribers) >= s.cfg.MaxSubscribers {
 		s.mu.Unlock()
 		return nil, errors.Wrap(errors.ErrInvalidField,
 			errors.New("maximum subscriber limit reached"))
 	}
-	internal := make(chan zenith.Telemetry, 16)
+	internal := make(chan satlyt.Telemetry, 16)
 	s.subscribers = append(s.subscribers, internal)
 	s.mu.Unlock()
 
-	public := make(chan zenith.Telemetry, 16)
+	public := make(chan satlyt.Telemetry, 16)
 
 	go func() {
 		defer func() {

@@ -1,4 +1,4 @@
-module github.com/absmach/zenith-link
+module github.com/absmach/satlyt-demo
 
 go 1.22
 

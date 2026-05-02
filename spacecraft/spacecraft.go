@@ -1,10 +1,10 @@
-// Package spacecraft implements the Zenith-Link spacecraft service.
+// Package spacecraft implements the Satlyt Demo spacecraft service.
 //
 // The spacecraft service owns:
 //   - Orbital propagation (current geodetic position from Keplerian elements)
 //   - Telemetry generation (attitude, power, thermal, RSSI simulation)
 //   - CCSDS TM Transfer Frame construction (space packet → TM frame)
-//   - Zenith-Link v2 binary frame encoding with HMAC-SHA256
+//   - Satlyt Demo v2 binary frame encoding with HMAC-SHA256
 //   - TC uplink command processing (inference, reboot, mode select)
 //   - Contact window computation for a configurable ground station
 //
@@ -22,14 +22,14 @@ import (
 	"sync"
 	"time"
 
-	"github.com/absmach/zenith-link/pkg/ccsds/spacepacket"
-	"github.com/absmach/zenith-link/pkg/ccsds/tcframe"
-	"github.com/absmach/zenith-link/pkg/ccsds/tmframe"
-	"github.com/absmach/zenith-link/pkg/errors"
-	"github.com/absmach/zenith-link/pkg/orbital"
-	"github.com/absmach/zenith-link/pkg/spaceweather"
-	"github.com/absmach/zenith-link/pkg/zenith"
-	"github.com/absmach/zenith-link/spacecraft/inference"
+	"github.com/absmach/satlyt-demo/pkg/ccsds/spacepacket"
+	"github.com/absmach/satlyt-demo/pkg/ccsds/tcframe"
+	"github.com/absmach/satlyt-demo/pkg/ccsds/tmframe"
+	"github.com/absmach/satlyt-demo/pkg/errors"
+	"github.com/absmach/satlyt-demo/pkg/orbital"
+	"github.com/absmach/satlyt-demo/pkg/spaceweather"
+	"github.com/absmach/satlyt-demo/pkg/satlyt"
+	"github.com/absmach/satlyt-demo/spacecraft/inference"
 )
 
 type CommandID uint8
@@ -94,7 +94,7 @@ type CommandResult struct {
 }
 
 type Service interface {
-	Telemetry(ctx context.Context, t time.Time) (zenith.Telemetry, error)
+	Telemetry(ctx context.Context, t time.Time) (satlyt.Telemetry, error)
 
 	TelemetryFrame(ctx context.Context, t time.Time) ([]byte, error)
 
@@ -174,12 +174,12 @@ func New(cfg Config) Service {
 	}
 }
 
-func (s *service) Telemetry(ctx context.Context, t time.Time) (zenith.Telemetry, error) {
+func (s *service) Telemetry(ctx context.Context, t time.Time) (satlyt.Telemetry, error) {
 	s.autonomyOnce.Do(func() { go s.autonomyLoop() })
 
 	st, err := s.State(ctx, t)
 	if err != nil {
-		return zenith.Telemetry{}, err
+		return satlyt.Telemetry{}, err
 	}
 
 	s.mu.Lock()
@@ -187,13 +187,13 @@ func (s *service) Telemetry(ctx context.Context, t time.Time) (zenith.Telemetry,
 	currentMode := s.mode
 	s.mu.Unlock()
 
-	presence := zenith.PresencePosition |
-		zenith.PresenceBatV |
-		zenith.PresenceSolarV |
-		zenith.PresenceTempC |
-		zenith.PresenceRSSI
+	presence := satlyt.PresencePosition |
+		satlyt.PresenceBatV |
+		satlyt.PresenceSolarV |
+		satlyt.PresenceTempC |
+		satlyt.PresenceRSSI
 	if currentMode == 0 {
-		presence |= zenith.PresenceAttitude | zenith.PresenceAngVel
+		presence |= satlyt.PresenceAttitude | satlyt.PresenceAngVel
 	}
 
 	batV := uint16(7400)
@@ -271,14 +271,14 @@ func (s *service) Telemetry(ctx context.Context, t time.Time) (zenith.Telemetry,
 
 	frameFlags := uint8(0)
 	if det.Class != inference.NOMINAL {
-		frameFlags |= zenith.FlagPriority
+		frameFlags |= satlyt.FlagPriority
 	}
 
-	tm := zenith.Telemetry{
+	tm := satlyt.Telemetry{
 		Sequence:       seq,
 		Timestamp:      uint32(t.Unix()),
 		Flags:          frameFlags,
-		Presence:       presence | zenith.PresenceInference,
+		Presence:       presence | satlyt.PresenceInference,
 		LatE7:          int32(st.Geodetic.LatitudeDeg * 1e7),
 		LonE7:          int32(st.Geodetic.LongitudeDeg * 1e7),
 		AltM:           int32(st.Geodetic.AltitudeM),
@@ -304,7 +304,7 @@ func (s *service) TelemetryFrame(ctx context.Context, t time.Time) ([]byte, erro
 	if err != nil {
 		return nil, err
 	}
-	return zenith.Encode(tm, s.cfg.HMACKey)
+	return satlyt.Encode(tm, s.cfg.HMACKey)
 }
 
 func (s *service) TMFrame(ctx context.Context, t time.Time, frameSize int) ([]byte, error) {

@@ -1,4 +1,4 @@
-// Command relay2 runs the Zenith-Link second ISL relay node (SC-3).
+// Command relay2 runs the Satlyt Demo second ISL relay node (SC-3).
 //
 // SC-3 sits in a medium-inclination orbit at 550 km, offset 180° in RAAN from
 // SC-1, filling the coverage gap between SC-1 (ISS-like, 400 km, 51.6°) and
@@ -38,8 +38,8 @@ import (
 	"syscall"
 	"time"
 
-	"github.com/absmach/zenith-link/pkg/link"
-	"github.com/absmach/zenith-link/pkg/orbital"
+	"github.com/absmach/satlyt-demo/pkg/link"
+	"github.com/absmach/satlyt-demo/pkg/orbital"
 	"github.com/caarlos0/env/v11"
 )
 
@@ -179,11 +179,11 @@ func pollLoop(ctx context.Context, client *http.Client, cfg config, buf *relayBu
 
 func fetchBest(ctx context.Context, client *http.Client, cfg config, buf *relayBuffer, logger *slog.Logger) {
 	if relay1HasData(ctx, client, cfg.Relay1Addr) {
-		if fetchFrom(ctx, client, cfg.Relay1Addr+"/frame/zenith", "SC-2-relay", buf, logger) {
+		if fetchFrom(ctx, client, cfg.Relay1Addr+"/frame/satlyt", "SC-2-relay", buf, logger) {
 			return
 		}
 	}
-	fetchFrom(ctx, client, cfg.SC1Addr+"/frame/zenith", "SC-1", buf, logger)
+	fetchFrom(ctx, client, cfg.SC1Addr+"/frame/satlyt", "SC-1", buf, logger)
 }
 
 func relay1HasData(ctx context.Context, client *http.Client, relay1Addr string) bool {

@@ -2,10 +2,10 @@ version: "3.9"
 
 # Production compose for DigitalOcean Droplet.
 # Only nginx (port 80) is exposed publicly — all Go services communicate
-# on the internal Docker network. Set ZENITH_HMAC_KEY in .env before starting.
+# on the internal Docker network. Set SATLYT_HMAC_KEY in .env before starting.
 #
 # Quick start:
-#   cp .env.example .env && nano .env   # set ZENITH_HMAC_KEY
+#   cp .env.example .env && nano .env   # set SATLYT_HMAC_KEY
 #   docker compose -f docker/docker-compose.prod.yaml up -d --build
 
 x-common: &common
@@ -33,7 +33,7 @@ services:
       context: ..
       dockerfile: docker/Dockerfile.spacecraft
     environment:
-      - ZENITH_HMAC_KEY=${ZENITH_HMAC_KEY:?ZENITH_HMAC_KEY must be set in .env}
+      - SATLYT_HMAC_KEY=${SATLYT_HMAC_KEY:?SATLYT_HMAC_KEY must be set in .env}
       - SPACECRAFT_ADDR=:8080
       - SPACECRAFT_SCID=90
       - SPACECRAFT_VCID=0
@@ -45,7 +45,7 @@ services:
       context: ..
       dockerfile: docker/Dockerfile.groundstation
     environment:
-      - ZENITH_HMAC_KEY=${ZENITH_HMAC_KEY:?ZENITH_HMAC_KEY must be set in .env}
+      - SATLYT_HMAC_KEY=${SATLYT_HMAC_KEY:?SATLYT_HMAC_KEY must be set in .env}
       - GROUNDSTATION_ADDR=:8081
       - GS_MAX_SUBSCRIBERS=64
       - GS_LAT=-1.2864

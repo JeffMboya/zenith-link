@@ -6,10 +6,10 @@ import (
 	"log/slog"
 	"time"
 
-	"github.com/absmach/zenith-link/pkg/orbital"
-	"github.com/absmach/zenith-link/pkg/zenith"
-	"github.com/absmach/zenith-link/spacecraft"
-	"github.com/absmach/zenith-link/spacecraft/inference"
+	"github.com/absmach/satlyt-demo/pkg/orbital"
+	"github.com/absmach/satlyt-demo/pkg/satlyt"
+	"github.com/absmach/satlyt-demo/spacecraft"
+	"github.com/absmach/satlyt-demo/spacecraft/inference"
 )
 
 var _ spacecraft.Service = (*loggingMiddleware)(nil)
@@ -23,7 +23,7 @@ func NewLogging(svc spacecraft.Service, logger *slog.Logger) spacecraft.Service 
 	return &loggingMiddleware{logger: logger, svc: svc}
 }
 
-func (lm *loggingMiddleware) Telemetry(ctx context.Context, t time.Time) (tm zenith.Telemetry, err error) {
+func (lm *loggingMiddleware) Telemetry(ctx context.Context, t time.Time) (tm satlyt.Telemetry, err error) {
 	defer func(begin time.Time) {
 		args := []any{
 			slog.String("duration", time.Since(begin).String()),

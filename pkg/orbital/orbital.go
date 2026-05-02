@@ -21,7 +21,7 @@ import (
 	"math"
 	"time"
 
-	"github.com/absmach/zenith-link/pkg/errors"
+	"github.com/absmach/satlyt-demo/pkg/errors"
 )
 
 const (

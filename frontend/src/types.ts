@@ -25,7 +25,7 @@ export interface LinkMetrics {
   nacks_issued: number
   acks_issued: number
   full_syncs_received: number
-  bytes_received_zenith: number
+  bytes_received_satlyt: number
   bytes_equivalent_json: number
 }
 

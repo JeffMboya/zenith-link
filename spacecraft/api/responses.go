@@ -4,9 +4,9 @@ import (
 	"net/http"
 	"time"
 
-	"github.com/absmach/zenith-link/pkg/orbital"
-	"github.com/absmach/zenith-link/pkg/zenith"
-	"github.com/absmach/zenith-link/spacecraft"
+	"github.com/absmach/satlyt-demo/pkg/orbital"
+	"github.com/absmach/satlyt-demo/pkg/satlyt"
+	"github.com/absmach/satlyt-demo/spacecraft"
 )
 
 type telemetryRes struct {
@@ -35,7 +35,7 @@ type telemetryRes struct {
 
 func (r telemetryRes) Code() int { return http.StatusOK }
 
-func telemetryFromDomain(tm zenith.Telemetry) telemetryRes {
+func telemetryFromDomain(tm satlyt.Telemetry) telemetryRes {
 	r := telemetryRes{
 		Sequence:  tm.Sequence,
 		Timestamp: tm.Timestamp,
@@ -55,12 +55,12 @@ func telemetryFromDomain(tm zenith.Telemetry) telemetryRes {
 		TempC:     tm.TempC,
 		RSSI:      tm.RSSI,
 	}
-	if tm.Presence&zenith.PresenceInference != 0 {
+	if tm.Presence&satlyt.PresenceInference != 0 {
 		c := tm.InferenceClass
 		cf := tm.InferenceConf
 		r.InferenceClass = &c
 		r.InferenceConf = &cf
-		r.InferenceLabel = zenith.InferenceClassName(c)
+		r.InferenceLabel = satlyt.InferenceClassName(c)
 	}
 	return r
 }

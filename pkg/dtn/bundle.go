@@ -1,5 +1,5 @@
 // Package dtn implements a subset of the Bundle Protocol (RFC 9171) for
-// delay-tolerant inter-satellite networking. Bundles wrap Zenith-Link telemetry
+// delay-tolerant inter-satellite networking. Bundles wrap Satlyt Demo telemetry
 // frames and carry metadata required for store-and-forward routing across
 // contact gaps in the ISL mesh.
 package dtn
@@ -9,7 +9,7 @@ import (
 	"fmt"
 	"time"
 
-	"github.com/absmach/zenith-link/pkg/errors"
+	"github.com/absmach/satlyt-demo/pkg/errors"
 )
 
 type EID struct {

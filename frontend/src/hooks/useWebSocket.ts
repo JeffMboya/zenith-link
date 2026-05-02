@@ -29,7 +29,7 @@ interface RawTelemetry {
 function toStateUpdate(
   raw: RawTelemetry,
   track: { lat: number; lon: number; alt: number }[],
-  zenithBytes: number,
+  satlytBytes: number,
   jsonBytes: number,
   packets: number,
   nacks: number,
@@ -63,7 +63,7 @@ function toStateUpdate(
       nacks_issued: nacks,
       acks_issued: packets,
       full_syncs_received: 0,
-      bytes_received_zenith: zenithBytes,
+      bytes_received_satlyt: satlytBytes,
       bytes_equivalent_json: jsonBytes,
     },
     ground_track: track,
@@ -75,7 +75,7 @@ function toStateUpdate(
   }
 }
 
-const ZENITH_FRAME_BYTES = 78  
+const SATLYT_FRAME_BYTES = 78  
 
 export function useWebSocket() {
   const [latest, setLatest] = useState<StateUpdate | null>(null)
@@ -85,7 +85,7 @@ export function useWebSocket() {
   const reconnectTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
   const trackRef = useRef<{ lat: number; lon: number; alt: number }[]>([])
   const everConnected = useRef(false)
-  const zenithBytesRef = useRef(0)
+  const satlytBytesRef = useRef(0)
   const jsonBytesRef = useRef(0)
   const packetsRef = useRef(0)
   const nacksRef = useRef(0)
@@ -105,12 +105,12 @@ export function useWebSocket() {
       try {
         const raw = JSON.parse(e.data) as RawTelemetry
         if (typeof raw.sequence !== 'number') return
-        zenithBytesRef.current += ZENITH_FRAME_BYTES
+        satlytBytesRef.current += SATLYT_FRAME_BYTES
         jsonBytesRef.current += e.data.length  
         packetsRef.current += 1
         const pt = { lat: raw.lat_e7 / 1e7, lon: raw.lon_e7 / 1e7, alt: raw.alt_m }
         trackRef.current = [...trackRef.current.slice(-(MAX_TRACK_POINTS - 1)), pt]
-        setLatest(toStateUpdate(raw, trackRef.current, zenithBytesRef.current, jsonBytesRef.current, packetsRef.current, nacksRef.current))
+        setLatest(toStateUpdate(raw, trackRef.current, satlytBytesRef.current, jsonBytesRef.current, packetsRef.current, nacksRef.current))
       } catch {
         
       }

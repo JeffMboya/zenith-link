@@ -3,7 +3,7 @@ version: "3.9"
 x-common: &common
   restart: unless-stopped
   environment:
-    - ZENITH_HMAC_KEY=${ZENITH_HMAC_KEY:?ZENITH_HMAC_KEY must be set}
+    - SATLYT_HMAC_KEY=${SATLYT_HMAC_KEY:?SATLYT_HMAC_KEY must be set}
 
 services:
   spacecraft:
@@ -14,7 +14,7 @@ services:
     ports:
       - "8080:8080"
     environment:
-      - ZENITH_HMAC_KEY=${ZENITH_HMAC_KEY}
+      - SATLYT_HMAC_KEY=${SATLYT_HMAC_KEY}
       - SPACECRAFT_ADDR=:8080
       - SPACECRAFT_SCID=90
       - SPACECRAFT_VCID=0
@@ -28,7 +28,7 @@ services:
     ports:
       - "8081:8081"
     environment:
-      - ZENITH_HMAC_KEY=${ZENITH_HMAC_KEY}
+      - SATLYT_HMAC_KEY=${SATLYT_HMAC_KEY}
       - GROUNDSTATION_ADDR=:8081
       - GS_MAX_SUBSCRIBERS=64
       - GS_LAT=-1.2864

@@ -3,7 +3,7 @@ package spaceweather_test
 import (
 	"testing"
 
-	"github.com/absmach/zenith-link/pkg/spaceweather"
+	"github.com/absmach/satlyt-demo/pkg/spaceweather"
 )
 
 func TestRSSIAdjustmentDB(t *testing.T) {

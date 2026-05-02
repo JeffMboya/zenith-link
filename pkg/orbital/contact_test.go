@@ -5,8 +5,8 @@ import (
 	"testing"
 	"time"
 
-	"github.com/absmach/zenith-link/pkg/errors"
-	"github.com/absmach/zenith-link/pkg/orbital"
+	"github.com/absmach/satlyt-demo/pkg/errors"
+	"github.com/absmach/satlyt-demo/pkg/orbital"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )

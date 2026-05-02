@@ -1,6 +1,6 @@
-// Command relay runs the Zenith-Link ISL (Inter-Satellite Link) relay service.
+// Command relay runs the Satlyt Demo ISL (Inter-Satellite Link) relay service.
 //
-// The relay satellite polls a primary spacecraft (SC-1) for its latest Zenith-Link
+// The relay satellite polls a primary spacecraft (SC-1) for its latest Satlyt Demo
 // telemetry frame, wraps it in a DTN bundle, buffers it in the DTN store, and
 // forwards it to a ground station when the relay is within a contact window of
 // the ground station. Forwarded frames carry the X-Relayed-By header so the
@@ -36,9 +36,9 @@ import (
 	"syscall"
 	"time"
 
-	"github.com/absmach/zenith-link/pkg/dtn"
-	"github.com/absmach/zenith-link/pkg/orbital"
-	"github.com/absmach/zenith-link/pkg/zenith"
+	"github.com/absmach/satlyt-demo/pkg/dtn"
+	"github.com/absmach/satlyt-demo/pkg/orbital"
+	"github.com/absmach/satlyt-demo/pkg/satlyt"
 	"github.com/caarlos0/env/v11"
 )
 
@@ -60,11 +60,11 @@ type relayNode struct {
 }
 
 func extractPriority(frame []byte) uint8 {
-	if len(frame) < zenith.HeaderSize {
+	if len(frame) < satlyt.HeaderSize {
 		return 1
 	}
 
-	if frame[3]&zenith.FlagPriority != 0 {
+	if frame[3]&satlyt.FlagPriority != 0 {
 		return 2
 	}
 	return 1
@@ -144,7 +144,7 @@ func main() {
 		})
 	})
 
-	mux.HandleFunc("/frame/zenith", func(w http.ResponseWriter, _ *http.Request) {
+	mux.HandleFunc("/frame/satlyt", func(w http.ResponseWriter, _ *http.Request) {
 		b := node.store.Next()
 		if b == nil {
 			w.WriteHeader(http.StatusNoContent)
@@ -206,7 +206,7 @@ func pollSC1(ctx context.Context, client *http.Client, cfg config, node *relayNo
 }
 
 func fetchAndStore(ctx context.Context, client *http.Client, cfg config, node *relayNode, logger *slog.Logger) {
-	url := cfg.SC1Addr + "/frame/zenith"
+	url := cfg.SC1Addr + "/frame/satlyt"
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, url, nil)
 	if err != nil {
 		logger.Warn("relay poll: build request failed", slog.Any("error", err))

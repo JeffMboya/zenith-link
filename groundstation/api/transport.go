@@ -17,9 +17,9 @@ import (
 	"sync/atomic"
 	"time"
 
-	"github.com/absmach/zenith-link/groundstation"
-	"github.com/absmach/zenith-link/pkg/ccsds/tcframe"
-	"github.com/absmach/zenith-link/pkg/zenith"
+	"github.com/absmach/satlyt-demo/groundstation"
+	"github.com/absmach/satlyt-demo/pkg/ccsds/tcframe"
+	"github.com/absmach/satlyt-demo/pkg/satlyt"
 	"github.com/go-chi/chi/v5"
 	"github.com/go-chi/chi/v5/middleware"
 	"github.com/gorilla/websocket"
@@ -214,8 +214,8 @@ func receiveHandler(svc groundstation.Service) http.HandlerFunc {
 			return
 		}
 
-		if tm.Flags&zenith.FlagPriority != 0 {
-			label := zenith.InferenceClassName(tm.InferenceClass)
+		if tm.Flags&satlyt.FlagPriority != 0 {
+			label := satlyt.InferenceClassName(tm.InferenceClass)
 			slog.Warn("[PRIORITY DOWNLINK] anomaly flagged by spacecraft",
 				slog.String("class", label),
 				slog.Int("conf_pct", int(tm.InferenceConf)*100/255),
@@ -346,7 +346,7 @@ type telemetryRes struct {
 	RelayedBy      string `json:"relayed_by,omitempty"`
 }
 
-func telemetryFromDomain(tm zenith.Telemetry) telemetryRes {
+func telemetryFromDomain(tm satlyt.Telemetry) telemetryRes {
 	r := telemetryRes{
 		Sequence:  tm.Sequence,
 		Timestamp: tm.Timestamp,
@@ -366,12 +366,12 @@ func telemetryFromDomain(tm zenith.Telemetry) telemetryRes {
 		TempC:     tm.TempC,
 		RSSI:      tm.RSSI,
 	}
-	if tm.Presence&zenith.PresenceInference != 0 {
+	if tm.Presence&satlyt.PresenceInference != 0 {
 		c := tm.InferenceClass
 		cf := tm.InferenceConf
 		r.InferenceClass = &c
 		r.InferenceConf = &cf
-		r.InferenceLabel = zenith.InferenceClassName(c)
+		r.InferenceLabel = satlyt.InferenceClassName(c)
 	}
 	return r
 }

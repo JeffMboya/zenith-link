@@ -6,27 +6,27 @@ import (
 	"testing"
 	"time"
 
-	"github.com/absmach/zenith-link/groundstation"
-	"github.com/absmach/zenith-link/pkg/errors"
-	"github.com/absmach/zenith-link/pkg/zenith"
+	"github.com/absmach/satlyt-demo/groundstation"
+	"github.com/absmach/satlyt-demo/pkg/errors"
+	"github.com/absmach/satlyt-demo/pkg/satlyt"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
 
 var testKey = []byte("test-hmac-key-32-bytes-padded-xx")
 
-func makeFrame(t *testing.T, tm zenith.Telemetry) []byte {
+func makeFrame(t *testing.T, tm satlyt.Telemetry) []byte {
 	t.Helper()
-	b, err := zenith.Encode(tm, testKey)
+	b, err := satlyt.Encode(tm, testKey)
 	require.NoError(t, err)
 	return b
 }
 
-func defaultTelemetry() zenith.Telemetry {
-	return zenith.Telemetry{
+func defaultTelemetry() satlyt.Telemetry {
+	return satlyt.Telemetry{
 		Sequence:  1,
 		Timestamp: uint32(time.Now().Unix()),
-		Presence:  zenith.PresencePosition,
+		Presence:  satlyt.PresencePosition,
 		LatE7:     377_498_000,
 		LonE7:     -1_224_194_000,
 		AltM:      415_000,
@@ -38,16 +38,16 @@ func TestReceive(t *testing.T) {
 		desc    string
 		frame   func(t *testing.T) []byte
 		wantErr error
-		check   func(t *testing.T, tm zenith.Telemetry)
+		check   func(t *testing.T, tm satlyt.Telemetry)
 	}{
 		{
 			desc: "valid frame is decoded and stored",
 			frame: func(t *testing.T) []byte {
 				return makeFrame(t, defaultTelemetry())
 			},
-			check: func(t *testing.T, tm zenith.Telemetry) {
+			check: func(t *testing.T, tm satlyt.Telemetry) {
 				assert.Equal(t, uint16(1), tm.Sequence)
-				assert.NotZero(t, tm.Presence&zenith.PresencePosition)
+				assert.NotZero(t, tm.Presence&satlyt.PresencePosition)
 				assert.Equal(t, int32(377_498_000), tm.LatE7)
 			},
 		},
@@ -71,7 +71,7 @@ func TestReceive(t *testing.T) {
 			desc: "wrong HMAC key",
 			frame: func(t *testing.T) []byte {
 
-				b, err := zenith.Encode(defaultTelemetry(), []byte("different-key"))
+				b, err := satlyt.Encode(defaultTelemetry(), []byte("different-key"))
 				require.NoError(t, err)
 				return b
 			},
