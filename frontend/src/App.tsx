@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useRef } from 'react'
 import { useWebSocket } from './hooks/useWebSocket'
 import { useOrbitalPosition } from './hooks/useOrbitalPosition'
 import { useConstellation } from './hooks/useConstellation'
@@ -42,16 +42,46 @@ export default function App() {
   const relay1Health = useRelayHealth('/relay/health')
   const relay2Health = useRelayHealth('/relay2/health')
 
-  // AT-1 is the default selected satellite (primary spacecraft with full telemetry)
   const [selectedSatId, setSelectedSatId] = useState('AT-1')
 
-  // Panel dot-buttons dispatch this event; Globe3D onClick calls setSelectedSatId directly
+  // Auto-import Planet Labs TLEs on mount — real orbital positions by default
+  useEffect(() => {
+    fetch('/tle/import?group=planet&limit=100', { method: 'POST' }).catch(() => {})
+  }, [])
+
+  // Designate the first Planet Labs satellite as primary when TLE mode activates.
+  // primarySatId drives: the big globe dot position, the telemetry panel header,
+  // and the hasTelemetry flag (enriched telemetry from spacecraft backend).
+  const [primarySatId, setPrimarySatId] = useState<string>('AT-1')
+  const primarySet = useRef(false)
+
+  useEffect(() => {
+    if (constellation.source === 'tle' && !primarySet.current) {
+      const first = constellation.satellites.find(s => s.id !== 'SC-2' && s.id !== 'SC-3')
+      if (first) {
+        primarySet.current = true
+        setPrimarySatId(first.id)
+        setSelectedSatId(first.id)
+      }
+    }
+    if (constellation.source === 'sim') {
+      primarySet.current = false
+      setPrimarySatId('AT-1')
+    }
+  }, [constellation.source, constellation.satellites])
+
   useEffect(() => {
     const handler = (e: Event) => setSelectedSatId((e as CustomEvent<string>).detail)
     window.addEventListener('select-sat', handler)
     return () => window.removeEventListener('select-sat', handler)
   }, [])
+
   const selectedSat = constellation.satellites.find(s => s.id === selectedSatId) ?? null
+
+  // hasTelemetry: true for the primary satellite — it gets enriched telemetry
+  // from the spacecraft backend regardless of whether its position is real (TLE)
+  // or simulated. All other constellation members are position-only.
+  const hasTelemetry = selectedSatId === primarySatId
 
   return (
     <>
@@ -63,6 +93,8 @@ export default function App() {
         onSelectSat={setSelectedSatId}
         relay1Health={relay1Health}
         relay2Health={relay2Health}
+        tleSource={constellation.source}
+        primarySatId={primarySatId}
       />
       <KPIBar
         metrics={latest?.metrics ?? null}
@@ -77,6 +109,9 @@ export default function App() {
         state={latest?.satellite ?? null}
         selectedSatId={selectedSatId}
         selectedSat={selectedSat}
+        hasTelemetry={hasTelemetry}
+        tleSource={constellation.source}
+        primarySatId={primarySatId}
       />
       <CommandPanel />
       <OperatorPanel primaryOnline={connected} />

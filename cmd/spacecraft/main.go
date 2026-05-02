@@ -47,12 +47,13 @@ func main() {
 		os.Exit(1)
 	}
 
-	// ISS-like orbit for demonstration; in production this would come from a
-	// TLE feed or mission database.
+	// Planet Labs Dove-class orbit: 500 km sun-synchronous, 97.4° inclination.
+	// Matches the orbital regime of Planet Labs Flock/SkySat satellites whose
+	// TLE data is loaded as the default constellation.
 	elem := orbital.Elements{
-		SemiMajorAxis: 6_788_000,
+		SemiMajorAxis: 6_878_000,
 		Eccentricity:  0.0001,
-		Inclination:   51.6 * math.Pi / 180,
+		Inclination:   97.4 * math.Pi / 180,
 		RAAN:          0.0,
 		ArgPerigee:    0.0,
 		MeanAnomaly:   0.0,

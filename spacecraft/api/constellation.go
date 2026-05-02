@@ -37,7 +37,7 @@ var (
 	constellationEpoch = time.Now().UTC()
 
 	constellation16 = []constellationSat{
-		{"AT-1", 6_788_000, 0.0001, 51.6 * deg, 0 * deg, 0 * deg},
+		{"AT-1", 6_878_000, 0.0001, 97.4 * deg, 0 * deg, 0 * deg},
 	}
 )
 

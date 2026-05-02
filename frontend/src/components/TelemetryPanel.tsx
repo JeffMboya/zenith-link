@@ -26,8 +26,10 @@ interface Props {
   state: SatelliteState | null
   selectedSatId: string
   selectedSat: ConstellationSat | null
+  hasTelemetry: boolean
+  tleSource: 'sim' | 'tle'
+  primarySatId: string
 }
-
 
 function Row({ label, value, unit, color = 'var(--text-body)' }: {
   label: string; value: string; unit: string; color?: string
@@ -62,10 +64,9 @@ function Section({ title, accent = 'var(--cyan-dim)', children }: {
   )
 }
 
-export function TelemetryPanel({ state, selectedSatId, selectedSat }: Props) {
+export function TelemetryPanel({ state, selectedSatId, selectedSat, hasTelemetry, tleSource, primarySatId }: Props) {
   const [open, setOpen] = useState(true)
   const payload = usePayload()
-  const isPrimary = selectedSatId === 'AT-1'
   const meta = SAT_META[selectedSatId]
   const planeColor = 'var(--cyan)'
 
@@ -117,10 +118,10 @@ export function TelemetryPanel({ state, selectedSatId, selectedSat }: Props) {
           </div>
 
           {/* ── Primary satellite: full CCSDS telemetry ── */}
-          {isPrimary && (
+          {hasTelemetry && (
             <>
               <div style={{ color: 'var(--cyan)', fontSize: 9, letterSpacing: 3, marginBottom: 12 }}>
-                TELEMETRY · GROUND MIRROR
+                {tleSource === 'tle' ? 'REAL POSITION · SIMULATED TELEMETRY' : 'TELEMETRY · GROUND MIRROR'}
               </div>
               {!state ? (
                 <div style={{ color: 'var(--text-dim)', fontSize: 10, marginTop: 8, textAlign: 'center' }}>
@@ -154,9 +155,9 @@ export function TelemetryPanel({ state, selectedSatId, selectedSat }: Props) {
                     </div>
                   </Section>
                   <Section title="POSITION">
-                    <Row label="LAT" value={state.latitude.toFixed(4)}          unit="°" />
-                    <Row label="LON" value={state.longitude.toFixed(4)}         unit="°" />
-                    <Row label="ALT" value={(state.altitude / 1000).toFixed(1)} unit="km" color="var(--cyan)" />
+                    <Row label="LAT" value={(selectedSat?.lat ?? state.latitude).toFixed(4)}                            unit="°" />
+                    <Row label="LON" value={(selectedSat?.lon ?? state.longitude).toFixed(4)}                            unit="°" />
+                    <Row label="ALT" value={((selectedSat?.alt_m ?? state.altitude) / 1000).toFixed(1)} unit="km" color="var(--cyan)" />
                   </Section>
                   {payload && (
                     <Section title="PAYLOAD" accent="var(--teal)">
@@ -172,7 +173,7 @@ export function TelemetryPanel({ state, selectedSatId, selectedSat }: Props) {
           )}
 
           {/* ── Constellation member: orbital data only ── */}
-          {!isPrimary && (
+          {!hasTelemetry && (
             <>
               <div style={{ color: planeColor, fontSize: 9, letterSpacing: 3, marginBottom: 12 }}>
                 ORBITAL DATA
@@ -205,7 +206,7 @@ export function TelemetryPanel({ state, selectedSatId, selectedSat }: Props) {
                     </div>
                     <button
                       onClick={() => {
-                        const evt = new CustomEvent('select-sat', { detail: 'AT-1' })
+                        const evt = new CustomEvent('select-sat', { detail: primarySatId })
                         window.dispatchEvent(evt)
                       }}
                       style={{
@@ -215,7 +216,7 @@ export function TelemetryPanel({ state, selectedSatId, selectedSat }: Props) {
                         cursor: 'pointer', borderRadius: 2,
                       }}
                     >
-                      SWITCH TO AT-1 TELEMETRY
+                      SWITCH TO PRIMARY TELEMETRY
                     </button>
                   </div>
                 </>
