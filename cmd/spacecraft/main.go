@@ -35,6 +35,33 @@ type config struct {
 	HMACKey string `env:"ZENITH_HMAC_KEY,required"`
 }
 
+// adjustForEarlyContact advances mean anomaly so the first Nairobi contact
+// window opens within targetLeadSec seconds of startup. Orbital shape is unchanged.
+func adjustForEarlyContact(elem orbital.Elements, gsLat, gsLon, minElevDeg, targetLeadSec float64, logger *slog.Logger) orbital.Elements {
+	now := time.Now().UTC()
+	windows, err := orbital.ContactWindows(elem, gsLat, gsLon, now, now.Add(24*time.Hour), minElevDeg)
+	if err != nil || len(windows) == 0 {
+		logger.Warn("spacecraft: startup contact scan failed — using default mean anomaly", slog.Any("error", err))
+		return elem
+	}
+	timeToAOS := windows[0].AOS.Sub(now).Seconds()
+	if timeToAOS <= targetLeadSec {
+		logger.Info("spacecraft: first Nairobi contact within target lead",
+			slog.Float64("time_to_aos_sec", timeToAOS))
+		return elem
+	}
+	const mu = 3.986004418e14
+	a := elem.SemiMajorAxis
+	T := 2 * math.Pi * math.Sqrt(a*a*a/mu)
+	advance := timeToAOS - targetLeadSec
+	elem.MeanAnomaly = math.Mod(elem.MeanAnomaly+2*math.Pi*advance/T, 2*math.Pi)
+	logger.Info("spacecraft: mean anomaly adjusted for early Nairobi contact",
+		slog.Float64("original_aos_sec", timeToAOS),
+		slog.Float64("target_lead_sec", targetLeadSec),
+		slog.Float64("advance_sec", advance))
+	return elem
+}
+
 func main() {
 	logger := slog.New(slog.NewJSONHandler(os.Stdout, &slog.HandlerOptions{
 		Level: slog.LevelInfo,
@@ -50,7 +77,7 @@ func main() {
 	// Planet Labs Dove-class orbit: 500 km sun-synchronous, 97.4° inclination.
 	// Matches the orbital regime of Planet Labs Flock/SkySat satellites whose
 	// TLE data is loaded as the default constellation.
-	elem := orbital.Elements{
+	elem := adjustForEarlyContact(orbital.Elements{
 		SemiMajorAxis: 6_878_000,
 		Eccentricity:  0.0001,
 		Inclination:   97.4 * math.Pi / 180,
@@ -58,7 +85,7 @@ func main() {
 		ArgPerigee:    0.0,
 		MeanAnomaly:   0.0,
 		Epoch:         time.Now().UTC(),
-	}
+	}, -1.2864, 36.8172, 5.0, 600.0, logger) // ensure Nairobi pass within 10 min
 
 	svcCfg := spacecraft.Config{
 		SCID:          cfg.SCID,

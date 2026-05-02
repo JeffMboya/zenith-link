@@ -106,7 +106,10 @@ func main() {
 		ArgPerigee:    0.0,
 		MeanAnomaly:   0.0,
 		Epoch:         time.Now().UTC(),
-	}, cfg.GSLat, cfg.GSLon, cfg.MinElevDeg, 120, logger) // 120s lead: staggered after Relay-1
+	}, cfg.GSLat, cfg.GSLon, cfg.MinElevDeg, 90, logger)
+	// Shift half an orbit so SC-3's contact windows are staggered ~47 min after
+	// Relay-1's, halving the maximum blackout window between ISL deliveries.
+	sc3Elements.MeanAnomaly = math.Mod(sc3Elements.MeanAnomaly+math.Pi, 2*math.Pi)
 
 	buf := &relayBuffer{}
 	client := &http.Client{Timeout: 10 * time.Second}
