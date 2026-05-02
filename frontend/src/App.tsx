@@ -81,7 +81,7 @@ export default function App() {
       />
       <CommandPanel />
       <AutonomyFeed />
-      <OperatorPanel />
+      <OperatorPanel primaryOnline={connected} />
     </>
   )
 }
