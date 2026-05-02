@@ -149,7 +149,7 @@ interface Props {
 }
 
 export function OperatorPanel({ primaryOnline }: Props) {
-  const [open, setOpen] = useState(false)
+  const [open, setOpen] = useState(true)
   const [tab, setTab] = useState<Tab>('FLEET')
   const [deployLog, setDeployLog] = useState<{ profileId: number; msg: string; ok: boolean } | null>(null)
   const [deploying, setDeploying] = useState<number | null>(null)

@@ -7,7 +7,6 @@ import type { RelayHealth } from './components/Globe3D'
 import { KPIBar } from './components/KPIBar'
 import { TelemetryPanel } from './components/TelemetryPanel'
 import { CommandPanel } from './components/CommandPanel'
-import { AutonomyFeed } from './components/AutonomyFeed'
 import { OperatorPanel } from './components/OperatorPanel'
 
 const RELAY_POLL_MS = 5_000
@@ -80,7 +79,6 @@ export default function App() {
         selectedSat={selectedSat}
       />
       <CommandPanel />
-      <AutonomyFeed />
       <OperatorPanel primaryOnline={connected} />
     </>
   )
