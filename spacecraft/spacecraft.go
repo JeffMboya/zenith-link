@@ -263,12 +263,23 @@ func (s *service) Telemetry(ctx context.Context, t time.Time) (zenith.Telemetry,
 	// Periods are chosen so anomalies are well-separated from eclipse transitions.
 	unix := t.Unix()
 
-	// Background noise — low-amplitude, gives the rolling window non-zero stddev
-	// even in quiet periods so thresholds are proportionally meaningful.
+	// Background noise — gives the rolling window non-zero stddev so anomaly
+	// z-score thresholds are proportionally meaningful.
 	bgNoise := math.Sin(float64(unix)*1.61803) * math.Sin(float64(unix)*2.71828)
-	batV = uint16(int(batV) + int(math.Round(bgNoise*12)))   // ±12 mV background
-	chassisC += int16(math.Round(bgNoise * 20))               // ±0.20°C background
-	rssiBase := -85.0 + bgNoise*1.2 // ±1.2 dBm background
+	batV = uint16(int(batV) + int(math.Round(bgNoise*50)))   // ±50 mV background
+	chassisC += int16(math.Round(bgNoise * 30))               // ±0.30°C background
+	rssiBase := -85.0 + bgNoise*2.0                           // ±2.0 dBm background
+
+	// Fast-varying noise (5–15 s period) so gauges show visible real-time activity.
+	// Periods chosen to be mutually incommensurate — avoids phase locking.
+	fast1 := math.Sin(float64(unix)*0.523) * math.Cos(float64(unix)*0.314) // ~7 s period
+	fast2 := math.Sin(float64(unix)*0.471) * math.Sin(float64(unix)*0.628) // ~10 s period
+	attRoll  += int16(math.Round(fast1 * 250))  // ±2.5° visible roll flutter
+	attPitch += int16(math.Round(fast2 * 350))  // ±3.5° visible pitch flutter
+	attYaw   += int16(math.Round(fast1 * 600))  // ±6° visible yaw drift
+	angVelX  += int16(math.Round(fast1 * 8))    // ±0.08 deg/s
+	angVelY  += int16(math.Round(fast2 * 6))    // ±0.06 deg/s
+	angVelZ  += int16(math.Round(fast1 * 4))    // ±0.04 deg/s
 
 	// Apply real-time NOAA space weather adjustment to the RF link margin.
 	// Elevated Kp → ionospheric scintillation → reduced RSSI, matching

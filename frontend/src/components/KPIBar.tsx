@@ -2,7 +2,6 @@ import { useEffect, useState, useRef } from 'react'
 import type { LinkMetrics, SatelliteState } from '../types'
 import { TleSelector } from './TleSelector'
 
-const LINK_COST_PER_MB = 15
 const WINDOWS_POLL_MS = 30_000
 const ISL_POLL_MS = 5_000
 const INFERENCE_POLL_MS = 2_000
@@ -17,11 +16,6 @@ interface Props {
   tleCount: number
 }
 
-interface KPI {
-  label: string
-  value: string
-  color: string
-}
 
 interface ContactWindow {
   aos: string
@@ -186,19 +180,18 @@ const ANOMALY_COLOR: Record<string, string> = {
   RF_DEGRADATION: 'var(--amber)',
 }
 
-function kpis(m: LinkMetrics): KPI[] {
+interface KPITile { label: string; value: string; color: string; nacks?: number }
+
+function kpis(m: LinkMetrics): KPITile[] {
   const zenithMB = m.bytes_received_zenith / 1e6
   const jsonMB = m.bytes_equivalent_json / 1e6
   const savedMB = Math.max(0, jsonMB - zenithMB)
   const eff = jsonMB > 0 ? ((savedMB / jsonMB) * 100).toFixed(1) : '0.0'
   const effNum = parseFloat(eff)
   return [
-    { label: 'PACKETS ACK', value: m.packets_received.toLocaleString(), color: 'var(--cyan)' },
-    { label: 'NACKs', value: m.nacks_issued.toLocaleString(), color: m.nacks_issued > 0 ? 'var(--amber)' : 'var(--green)' },
-    { label: 'DROPPED', value: m.packets_dropped_simulated.toLocaleString(), color: 'var(--amber)' },
-    { label: 'EFFICIENCY', value: `${eff}%`, color: effNum >= 80 ? 'var(--green)' : effNum >= 60 ? 'var(--amber)' : 'var(--red)' },
+    { label: 'PACKETS ACK', value: m.packets_received.toLocaleString(), color: 'var(--cyan)', nacks: m.nacks_issued },
+    { label: 'EFFICIENCY',  value: `${eff}%`, color: effNum >= 80 ? 'var(--green)' : effNum >= 60 ? 'var(--amber)' : 'var(--red)' },
     { label: 'BYTES SAVED', value: `${(savedMB * 1000).toFixed(1)} KB`, color: 'var(--teal)' },
-    { label: 'COST SAVED', value: `$${(savedMB * LINK_COST_PER_MB).toFixed(4)}`, color: 'var(--purple)' },
   ]
 }
 
@@ -289,16 +282,27 @@ export function KPIBar({ metrics, satellite, connected, linkLost, tleSource, tle
         <TleSelector source={tleSource} group={tleGroup} count={tleCount} />
       </div>
 
-      {/* KPI tiles */}
-      <div style={{ flex: 1, display: 'flex' }}>
+      {/* KPI tiles — 3 tiles: PACKETS (with NACK badge), EFFICIENCY, BYTES SAVED */}
+      <div style={{ display: 'flex' }}>
         {metrics
-          ? kpis(metrics).map(({ label, value, color }) => (
+          ? kpis(metrics).map(({ label, value, color, nacks }) => (
               <div key={label} style={{
-                flex: 1, padding: '6px 12px', borderRight: '1px solid var(--bg-dark)',
+                padding: '6px 16px', borderRight: '1px solid var(--bg-dark)',
                 display: 'flex', flexDirection: 'column', alignItems: 'center',
+                position: 'relative', minWidth: 90,
               }}>
                 <span style={{ color, fontSize: 16, fontWeight: 700, lineHeight: 1.2 }}>{value}</span>
-                <span style={{ color: 'var(--text-dim)', fontSize: 9, letterSpacing: 2, marginTop: 2 }}>{label}</span>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 5, marginTop: 2 }}>
+                  <span style={{ color: 'var(--text-dim)', fontSize: 9, letterSpacing: 2 }}>{label}</span>
+                  {nacks != null && nacks > 0 && (
+                    <span style={{
+                      color: 'var(--amber)', fontSize: 7, letterSpacing: 1, fontWeight: 700,
+                      border: '1px solid var(--amber)', borderRadius: 2, padding: '0 3px',
+                    }}>
+                      {nacks} NACK
+                    </span>
+                  )}
+                </div>
               </div>
             ))
           : <div style={{ padding: '12px 20px', color: offlineColor, fontSize: 10, letterSpacing: 2, fontWeight: linkLost ? 700 : 400 }}>
@@ -328,7 +332,14 @@ export function KPIBar({ metrics, satellite, connected, linkLost, tleSource, tle
             +{String(Math.floor(eclipseElapsed / 60)).padStart(2, '0')}:{String(eclipseElapsed % 60).padStart(2, '0')} compute
           </span>
         )}
-        <span style={{ color: 'var(--text-dim)', fontSize: 9, letterSpacing: 2, marginTop: 2 }}>ONBOARD AI</span>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginTop: 2 }}>
+          <span style={{ color: 'var(--text-dim)', fontSize: 9, letterSpacing: 2 }}>ONBOARD AI</span>
+          {inferenceDetail && (
+            <span style={{ color: 'var(--text-dim)', fontSize: 7, letterSpacing: 1 }}>
+              · Kp {(inferenceDetail.kp_index ?? 0).toFixed(1)}
+            </span>
+          )}
+        </div>
         {/* Z-score tooltip */}
         {aiHover && inferenceDetail?.channels && (
           <div style={{
@@ -388,33 +399,6 @@ export function KPIBar({ metrics, satellite, connected, linkLost, tleSource, tle
         ))}
         <span style={{ color: 'var(--text-dim)', fontSize: 7, letterSpacing: 2 }}>ISL MESH</span>
       </div>
-
-      {/* Space weather — NOAA Kp index + storm level */}
-      {(() => {
-        const stormLevel = inferenceDetail?.storm_level ?? 'QUIET'
-        const kp = inferenceDetail?.kp_index ?? 0
-        const stormColor =
-          stormLevel === 'SEVERE' || stormLevel === 'STRONG' ? 'var(--red)'
-          : stormLevel === 'MODERATE' ? 'var(--amber)'
-          : stormLevel === 'MINOR' ? 'var(--cyan)'
-          : 'var(--green)'
-        return (
-          <div style={{
-            padding: '6px 12px', borderLeft: '1px solid var(--border)',
-            display: 'flex', flexDirection: 'column', alignItems: 'center', minWidth: 96,
-            background: stormLevel !== 'QUIET' ? `color-mix(in srgb, ${stormColor} 8%, transparent)` : 'transparent',
-            borderTop: stormLevel !== 'QUIET' ? `2px solid ${stormColor}` : '2px solid transparent',
-          }}>
-            <span style={{ color: stormColor, fontSize: 10, fontWeight: 700, lineHeight: 1.2, letterSpacing: 1 }}>
-              {stormLevel}
-            </span>
-            <span style={{ color: 'var(--text-dim)', fontSize: 8, letterSpacing: 1, marginTop: 1 }}>
-              Kp {kp.toFixed(1)}
-            </span>
-            <span style={{ color: 'var(--text-dim)', fontSize: 7, letterSpacing: 2, marginTop: 1 }}>SPACE WX</span>
-          </div>
-        )
-      })()}
 
       {/* NEXT PASS — elevated tile */}
       <div style={{
