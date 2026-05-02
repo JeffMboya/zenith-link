@@ -278,6 +278,7 @@ export function KPIBar({ metrics, satellite, connected, linkLost, tleSource, tle
     )}
     <div style={{
       display: 'flex', alignItems: 'center', gap: 1,
+      height: 48,
       background: 'rgba(4,13,28,0.92)', borderBottom: '1px solid var(--border)',
       backdropFilter: 'blur(6px)',
     }}>
