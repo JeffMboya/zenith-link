@@ -2,7 +2,7 @@ import { useState, useEffect } from 'react'
 import type { SatelliteState, DeployedPayload } from '../types'
 import type { ConstellationSat } from '../hooks/useConstellation'
 import { ArcGauge } from './ArcGauge'
-import { SAT_META, PLANE_LABEL } from '../data/constellation'
+import { SAT_META } from '../data/constellation'
 
 function usePayload() {
   const [payload, setPayload] = useState<DeployedPayload | null>(null)
@@ -28,12 +28,6 @@ interface Props {
   selectedSat: ConstellationSat | null
 }
 
-const PLANE_CSS_COLOR: Record<string, string> = {
-  A: 'var(--cyan)',
-  B: 'var(--green)',
-  C: 'var(--amber)',
-  D: 'var(--purple)',
-}
 
 function Row({ label, value, unit, color = 'var(--text-body)' }: {
   label: string; value: string; unit: string; color?: string
@@ -73,7 +67,7 @@ export function TelemetryPanel({ state, selectedSatId, selectedSat }: Props) {
   const payload = usePayload()
   const isPrimary = selectedSatId === 'AT-1'
   const meta = SAT_META[selectedSatId]
-  const planeColor = meta ? PLANE_CSS_COLOR[meta.plane] : 'var(--cyan)'
+  const planeColor = 'var(--cyan)'
 
   const battColor = state && state.battery_voltage > 7.8
     ? 'var(--green)'
@@ -107,7 +101,7 @@ export function TelemetryPanel({ state, selectedSatId, selectedSat }: Props) {
       {open && (
         <div style={{ padding: '12px 12px', flex: 1, overflowY: 'auto' }}>
 
-          {/* Satellite selector header */}
+          {/* Satellite header */}
           <div style={{ marginBottom: 12 }}>
             <div style={{
               color: planeColor, fontSize: 13, fontWeight: 700, letterSpacing: 1,
@@ -116,48 +110,10 @@ export function TelemetryPanel({ state, selectedSatId, selectedSat }: Props) {
               {selectedSatId}
             </div>
             {meta && (
-              <>
-                <div style={{ color: planeColor, fontSize: 8, letterSpacing: 2, opacity: 0.8 }}>
-                  {PLANE_LABEL[meta.plane]}
-                </div>
-                <div style={{ color: 'var(--text-dim)', fontSize: 8, marginTop: 2 }}>
-                  {meta.description}
-                </div>
-              </>
+              <div style={{ color: 'var(--text-dim)', fontSize: 8, marginTop: 2 }}>
+                {meta.description}
+              </div>
             )}
-            <div style={{
-              marginTop: 6, display: 'flex', gap: 3, flexWrap: 'wrap',
-            }}>
-              {['A', 'B', 'C', 'D'].map(plane => (
-                <div key={plane} style={{ display: 'flex', gap: 2 }}>
-                  {['AT-1','AT-2','AT-3','AT-4','AT-5','AT-6','AT-7','AT-8',
-                    'AT-9','AT-10','AT-11','AT-12','AT-13','AT-14','AT-15','AT-16']
-                    .filter(id => SAT_META[id]?.plane === plane)
-                    .map(id => (
-                      <button
-                        key={id}
-                        onClick={() => {
-                          // dispatch handled via Globe3D click, but allow panel click too
-                          const evt = new CustomEvent('select-sat', { detail: id })
-                          window.dispatchEvent(evt)
-                        }}
-                        aria-label={`Select ${id}`}
-                        title={id}
-                        style={{
-                          width: 10, height: 10, borderRadius: '50%', border: 'none',
-                          cursor: 'pointer', padding: 0,
-                          background: id === selectedSatId
-                            ? PLANE_CSS_COLOR[plane]
-                            : `color-mix(in srgb, ${PLANE_CSS_COLOR[plane]} 35%, var(--bg-dark))`,
-                          outline: id === selectedSatId ? `1px solid ${PLANE_CSS_COLOR[plane]}` : 'none',
-                          outlineOffset: 1,
-                        }}
-                      />
-                    ))
-                  }
-                </div>
-              ))}
-            </div>
           </div>
 
           {/* ── Primary satellite: full CCSDS telemetry ── */}

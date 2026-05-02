@@ -373,7 +373,7 @@ export function OperatorPanel({ primaryOnline }: Props) {
               }}>
                 <div style={{ color: 'var(--text-dim)', fontSize: 7, letterSpacing: 2, marginBottom: 4 }}>CONSTELLATION</div>
                 <div style={{ color: 'var(--text-mid)', fontSize: 8, lineHeight: 1.5 }}>
-                  16 satellites across 4 orbital planes (A–D). Select any satellite in the telemetry panel or on the globe to view its state.
+                  AT-1 primary + SC-2 / SC-3 ISL relay nodes. Switch to live TLE data via the KPI bar to overlay real constellations.
                 </div>
               </div>
             </div>

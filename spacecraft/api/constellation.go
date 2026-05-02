@@ -31,33 +31,13 @@ type constellationSat struct {
 	ma  float64 // mean anomaly at epoch [rad]
 }
 
-// constellation16 defines the 16-satellite LEO constellation.
-// Epoch is set once at package initialisation (server startup) so all satellites
-// propagate consistently across repeated requests.
+// primarySats defines the primary spacecraft. AT-1 is the only simulated node
+// with a live telemetry backend; AT-2..16 have been removed.
 var (
 	constellationEpoch = time.Now().UTC()
 
 	constellation16 = []constellationSat{
-		// ── Plane A: 51.6° inclination (ISS-like), RAAN = 0° ─────────────────────
-		{"AT-1",  6_788_000, 0.0001, 51.6 * deg,   0 * deg,   0 * deg},
-		{"AT-2",  6_788_000, 0.0001, 51.6 * deg,   0 * deg,  90 * deg},
-		{"AT-3",  6_788_000, 0.0001, 51.6 * deg,   0 * deg, 180 * deg},
-		{"AT-4",  6_788_000, 0.0001, 51.6 * deg,   0 * deg, 270 * deg},
-		// ── Plane B: 97.5° inclination (sun-synchronous), RAAN = 45° ─────────────
-		{"AT-5",  6_878_000, 0.0001, 97.5 * deg,  45 * deg,   0 * deg},
-		{"AT-6",  6_878_000, 0.0001, 97.5 * deg,  45 * deg,  90 * deg},
-		{"AT-7",  6_878_000, 0.0001, 97.5 * deg,  45 * deg, 180 * deg},
-		{"AT-8",  6_878_000, 0.0001, 97.5 * deg,  45 * deg, 270 * deg},
-		// ── Plane C: 28.5° inclination (low-inclination), RAAN = 90° ─────────────
-		{"AT-9",  6_828_000, 0.0001, 28.5 * deg,  90 * deg,   0 * deg},
-		{"AT-10", 6_828_000, 0.0001, 28.5 * deg,  90 * deg,  90 * deg},
-		{"AT-11", 6_828_000, 0.0001, 28.5 * deg,  90 * deg, 180 * deg},
-		{"AT-12", 6_828_000, 0.0001, 28.5 * deg,  90 * deg, 270 * deg},
-		// ── Plane D: 70.0° inclination (high-inclination), RAAN = 135° ───────────
-		{"AT-13", 6_858_000, 0.0001, 70.0 * deg, 135 * deg,   0 * deg},
-		{"AT-14", 6_858_000, 0.0001, 70.0 * deg, 135 * deg,  90 * deg},
-		{"AT-15", 6_858_000, 0.0001, 70.0 * deg, 135 * deg, 180 * deg},
-		{"AT-16", 6_858_000, 0.0001, 70.0 * deg, 135 * deg, 270 * deg},
+		{"AT-1", 6_788_000, 0.0001, 51.6 * deg, 0 * deg, 0 * deg},
 	}
 )
 
@@ -86,10 +66,7 @@ var islRelays = []constellationSat{
 }
 
 var satPlane = map[string]string{
-	"AT-1": "A", "AT-2": "A", "AT-3": "A", "AT-4": "A",
-	"AT-5": "B", "AT-6": "B", "AT-7": "B", "AT-8": "B",
-	"AT-9": "C", "AT-10": "C", "AT-11": "C", "AT-12": "C",
-	"AT-13": "D", "AT-14": "D", "AT-15": "D", "AT-16": "D",
+	"AT-1": "A",
 	"SC-2": "ISL", "SC-3": "ISL",
 }
 
