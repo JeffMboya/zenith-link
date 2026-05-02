@@ -2,7 +2,6 @@ import { useEffect, useRef, useState } from 'react'
 
 export interface TrackPoint { lat: number; lon: number; alt_m: number }
 
-// Fetches the predicted forward ground track from /track every 60 seconds.
 export function useForwardTrack(): TrackPoint[] {
   const [track, setTrack] = useState<TrackPoint[]>([])
   const timer = useRef<ReturnType<typeof setTimeout> | null>(null)
@@ -16,7 +15,7 @@ export function useForwardTrack(): TrackPoint[] {
         if (!res.ok) return
         const d = await res.json() as { points: TrackPoint[] }
         if (active && d.points?.length) setTrack(d.points)
-      } catch { /* keep last */ }
+      } catch {  }
       if (active) timer.current = setTimeout(fetch_, 60_000)
     }
 

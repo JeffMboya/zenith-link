@@ -10,8 +10,6 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-// ─── EncodePrimary ──────────────────────────────────────────────────────────
-
 func TestEncodePrimary(t *testing.T) {
 	tests := []struct {
 		desc    string
@@ -29,9 +27,7 @@ func TestEncodePrimary(t *testing.T) {
 				SequenceCount:      0,
 				PacketDataLength:   7,
 			},
-			// Byte 0-1: 000|0|0|001_0000_0000 = 0x0100
-			// Byte 2-3: 11|00_0000_0000_0000  = 0xC000
-			// Byte 4-5: 0x0007
+
 			want: [6]byte{0x01, 0x00, 0xC0, 0x00, 0x00, 0x07},
 		},
 		{
@@ -44,7 +40,7 @@ func TestEncodePrimary(t *testing.T) {
 				SequenceCount:      0,
 				PacketDataLength:   7,
 			},
-			// Byte 0-1: 000|0|1|001_0000_0000 = 0x0900
+
 			want: [6]byte{0x09, 0x00, 0xC0, 0x00, 0x00, 0x07},
 		},
 		{
@@ -57,8 +53,7 @@ func TestEncodePrimary(t *testing.T) {
 				SequenceCount:      1,
 				PacketDataLength:   0,
 			},
-			// Byte 0-1: 000|1|0|000_0000_0001 = 0x1001
-			// Byte 2-3: 01|00_0000_0000_0001  = 0x4001
+
 			want: [6]byte{0x10, 0x01, 0x40, 0x01, 0x00, 0x00},
 		},
 		{
@@ -67,7 +62,7 @@ func TestEncodePrimary(t *testing.T) {
 				APID:          spacepacket.MaxAPID,
 				GroupingFlags: spacepacket.Unsegmented,
 			},
-			// Byte 0-1: 000|0|0|111_1111_1111 = 0x07FF
+
 			want: [6]byte{0x07, 0xFF, 0xC0, 0x00, 0x00, 0x00},
 		},
 		{
@@ -76,7 +71,7 @@ func TestEncodePrimary(t *testing.T) {
 				GroupingFlags: spacepacket.Unsegmented,
 				SequenceCount: spacepacket.MaxSeqCount,
 			},
-			// Byte 2-3: 11|11_1111_1111_1111 = 0xFFFF
+
 			want: [6]byte{0x00, 0x00, 0xFF, 0xFF, 0x00, 0x00},
 		},
 		{
@@ -84,7 +79,7 @@ func TestEncodePrimary(t *testing.T) {
 			hdr: spacepacket.PrimaryHeader{
 				GroupingFlags: spacepacket.Continuation,
 			},
-			// Byte 2-3: 00|00_0000_0000_0000 = 0x0000
+
 			want: [6]byte{0x00, 0x00, 0x00, 0x00, 0x00, 0x00},
 		},
 		{
@@ -92,7 +87,7 @@ func TestEncodePrimary(t *testing.T) {
 			hdr: spacepacket.PrimaryHeader{
 				GroupingFlags: spacepacket.LastSegment,
 			},
-			// Byte 2-3: 10|00_0000_0000_0000 = 0x8000
+
 			want: [6]byte{0x00, 0x00, 0x80, 0x00, 0x00, 0x00},
 		},
 		{
@@ -120,8 +115,6 @@ func TestEncodePrimary(t *testing.T) {
 		})
 	}
 }
-
-// ─── DecodePrimary ──────────────────────────────────────────────────────────
 
 func TestDecodePrimary(t *testing.T) {
 	tests := []struct {
@@ -199,8 +192,6 @@ func TestDecodePrimary(t *testing.T) {
 	}
 }
 
-// ─── CDS Timestamp ──────────────────────────────────────────────────────────
-
 func TestCDSFromTime(t *testing.T) {
 	tests := []struct {
 		desc    string
@@ -235,11 +226,8 @@ func TestCDSFromTime(t *testing.T) {
 		{
 			desc:  "2024-01-01T00:00:00 UTC",
 			input: time.Date(2024, 1, 1, 0, 0, 0, 0, time.UTC),
-			// Days from 1958-01-01 to 2024-01-01:
-			// = 4383 (to Unix epoch 1970-01-01) + 54*365 + 14 leap years
-			// 54 years 1970→2024: leap years: 1972,1976,1980,1984,1988,1992,1996,2000,2004,2008,2012,2016,2020 = 13
-			// = 4383 + 54*365 + 13 = 4383 + 19710 + 13 = 24106
-			wantDay: 24106, // = days since 1958-01-01 for 2024-01-01
+
+			wantDay: 24106,
 			wantMs:  0,
 		},
 	}
@@ -262,8 +250,7 @@ func TestCDSRoundTrip(t *testing.T) {
 	}
 	for _, ts := range cases {
 		t.Run(ts.String(), func(t *testing.T) {
-			// Sub-millisecond precision is rounded in CDS encoding,
-			// so compare only to millisecond granularity.
+
 			encoded := spacepacket.CDSFromTime(ts)
 			decoded := spacepacket.CDSToTime(encoded)
 			diff := ts.Sub(decoded)
@@ -276,16 +263,14 @@ func TestCDSRoundTrip(t *testing.T) {
 	}
 }
 
-// ─── Full Packet Encode/Decode ───────────────────────────────────────────────
-
 func TestEncode(t *testing.T) {
 	sh := spacepacket.CDSFromTime(time.Unix(0, 0).UTC())
 
 	tests := []struct {
-		desc     string
-		pkt      spacepacket.SpacePacket
-		wantLen  int
-		wantErr  error
+		desc    string
+		pkt     spacepacket.SpacePacket
+		wantLen int
+		wantErr error
 	}{
 		{
 			desc: "TM with secondary header and user data",
@@ -299,7 +284,7 @@ func TestEncode(t *testing.T) {
 				Secondary: &sh,
 				UserData:  []byte{0xDE, 0xAD, 0xBE, 0xEF},
 			},
-			// 6 primary + 8 secondary + 4 user data = 18
+
 			wantLen: 18,
 		},
 		{
@@ -312,7 +297,7 @@ func TestEncode(t *testing.T) {
 				},
 				UserData: []byte{0x01},
 			},
-			// 6 primary + 1 user data = 7
+
 			wantLen: 7,
 		},
 		{
@@ -393,7 +378,7 @@ func TestDecode(t *testing.T) {
 		},
 		{
 			desc:    "DataLength field claims more bytes than buffer holds",
-			input:   append(goodPacket[:5:5], 0xFF, 0xFF), // claim 65535 data bytes
+			input:   append(goodPacket[:5:5], 0xFF, 0xFF),
 			wantErr: errors.ErrDataLenMismatch,
 		},
 	}

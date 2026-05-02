@@ -1,20 +1,5 @@
 package api
 
-// TLE (Two-Line Element) integration with CelesTrak.
-//
-// GET /tle/import?group=<group>&limit=<n>
-//
-//	group: stations | starlink | planet | active
-//	limit: max satellites to import (default 100; ignored for "stations")
-//
-// GET /tle/status  — returns current data source and count
-//
-// GET /tle/clear   — reverts to the hardcoded 16-satellite simulation
-//
-// After a successful import, GET /constellation returns TLE-derived positions
-// instead of the hardcoded constellation. The switch is transparent — the
-// frontend polling /constellation at 1Hz sees the change immediately.
-
 import (
 	"fmt"
 	"io"
@@ -30,7 +15,6 @@ import (
 
 const celestrakBase = "https://celestrak.org/NORAD/elements/gp.php"
 
-// Supported groups and their CelesTrak group names.
 var celestrakGroups = map[string]string{
 	"stations": "stations",
 	"starlink": "starlink",
@@ -38,14 +22,12 @@ var celestrakGroups = map[string]string{
 	"active":   "active",
 }
 
-// tleEntry holds a parsed satellite from a TLE set.
 type tleEntry struct {
 	Name     string
 	NoradID  string
 	Elements orbital.Elements
 }
 
-// tleDataStore is the active TLE dataset.  nil slice = use hardcoded simulation.
 var tleDataStore struct {
 	sync.RWMutex
 	entries  []tleEntry
@@ -53,14 +35,12 @@ var tleDataStore struct {
 	loadedAt time.Time
 }
 
-// tleEntries returns a snapshot of the current TLE entries (nil if none loaded).
 func tleEntries() ([]tleEntry, string) {
 	tleDataStore.RLock()
 	defer tleDataStore.RUnlock()
 	return tleDataStore.entries, tleDataStore.group
 }
 
-// importTLEs fetches a TLE group from CelesTrak, parses it, and stores the result.
 func importTLEs(group string, limit int) (int, error) {
 	celestrakGroup, ok := celestrakGroups[group]
 	if !ok {
@@ -79,7 +59,7 @@ func importTLEs(group string, limit int) (int, error) {
 		return 0, fmt.Errorf("CelesTrak returned HTTP %d", resp.StatusCode)
 	}
 
-	body, err := io.ReadAll(io.LimitReader(resp.Body, 10<<20)) // cap at 10 MB
+	body, err := io.ReadAll(io.LimitReader(resp.Body, 10<<20))
 	if err != nil {
 		return 0, fmt.Errorf("reading response: %w", err)
 	}
@@ -101,7 +81,6 @@ func importTLEs(group string, limit int) (int, error) {
 	return len(entries), nil
 }
 
-// parseTLEText splits raw TLE text (3-line format: name + line1 + line2) into entries.
 func parseTLEText(text string, limit int) ([]tleEntry, error) {
 	text = strings.ReplaceAll(text, "\r\n", "\n")
 	lines := strings.Split(strings.TrimSpace(text), "\n")
@@ -137,16 +116,9 @@ func parseTLEText(text string, limit int) ([]tleEntry, error) {
 	return entries, nil
 }
 
-// tleLinesToElements parses TLE line1 + line2 into orbital.Elements.
-// TLE character positions follow the NORAD standard (0-indexed in Go):
-//
-//	Line 1: [18:20] epoch year, [20:32] epoch day+fraction
-//	Line 2: [8:16] inclination, [17:25] RAAN, [26:33] eccentricity,
-//	        [34:42] arg perigee, [43:51] mean anomaly, [52:63] mean motion
 func tleLinesToElements(l1, l2 string) (orbital.Elements, string, error) {
 	norad := strings.TrimSpace(l1[2:7])
 
-	// ── Line 2 ────────────────────────────────────────────────────────────
 	incDeg, err := strconv.ParseFloat(strings.TrimSpace(l2[8:16]), 64)
 	if err != nil {
 		return orbital.Elements{}, "", fmt.Errorf("inclination: %w", err)
@@ -155,7 +127,7 @@ func tleLinesToElements(l1, l2 string) (orbital.Elements, string, error) {
 	if err != nil {
 		return orbital.Elements{}, "", fmt.Errorf("RAAN: %w", err)
 	}
-	// Eccentricity has an implied leading "0." in the TLE format.
+
 	ecc, err := strconv.ParseFloat("0."+strings.TrimSpace(l2[26:33]), 64)
 	if err != nil {
 		return orbital.Elements{}, "", fmt.Errorf("eccentricity: %w", err)
@@ -168,17 +140,16 @@ func tleLinesToElements(l1, l2 string) (orbital.Elements, string, error) {
 	if err != nil {
 		return orbital.Elements{}, "", fmt.Errorf("mean anomaly: %w", err)
 	}
-	// Mean motion [rev/day] → convert to rad/s → derive SMA via Kepler's 3rd law.
+
 	mmRevDay, err := strconv.ParseFloat(strings.TrimSpace(l2[52:63]), 64)
 	if err != nil {
 		return orbital.Elements{}, "", fmt.Errorf("mean motion: %w", err)
 	}
 
-	const mu = 3.986004418e14 // Earth gravitational parameter [m³/s²]
+	const mu = 3.986004418e14
 	n := mmRevDay * 2 * math.Pi / 86400
 	sma := math.Pow(mu/(n*n), 1.0/3.0)
 
-	// ── Line 1 epoch ──────────────────────────────────────────────────────
 	epoch := parseTLEEpoch(l1)
 
 	const toRad = math.Pi / 180
@@ -193,8 +164,6 @@ func tleLinesToElements(l1, l2 string) (orbital.Elements, string, error) {
 	}, norad, nil
 }
 
-// parseTLEEpoch converts the two-digit year and day-fraction from TLE line 1
-// into a time.Time.  Year < 57 → 2000s, year ≥ 57 → 1900s.
 func parseTLEEpoch(l1 string) time.Time {
 	if len(l1) < 32 {
 		return time.Now().UTC()
@@ -216,9 +185,6 @@ func parseTLEEpoch(l1 string) time.Time {
 	return base.Add(time.Duration(frac * float64(24*time.Hour)))
 }
 
-// ── HTTP handlers ─────────────────────────────────────────────────────────────
-
-// tleImportHandler fetches and stores TLEs from CelesTrak.
 func tleImportHandler() http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		group := r.URL.Query().Get("group")
@@ -232,7 +198,7 @@ func tleImportHandler() http.HandlerFunc {
 				limit = v
 			}
 		}
-		// No limit on small datasets
+
 		if group == "stations" {
 			limit = 0
 		}
@@ -252,7 +218,6 @@ func tleImportHandler() http.HandlerFunc {
 	}
 }
 
-// tleStatusHandler returns the current data source.
 func tleStatusHandler() http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		tleDataStore.RLock()
@@ -275,7 +240,6 @@ func tleStatusHandler() http.HandlerFunc {
 	}
 }
 
-// tleClearHandler reverts to the hardcoded simulation.
 func tleClearHandler() http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		tleDataStore.Lock()

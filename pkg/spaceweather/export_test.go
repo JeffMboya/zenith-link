@@ -5,8 +5,6 @@ package spaceweather
 
 import "time"
 
-// InjectForTest sets synthetic Conditions on the monitor without a network fetch.
-// Used by unit tests that verify RSSIAdjustmentDB and StormLevel logic in isolation.
 func InjectForTest(m *Monitor, kp, solarFlux float64) {
 	m.mu.Lock()
 	m.conditions = Conditions{

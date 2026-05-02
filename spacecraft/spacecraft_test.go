@@ -35,8 +35,6 @@ func issConfig() spacecraft.Config {
 	}
 }
 
-// ─── State ───────────────────────────────────────────────────────────────────
-
 func TestState(t *testing.T) {
 	cfg := issConfig()
 	svc := spacecraft.New(cfg)
@@ -88,8 +86,6 @@ func TestState(t *testing.T) {
 	}
 }
 
-// ─── Telemetry ───────────────────────────────────────────────────────────────
-
 func TestTelemetry(t *testing.T) {
 	cfg := issConfig()
 	svc := spacecraft.New(cfg)
@@ -139,7 +135,6 @@ func TestTelemetry(t *testing.T) {
 		})
 	}
 
-	// Sequence monotonicity test.
 	t.Run("sequence increments", func(t *testing.T) {
 		svc2 := spacecraft.New(cfg)
 		tm1, err := svc2.Telemetry(ctx, t0)
@@ -149,8 +144,6 @@ func TestTelemetry(t *testing.T) {
 		assert.Equal(t, tm1.Sequence+1, tm2.Sequence)
 	})
 }
-
-// ─── TelemetryFrame ──────────────────────────────────────────────────────────
 
 func TestTelemetryFrame(t *testing.T) {
 	cfg := issConfig()
@@ -200,8 +193,6 @@ func TestTelemetryFrame(t *testing.T) {
 	}
 }
 
-// ─── ExecuteCommand ──────────────────────────────────────────────────────────
-
 func buildTC(t *testing.T, scid uint16, vcid uint8, data []byte) []byte {
 	t.Helper()
 	frame := tcframe.TransferFrame{
@@ -223,20 +214,20 @@ func TestExecuteCommand(t *testing.T) {
 	t0 := cfg.Elements.Epoch
 
 	tests := []struct {
-		desc      string
-		tcData    []byte
-		scid      uint16
-		wantErr   error
-		check     func(t *testing.T, svc spacecraft.Service, res spacecraft.CommandResult)
+		desc    string
+		tcData  []byte
+		scid    uint16
+		wantErr error
+		check   func(t *testing.T, svc spacecraft.Service, res spacecraft.CommandResult)
 	}{
 		{
 			desc:   "CmdInferenceRun accepted and inference appears in next telemetry",
-			tcData: []byte{0x01}, // CmdInferenceRun
+			tcData: []byte{0x01},
 			scid:   cfg.SCID,
 			check: func(t *testing.T, svc spacecraft.Service, res spacecraft.CommandResult) {
 				assert.True(t, res.Accepted)
 				assert.Equal(t, spacecraft.CmdInferenceRun, res.CommandID)
-				// Next telemetry frame must include the inference presence bit.
+
 				tm, err := svc.Telemetry(ctx, t0)
 				require.NoError(t, err)
 				assert.NotZero(t, tm.Presence&zenith.PresenceInference)
@@ -246,22 +237,21 @@ func TestExecuteCommand(t *testing.T) {
 		},
 		{
 			desc:   "CmdReboot accepted, inference still present via auto-detect",
-			tcData: []byte{0x02}, // CmdReboot
+			tcData: []byte{0x02},
 			scid:   cfg.SCID,
 			check: func(t *testing.T, svc spacecraft.Service, res spacecraft.CommandResult) {
 				assert.True(t, res.Accepted)
 				assert.Equal(t, spacecraft.CmdReboot, res.CommandID)
-				// Inference now runs on every Telemetry() call — frame includes the bit.
-				// After reboot the detector window is warm but seqCount resets to 0.
+
 				tm, err := svc.Telemetry(ctx, t0)
 				require.NoError(t, err)
 				assert.NotZero(t, tm.Presence&zenith.PresenceInference)
-				assert.Equal(t, uint16(0), tm.Sequence) // seq reset by reboot
+				assert.Equal(t, uint16(0), tm.Sequence)
 			},
 		},
 		{
 			desc:   "CmdSetMode with payload accepted",
-			tcData: []byte{0x03, 0x02}, // CmdSetMode, mode=2
+			tcData: []byte{0x03, 0x02},
 			scid:   cfg.SCID,
 			check: func(t *testing.T, _ spacecraft.Service, res spacecraft.CommandResult) {
 				assert.True(t, res.Accepted)
@@ -270,7 +260,7 @@ func TestExecuteCommand(t *testing.T) {
 		},
 		{
 			desc:   "CmdSetMode without payload — rejected gracefully",
-			tcData: []byte{0x03}, // CmdSetMode, missing payload
+			tcData: []byte{0x03},
 			scid:   cfg.SCID,
 			check: func(t *testing.T, _ spacecraft.Service, res spacecraft.CommandResult) {
 				assert.False(t, res.Accepted)
@@ -294,7 +284,6 @@ func TestExecuteCommand(t *testing.T) {
 		t.Run(tc.desc, func(t *testing.T) {
 			svc := spacecraft.New(cfg)
 
-			// For reboot test: run inference first so there is state to clear.
 			if tc.tcData[0] == 0x02 {
 				inferFrame := buildTC(t, cfg.SCID, 0, []byte{0x01})
 				_, err := svc.ExecuteCommand(ctx, inferFrame)
@@ -314,8 +303,6 @@ func TestExecuteCommand(t *testing.T) {
 		})
 	}
 }
-
-// ─── Windows ─────────────────────────────────────────────────────────────────
 
 func TestWindows(t *testing.T) {
 	cfg := issConfig()
@@ -340,8 +327,6 @@ func TestWindows(t *testing.T) {
 		assert.Error(t, err)
 	})
 }
-
-// ─── TMFrame ─────────────────────────────────────────────────────────────────
 
 func TestTMFrame(t *testing.T) {
 	cfg := issConfig()
@@ -395,8 +380,6 @@ func TestTMFrame(t *testing.T) {
 	}
 }
 
-// ─── CmdComputeJob ──────────────────────────────────────────────────────────
-
 func TestCmdComputeJob(t *testing.T) {
 	cfg := issConfig()
 	ctx := context.Background()
@@ -404,7 +387,7 @@ func TestCmdComputeJob(t *testing.T) {
 
 	t.Run("JobHealthScan returns HEALTH_SCAN prefix", func(t *testing.T) {
 		svc := spacecraft.New(cfg)
-		rawTC := buildTC(t, cfg.SCID, 0, []byte{0x04, 0x01}) // CmdComputeJob, JobHealthScan
+		rawTC := buildTC(t, cfg.SCID, 0, []byte{0x04, 0x01})
 		res, err := svc.ExecuteCommand(ctx, rawTC)
 		require.NoError(t, err)
 		assert.True(t, res.Accepted)
@@ -414,7 +397,7 @@ func TestCmdComputeJob(t *testing.T) {
 
 	t.Run("JobEclipseForecast returns ECLIPSE_FORECAST prefix", func(t *testing.T) {
 		svc := spacecraft.New(cfg)
-		rawTC := buildTC(t, cfg.SCID, 0, []byte{0x04, 0x02}) // CmdComputeJob, JobEclipseForecast
+		rawTC := buildTC(t, cfg.SCID, 0, []byte{0x04, 0x02})
 		res, err := svc.ExecuteCommand(ctx, rawTC)
 		require.NoError(t, err)
 		assert.True(t, res.Accepted)
@@ -423,11 +406,11 @@ func TestCmdComputeJob(t *testing.T) {
 
 	t.Run("JobLinkBudget returns LINK_BUDGET prefix with margins", func(t *testing.T) {
 		svc := spacecraft.New(cfg)
-		// Prime state so orbital propagation has a valid position.
+
 		_, err := svc.State(ctx, t0)
 		require.NoError(t, err)
 
-		rawTC := buildTC(t, cfg.SCID, 0, []byte{0x04, 0x03}) // CmdComputeJob, JobLinkBudget
+		rawTC := buildTC(t, cfg.SCID, 0, []byte{0x04, 0x03})
 		res, err := svc.ExecuteCommand(ctx, rawTC)
 		require.NoError(t, err)
 		assert.True(t, res.Accepted)
@@ -437,7 +420,7 @@ func TestCmdComputeJob(t *testing.T) {
 
 	t.Run("missing payload rejected", func(t *testing.T) {
 		svc := spacecraft.New(cfg)
-		rawTC := buildTC(t, cfg.SCID, 0, []byte{0x04}) // CmdComputeJob, no job type
+		rawTC := buildTC(t, cfg.SCID, 0, []byte{0x04})
 		res, err := svc.ExecuteCommand(ctx, rawTC)
 		require.NoError(t, err)
 		assert.False(t, res.Accepted)
@@ -453,8 +436,6 @@ func TestCmdComputeJob(t *testing.T) {
 		assert.Contains(t, res.Message, "unknown job type")
 	})
 }
-
-// ─── CmdDeployPayload ───────────────────────────────────────────────────────
 
 func TestCmdDeployPayload(t *testing.T) {
 	cfg := issConfig()

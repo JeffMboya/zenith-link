@@ -9,8 +9,6 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-// ─── Encode ─────────────────────────────────────────────────────────────────
-
 func TestEncode(t *testing.T) {
 	tests := []struct {
 		desc    string
@@ -21,10 +19,7 @@ func TestEncode(t *testing.T) {
 		{
 			desc:  "all-zero CLCW",
 			input: clcw.CLCW{},
-			// Byte 0: 0|00|000|00 = 0x00
-			// Byte 1: 000000|00  = 0x00
-			// Byte 2: 0|0|0|0|0|00|0 = 0x00
-			// Byte 3: 0x00
+
 			want: [4]byte{0x00, 0x00, 0x00, 0x00},
 		},
 		{
@@ -32,7 +27,7 @@ func TestEncode(t *testing.T) {
 			input: clcw.CLCW{
 				NoRFAvail: true,
 			},
-			// Byte 2: 1|0|0|0|0|00|0 = 0x80
+
 			want: [4]byte{0x00, 0x00, 0x80, 0x00},
 		},
 		{
@@ -40,7 +35,7 @@ func TestEncode(t *testing.T) {
 			input: clcw.CLCW{
 				NoBitLock: true,
 			},
-			// Byte 2: 0|1|0|0|0|00|0 = 0x40
+
 			want: [4]byte{0x00, 0x00, 0x40, 0x00},
 		},
 		{
@@ -48,7 +43,7 @@ func TestEncode(t *testing.T) {
 			input: clcw.CLCW{
 				Lockout: true,
 			},
-			// Byte 2: 0|0|1|0|0|00|0 = 0x20
+
 			want: [4]byte{0x00, 0x00, 0x20, 0x00},
 		},
 		{
@@ -56,7 +51,7 @@ func TestEncode(t *testing.T) {
 			input: clcw.CLCW{
 				Wait: true,
 			},
-			// Byte 2: 0|0|0|1|0|00|0 = 0x10
+
 			want: [4]byte{0x00, 0x00, 0x10, 0x00},
 		},
 		{
@@ -64,7 +59,7 @@ func TestEncode(t *testing.T) {
 			input: clcw.CLCW{
 				Retransmit: true,
 			},
-			// Byte 2: 0|0|0|0|1|00|0 = 0x08
+
 			want: [4]byte{0x00, 0x00, 0x08, 0x00},
 		},
 		{
@@ -73,7 +68,7 @@ func TestEncode(t *testing.T) {
 				FARMBCounter: 0x03,
 				ReportType:   0x01,
 			},
-			// Byte 2: 0|0|0|0|0|11|1 = 0x07
+
 			want: [4]byte{0x00, 0x00, 0x07, 0x00},
 		},
 		{
@@ -88,7 +83,7 @@ func TestEncode(t *testing.T) {
 			input: clcw.CLCW{
 				VCIDField: 0x3F,
 			},
-			// Byte 1: 111111|00 = 0xFC
+
 			want: [4]byte{0x00, 0xFC, 0x00, 0x00},
 		},
 		{
@@ -97,7 +92,7 @@ func TestEncode(t *testing.T) {
 				StatusField: 0x07,
 				COPInEffect: 0x03,
 			},
-			// Byte 0: 0|00|111|11 = 0x1F
+
 			want: [4]byte{0x1F, 0x00, 0x00, 0x00},
 		},
 		{
@@ -107,10 +102,7 @@ func TestEncode(t *testing.T) {
 				VCIDField:   1,
 				ReportValue: 7,
 			},
-			// Byte 0: 0|00|000|00 = 0x00
-			// Byte 1: 000001|00  = 0x04
-			// Byte 2: 0x00
-			// Byte 3: 0x07
+
 			want: [4]byte{0x00, 0x04, 0x00, 0x07},
 		},
 		{
@@ -128,10 +120,7 @@ func TestEncode(t *testing.T) {
 				ReportType:   0x01,
 				ReportValue:  0xFF,
 			},
-			// Byte 0: 0|00|111|11 = 0x1F
-			// Byte 1: 111111|00  = 0xFC
-			// Byte 2: 1|1|1|1|1|11|1 = 0xFF
-			// Byte 3: 0xFF
+
 			want: [4]byte{0x1F, 0xFC, 0xFF, 0xFF},
 		},
 		{
@@ -168,8 +157,6 @@ func TestEncode(t *testing.T) {
 		})
 	}
 }
-
-// ─── Decode ─────────────────────────────────────────────────────────────────
 
 func TestDecode(t *testing.T) {
 	tests := []struct {
@@ -260,8 +247,6 @@ func TestDecode(t *testing.T) {
 	}
 }
 
-// ─── Round-trip ─────────────────────────────────────────────────────────────
-
 func TestEncodeDecodeRoundTrip(t *testing.T) {
 	tests := []struct {
 		desc  string
@@ -299,8 +284,8 @@ func TestEncodeDecodeRoundTrip(t *testing.T) {
 		{
 			desc: "retransmit with N(R)=200",
 			input: clcw.CLCW{
-				VCIDField:  2,
-				Retransmit: true,
+				VCIDField:   2,
+				Retransmit:  true,
 				ReportValue: 200,
 			},
 		},

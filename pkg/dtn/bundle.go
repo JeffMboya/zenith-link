@@ -12,20 +12,15 @@ import (
 	"github.com/absmach/zenith-link/pkg/errors"
 )
 
-// EID is a simplified endpoint identifier. We use the ipn scheme: ipn:node.service.
-// Nodes: 0=groundstation, 1=SC-1, 2=SC-2/Relay-1, 3=SC-3/Relay-2.
-// Services: 1=telemetry, 2=command.
 type EID struct {
 	Node    uint32
 	Service uint32
 }
 
-// String returns the IPN URI representation of the EID.
 func (e EID) String() string {
 	return fmt.Sprintf("ipn:%d.%d", e.Node, e.Service)
 }
 
-// ParseEID parses an EID from "ipn:N.S" format.
 func ParseEID(s string) (EID, error) {
 	var node, service uint32
 	_, err := fmt.Sscanf(s, "ipn:%d.%d", &node, &service)
@@ -36,43 +31,21 @@ func ParseEID(s string) (EID, error) {
 	return EID{Node: node, Service: service}, nil
 }
 
-// Bundle is a single DTN bundle (simplified RFC 9171 primary block + payload block).
 type Bundle struct {
-	ID          uint64        // monotonically increasing bundle sequence number
+	ID          uint64
 	Source      EID
 	Destination EID
 	CreatedAt   time.Time
-	Lifetime    time.Duration // default 2h
-	HopCount    uint8         // incremented at each store-and-forward hop; drop if > 8
-	Payload     []byte        // raw Zenith-Link v2 frame bytes
-	Priority    uint8         // 0=bulk, 1=normal, 2=expedited (maps to frame Flags priority bit)
+	Lifetime    time.Duration
+	HopCount    uint8
+	Payload     []byte
+	Priority    uint8
 }
 
-// Expired reports whether the bundle has exceeded its lifetime.
 func (b *Bundle) Expired() bool { return time.Since(b.CreatedAt) > b.Lifetime }
 
-// encodedHeaderSize is the fixed portion of the wire encoding before the payload.
-// [8] ID + [4] Source.Node + [4] Source.Service + [4] Dest.Node + [4] Dest.Service
-// + [8] CreatedAt Unix seconds + [4] Lifetime seconds + [1] HopCount + [1] Priority
-// + [4] PayloadLen = 42 bytes.
 const encodedHeaderSize = 8 + 4 + 4 + 4 + 4 + 8 + 4 + 1 + 1 + 4
 
-// Encode serialises the bundle to a compact binary format (NOT full CBOR — a
-// pragmatic binary encoding sufficient for the ISL demo).
-//
-// Wire format (all big-endian):
-//
-//	[8] ID
-//	[4] Source.Node
-//	[4] Source.Service
-//	[4] Dest.Node
-//	[4] Dest.Service
-//	[8] CreatedAt Unix seconds
-//	[4] Lifetime seconds
-//	[1] HopCount
-//	[1] Priority
-//	[4] PayloadLen
-//	[N] Payload
 func (b *Bundle) Encode() []byte {
 	payloadLen := len(b.Payload)
 	buf := make([]byte, encodedHeaderSize+payloadLen)
@@ -92,7 +65,6 @@ func (b *Bundle) Encode() []byte {
 	return buf
 }
 
-// DecodeBundle deserialises a bundle from the binary format produced by Encode.
 func DecodeBundle(data []byte) (*Bundle, error) {
 	if len(data) < encodedHeaderSize {
 		return nil, errors.Wrap(errors.ErrFrameTooSmall,

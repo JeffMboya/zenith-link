@@ -24,29 +24,27 @@ func fullPresence() uint16 {
 
 func fullTelemetry() zenith.Telemetry {
 	return zenith.Telemetry{
-		Sequence:  42,
-		Timestamp: 1_700_000_000,
-		Flags:     0,
-		Presence:  fullPresence(),
-		LatE7:     377_498_000, // 37.7498° N (San Francisco)
-		LonE7:    -1_224_194_000,
-		AltM:      415_000,
-		AttRoll:   150,   // 1.50 deg
-		AttPitch:  -200,  // -2.00 deg
-		AttYaw:    3600,  // 36.00 deg
-		AngVelX:   10,
-		AngVelY:   -5,
-		AngVelZ:   3,
-		BatV:      7400,
-		SolarV:    5000,
-		TempC:     2150,  // 21.50 °C
-		RSSI:           -900, // -90.0 dBm
-		InferenceClass: 2,    // land
-		InferenceConf:  220,  // ~86%
+		Sequence:       42,
+		Timestamp:      1_700_000_000,
+		Flags:          0,
+		Presence:       fullPresence(),
+		LatE7:          377_498_000,
+		LonE7:          -1_224_194_000,
+		AltM:           415_000,
+		AttRoll:        150,
+		AttPitch:       -200,
+		AttYaw:         3600,
+		AngVelX:        10,
+		AngVelY:        -5,
+		AngVelZ:        3,
+		BatV:           7400,
+		SolarV:         5000,
+		TempC:          2150,
+		RSSI:           -900,
+		InferenceClass: 2,
+		InferenceConf:  220,
 	}
 }
-
-// ─── Encode ─────────────────────────────────────────────────────────────────
 
 func TestEncode(t *testing.T) {
 	tests := []struct {
@@ -66,19 +64,19 @@ func TestEncode(t *testing.T) {
 			key: testKey,
 			check: func(t *testing.T, b []byte) {
 				assert.Equal(t, zenith.MinFrameSize, len(b), "minimal frame size")
-				// Verify magic.
+
 				assert.Equal(t, uint8(0x5A), b[0])
 				assert.Equal(t, uint8(0x4C), b[1])
-				// Version.
+
 				assert.Equal(t, uint8(2), b[2])
 			},
 		},
 		{
-			desc:  "full telemetry — all fields present",
-			tm:    fullTelemetry(),
-			key:   testKey,
+			desc: "full telemetry — all fields present",
+			tm:   fullTelemetry(),
+			key:  testKey,
 			check: func(t *testing.T, b []byte) {
-				// Header(10)+Presence(2)+pos(12)+att(6)+angvel(6)+batV(2)+solarV(2)+tempC(2)+rssi(2)+inference(2)+HMAC(32) = 78
+
 				assert.Equal(t, 78, len(b))
 			},
 		},
@@ -91,7 +89,7 @@ func TestEncode(t *testing.T) {
 			},
 			key: testKey,
 			check: func(t *testing.T, b []byte) {
-				// Header(10) + Presence(2) + inference(2) + HMAC(32) = 46
+
 				assert.Equal(t, 46, len(b))
 			},
 		},
@@ -105,7 +103,7 @@ func TestEncode(t *testing.T) {
 			},
 			key: testKey,
 			check: func(t *testing.T, b []byte) {
-				// Header(10) + Presence(2) + pos(12) + HMAC(32) = 56
+
 				assert.Equal(t, 56, len(b))
 			},
 		},
@@ -148,8 +146,6 @@ func TestEncode(t *testing.T) {
 		})
 	}
 }
-
-// ─── Decode ─────────────────────────────────────────────────────────────────
 
 func TestDecode(t *testing.T) {
 	goodFrame := func() []byte {
@@ -221,14 +217,12 @@ func TestDecode(t *testing.T) {
 			frame: func() []byte {
 				b := make([]byte, len(goodFrame))
 				copy(b, goodFrame)
-				// Recompute valid HMAC after changing magic so we get past HMAC check.
-				// This tests that magic check happens AFTER HMAC (it doesn't — HMAC first).
-				// Actually HMAC is checked first, so changing body bytes will hit ErrHMACFailure.
+
 				b[0] = 0x00
 				return b
 			}(),
 			key:     testKey,
-			wantErr: errors.ErrHMACFailure, // HMAC checked before magic
+			wantErr: errors.ErrHMACFailure,
 		},
 		{
 			desc:    "empty HMAC key returns error",
@@ -258,8 +252,6 @@ func TestDecode(t *testing.T) {
 		})
 	}
 }
-
-// ─── Round-trip ─────────────────────────────────────────────────────────────
 
 func TestEncodeDecodeRoundTrip(t *testing.T) {
 	tests := []struct {
@@ -332,7 +324,7 @@ func TestEncodeDecodeRoundTrip(t *testing.T) {
 			tm: zenith.Telemetry{
 				Sequence: 99, Timestamp: 1_800_000_000,
 				Presence:       zenith.PresenceInference,
-				InferenceClass: 4, // vegetation
+				InferenceClass: 4,
 				InferenceConf:  245,
 			},
 		},
@@ -340,10 +332,10 @@ func TestEncodeDecodeRoundTrip(t *testing.T) {
 			desc: "inference result with position",
 			tm: zenith.Telemetry{
 				Presence:       zenith.PresencePosition | zenith.PresenceInference,
-				LatE7:          -12_864_000, // Nairobi
+				LatE7:          -12_864_000,
 				LonE7:          36_817_200,
 				AltM:           410_000,
-				InferenceClass: 1, // ocean
+				InferenceClass: 1,
 				InferenceConf:  180,
 			},
 		},
@@ -397,8 +389,6 @@ func TestEncodeDecodeRoundTrip(t *testing.T) {
 	}
 }
 
-// ─── InferenceClassName ──────────────────────────────────────────────────────
-
 func TestInferenceClassName(t *testing.T) {
 	tests := []struct {
 		class uint8
@@ -412,7 +402,7 @@ func TestInferenceClassName(t *testing.T) {
 		{5, "ECLIPSE_ENTRY"},
 		{6, "ECLIPSE_COMPUTE"},
 		{7, "UNKNOWN"},
-		{255, "UNKNOWN"}, // out-of-range clamps to UNKNOWN
+		{255, "UNKNOWN"},
 	}
 	for _, tc := range tests {
 		t.Run(tc.want, func(t *testing.T) {

@@ -15,27 +15,18 @@ import (
 
 const contactSampleStep = 10 * time.Second
 
-// ContactWindow describes a single satellite visibility window.
 type ContactWindow struct {
-	// AOS is the Acquisition of Signal time (satellite rises above minElev).
 	AOS time.Time
-	// LOS is the Loss of Signal time (satellite drops below minElev).
+
 	LOS time.Time
-	// MaxElevationDeg is the peak elevation angle [degrees] during the window.
+
 	MaxElevationDeg float64
 }
 
-// Duration returns the length of the contact window.
 func (cw ContactWindow) Duration() time.Duration {
 	return cw.LOS.Sub(cw.AOS)
 }
 
-// ElevationAzimuth returns the elevation [rad] and azimuth [rad] of a
-// satellite as seen from a ground station.
-//
-// satECEF is the satellite's ECEF position [m].
-// gsLat, gsLon are the ground station's geodetic WGS-84 coordinates [degrees].
-// Azimuth is measured clockwise from North.
 func ElevationAzimuth(satECEF ECIState, gsLat, gsLon float64) (elevRad, azRad float64) {
 	lat := gsLat * math.Pi / 180
 	lon := gsLon * math.Pi / 180
@@ -58,12 +49,6 @@ func ElevationAzimuth(satECEF ECIState, gsLat, gsLon float64) (elevRad, azRad fl
 	return
 }
 
-// ContactWindows returns all windows during [start, end] where the satellite
-// is above minElevDeg as seen from the ground station at (gsLat, gsLon).
-//
-// Sampling is at 10-second steps. Windows that are open at the start of the
-// search interval have their AOS set to start; windows that are still open at
-// end have their LOS set to end.
 func ContactWindows(elem Elements, gsLat, gsLon float64, start, end time.Time, minElevDeg float64) ([]ContactWindow, error) {
 	if err := elem.Validate(); err != nil {
 		return nil, err
@@ -120,8 +105,6 @@ func ContactWindows(elem Elements, gsLat, gsLon float64, start, end time.Time, m
 	return windows, nil
 }
 
-// IsInContact reports whether the satellite is currently above minElevDeg
-// as seen from the ground station at (gsLat, gsLon) at time t.
 func IsInContact(elem Elements, gsLat, gsLon float64, t time.Time, minElevDeg float64) (bool, error) {
 	if err := elem.Validate(); err != nil {
 		return false, err
@@ -151,8 +134,6 @@ func validateGSCoords(gsLat, gsLon float64) error {
 	return nil
 }
 
-// geodeticToECEF converts a geodetic (WGS-84) position to ECEF [m].
-// lat, lon are in radians; altM is altitude above ellipsoid in metres.
 func geodeticToECEF(lat, lon, altM float64) ECIState {
 	f := earthFlattening
 	e2 := 2*f - f*f

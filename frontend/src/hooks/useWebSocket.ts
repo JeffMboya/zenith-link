@@ -4,7 +4,6 @@ import type { StateUpdate } from '../types'
 const RECONNECT_DELAY_MS = 2000
 const MAX_TRACK_POINTS = 200
 
-// Shape the ground station WS actually sends
 interface RawTelemetry {
   sequence: number
   timestamp: number
@@ -39,10 +38,10 @@ function toStateUpdate(
     type: 'state_update',
     ts: raw.timestamp,
     satellite: {
-      pitch:   (raw.att_pitch  ?? 0) / 100,   // 0.01° LSB → °
+      pitch:   (raw.att_pitch  ?? 0) / 100,   
       yaw:     (raw.att_yaw    ?? 0) / 100,
       roll:    (raw.att_roll   ?? 0) / 100,
-      omega_x: (raw.ang_vel_x  ?? 0) / 100,   // 0.01 deg/s LSB → deg/s
+      omega_x: (raw.ang_vel_x  ?? 0) / 100,   
       omega_y: (raw.ang_vel_y  ?? 0) / 100,
       omega_z: (raw.ang_vel_z  ?? 0) / 100,
       latitude: raw.lat_e7 / 1e7,
@@ -51,7 +50,7 @@ function toStateUpdate(
       battery_voltage: raw.bat_v / 1000,
       solar_voltage: raw.solar_v / 1000,
       chassis_temp: raw.temp_c / 100,
-      cpu_temp: raw.temp_c / 100 + 8,          // derived: chassis + 8°C offset
+      cpu_temp: raw.temp_c / 100 + 8,          
       rssi: raw.rssi / 10,
       flags: raw.flags,
       inference_class: raw.inference_class,
@@ -76,7 +75,7 @@ function toStateUpdate(
   }
 }
 
-const ZENITH_FRAME_BYTES = 78  // 10 header + 2 presence + 34 payload + 32 HMAC
+const ZENITH_FRAME_BYTES = 78  
 
 export function useWebSocket() {
   const [latest, setLatest] = useState<StateUpdate | null>(null)
@@ -107,13 +106,13 @@ export function useWebSocket() {
         const raw = JSON.parse(e.data) as RawTelemetry
         if (typeof raw.sequence !== 'number') return
         zenithBytesRef.current += ZENITH_FRAME_BYTES
-        jsonBytesRef.current += e.data.length  // actual JSON bytes on the wire
+        jsonBytesRef.current += e.data.length  
         packetsRef.current += 1
         const pt = { lat: raw.lat_e7 / 1e7, lon: raw.lon_e7 / 1e7, alt: raw.alt_m }
         trackRef.current = [...trackRef.current.slice(-(MAX_TRACK_POINTS - 1)), pt]
         setLatest(toStateUpdate(raw, trackRef.current, zenithBytesRef.current, jsonBytesRef.current, packetsRef.current, nacksRef.current))
       } catch {
-        // malformed frame — ignore
+        
       }
     }
 

@@ -1,13 +1,5 @@
 package zenith_test
 
-// Protocol efficiency benchmark: Zenith-Link v2 vs JSON vs MessagePack-equivalent.
-//
-// Run: go test ./pkg/zenith -bench=. -benchmem -count=3
-//
-// Zenith-Link v2 encodes only fields with their presence bit set, plus an 8-byte
-// truncated HMAC-SHA256 trailer. No field names on the wire. A full telemetry frame
-// is ~70 bytes; a delta (position-only) is ~34 bytes. The JSON equivalent is ~300 bytes.
-
 import (
 	"encoding/json"
 	"testing"
@@ -15,7 +7,6 @@ import (
 	"github.com/absmach/zenith-link/pkg/zenith"
 )
 
-// fullFrame is a realistic full telemetry sample with all standard fields set.
 var fullFrame = zenith.Telemetry{
 	Sequence:  1024,
 	Timestamp: 1_750_000_000,
@@ -44,7 +35,6 @@ var fullFrame = zenith.Telemetry{
 	InferenceConf:  236,
 }
 
-// deltaFrame carries position + power only — typical in-pass delta.
 var deltaFrame = zenith.Telemetry{
 	Sequence:  1025,
 	Timestamp: 1_750_000_001,
@@ -57,8 +47,6 @@ var deltaFrame = zenith.Telemetry{
 }
 
 var benchKey = []byte("benchmark-key-32-bytes-xxxxxxxxxxx")
-
-// ── Zenith-Link v2 ──────────────────────────────────────────────────────────
 
 func BenchmarkZenithEncode_Full(b *testing.B) {
 	b.ReportAllocs()
@@ -92,27 +80,24 @@ func BenchmarkZenithDecode_Delta(b *testing.B) {
 	}
 }
 
-// ── JSON (stdlib) ────────────────────────────────────────────────────────────
-// Simulates the naive alternative: marshal the full telemetry struct as JSON.
-
 type jsonTelemetry struct {
-	Sequence       uint16  `json:"sequence"`
-	Timestamp      uint32  `json:"timestamp"`
-	LatE7          int32   `json:"lat_e7"`
-	LonE7          int32   `json:"lon_e7"`
-	AltM           int32   `json:"alt_m"`
-	AttRoll        int16   `json:"att_roll"`
-	AttPitch       int16   `json:"att_pitch"`
-	AttYaw         int16   `json:"att_yaw"`
-	AngVelX        int16   `json:"ang_vel_x"`
-	AngVelY        int16   `json:"ang_vel_y"`
-	AngVelZ        int16   `json:"ang_vel_z"`
-	BatV           uint16  `json:"bat_v"`
-	SolarV         uint16  `json:"solar_v"`
-	TempC          int16   `json:"temp_c"`
-	RSSI           int16   `json:"rssi"`
-	InferenceClass uint8   `json:"inference_class"`
-	InferenceConf  uint8   `json:"inference_conf"`
+	Sequence       uint16 `json:"sequence"`
+	Timestamp      uint32 `json:"timestamp"`
+	LatE7          int32  `json:"lat_e7"`
+	LonE7          int32  `json:"lon_e7"`
+	AltM           int32  `json:"alt_m"`
+	AttRoll        int16  `json:"att_roll"`
+	AttPitch       int16  `json:"att_pitch"`
+	AttYaw         int16  `json:"att_yaw"`
+	AngVelX        int16  `json:"ang_vel_x"`
+	AngVelY        int16  `json:"ang_vel_y"`
+	AngVelZ        int16  `json:"ang_vel_z"`
+	BatV           uint16 `json:"bat_v"`
+	SolarV         uint16 `json:"solar_v"`
+	TempC          int16  `json:"temp_c"`
+	RSSI           int16  `json:"rssi"`
+	InferenceClass uint8  `json:"inference_class"`
+	InferenceConf  uint8  `json:"inference_conf"`
 }
 
 func makeJSONFrame() jsonTelemetry {
@@ -144,8 +129,6 @@ func BenchmarkJSONUnmarshal_Full(b *testing.B) {
 		_ = json.Unmarshal(raw, &out)
 	}
 }
-
-// ── Size comparison (not a timing benchmark) ─────────────────────────────────
 
 func TestFrameSizeComparison(t *testing.T) {
 	zenithFull, _ := zenith.Encode(fullFrame, benchKey)

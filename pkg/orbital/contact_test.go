@@ -11,13 +11,11 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-// nairobiLat, nairobiLon are the WGS-84 coordinates of Nairobi, Kenya.
 const (
 	nairobiLat = -1.2864
 	nairobiLon = 36.8172
 )
 
-// issElements returns ISS-like orbital elements at a fixed epoch for deterministic tests.
 func issContactElements() orbital.Elements {
 	return orbital.Elements{
 		SemiMajorAxis: 6_788_000,
@@ -30,8 +28,6 @@ func issContactElements() orbital.Elements {
 	}
 }
 
-// ─── ElevationAzimuth ────────────────────────────────────────────────────────
-
 func TestElevationAzimuth(t *testing.T) {
 	tests := []struct {
 		desc        string
@@ -42,8 +38,7 @@ func TestElevationAzimuth(t *testing.T) {
 		tolerance   float64
 	}{
 		{
-			// Satellite directly above the ground station (GS at equator/prime meridian).
-			// ECEF of GS ≈ (earthRadius, 0, 0); satellite further along X axis.
+
 			desc:        "satellite directly overhead — elevation ≈ 90°",
 			satECEF:     orbital.ECIState{X: 7_000_000, Y: 0, Z: 0},
 			gsLat:       0,
@@ -52,23 +47,21 @@ func TestElevationAzimuth(t *testing.T) {
 			tolerance:   1,
 		},
 		{
-			// Satellite at 90° longitude from GS (at equator) — well below horizon.
+
 			desc:        "satellite 90° away in longitude — below horizon",
 			satECEF:     orbital.ECIState{X: 0, Y: 7_000_000, Z: 0},
 			gsLat:       0,
 			gsLon:       0,
-			wantElevDeg: -40, // roughly -42° given geometry
+			wantElevDeg: -40,
 			tolerance:   5,
 		},
 		{
-			// Satellite at 45° elevation — halfway between horizon and zenith.
-			// Analytically: put GS at (0°N, 0°E), satellite at bearing 45° elev.
-			// Easier: put satellite slightly off-zenith and check elev > 0.
+
 			desc:        "satellite north of GS — positive elevation",
 			satECEF:     orbital.ECIState{X: 6_600_000, Y: 0, Z: 1_500_000},
 			gsLat:       0,
 			gsLon:       0,
-			wantElevDeg: 10, // approximate; just verify positive
+			wantElevDeg: 10,
 			tolerance:   20,
 		},
 	}
@@ -83,16 +76,13 @@ func TestElevationAzimuth(t *testing.T) {
 }
 
 func TestElevationAzimuth_Azimuth(t *testing.T) {
-	// Satellite due north of GS (0°N, 0°E) at some elevation — azimuth ≈ 0° (North).
-	// Z axis in ECEF points north; positive Z contribution → North component dominant.
+
 	satECEF := orbital.ECIState{X: 6_400_000, Y: 0, Z: 2_000_000}
 	_, azRad := orbital.ElevationAzimuth(satECEF, 0, 0)
 	azDeg := azRad * 180 / math.Pi
-	// Azimuth should be near 0° (North) since the satellite is in the +Z (north) direction.
+
 	assert.InDelta(t, 0, azDeg, 30)
 }
-
-// ─── ContactWindows ──────────────────────────────────────────────────────────
 
 func TestContactWindows(t *testing.T) {
 	elem := issContactElements()
@@ -102,8 +92,7 @@ func TestContactWindows(t *testing.T) {
 	t.Run("ISS passes Nairobi multiple times per day", func(t *testing.T) {
 		windows, err := orbital.ContactWindows(elem, nairobiLat, nairobiLon, start, end, 5.0)
 		require.NoError(t, err)
-		// ISS has ~15.5 orbits/day; Nairobi at -1.3°N is well within the 51.6° inclination
-		// ground track, so multiple passes are expected.
+
 		assert.GreaterOrEqual(t, len(windows), 2, "should have at least 2 contact windows in 24h")
 	})
 
@@ -147,14 +136,14 @@ func TestContactWindows_Errors(t *testing.T) {
 	now := elem.Epoch
 
 	tests := []struct {
-		desc      string
-		elem      orbital.Elements
-		gsLat     float64
-		gsLon     float64
-		start     time.Time
-		end       time.Time
-		minElev   float64
-		wantErr   error
+		desc    string
+		elem    orbital.Elements
+		gsLat   float64
+		gsLon   float64
+		start   time.Time
+		end     time.Time
+		minElev float64
+		wantErr error
 	}{
 		{
 			desc:    "end before start",
@@ -189,7 +178,7 @@ func TestContactWindows_Errors(t *testing.T) {
 		{
 			desc: "invalid orbital elements",
 			elem: orbital.Elements{
-				SemiMajorAxis: 100, // below Earth radius
+				SemiMajorAxis: 100,
 				Eccentricity:  0,
 				Inclination:   0,
 				Epoch:         now,
@@ -251,27 +240,21 @@ func TestContactWindows_Errors(t *testing.T) {
 	}
 }
 
-// ─── IsInContact ─────────────────────────────────────────────────────────────
-
 func TestIsInContact(t *testing.T) {
 	elem := issContactElements()
 	start := elem.Epoch
 	end := start.Add(24 * time.Hour)
 
-	// Find at least one in-contact time and one out-of-contact time using the
-	// contact windows we already trust.
 	windows, err := orbital.ContactWindows(elem, nairobiLat, nairobiLon, start, end, 5.0)
 	require.NoError(t, err)
 	require.NotEmpty(t, windows, "need at least one window to test IsInContact")
 
-	// Mid-point of first window: should be in contact.
 	w := windows[0]
 	mid := w.AOS.Add(w.Duration() / 2)
 	inContact, err := orbital.IsInContact(elem, nairobiLat, nairobiLon, mid, 5.0)
 	require.NoError(t, err)
 	assert.True(t, inContact, "mid-window should be in contact")
 
-	// 30 minutes before AOS: should NOT be in contact (assuming gap between windows > 30 min).
 	before := w.AOS.Add(-30 * time.Minute)
 	if before.After(start) {
 		notIn, err := orbital.IsInContact(elem, nairobiLat, nairobiLon, before, 5.0)
@@ -296,7 +279,6 @@ func TestIsInContact_InvalidCoordinates(t *testing.T) {
 	_, err = orbital.IsInContact(elem, 0, 0, now, 90.0)
 	assert.True(t, errors.Contains(err, errors.ErrInvalidField), "minElevDeg >= 90 should error")
 
-	// Invalid orbital elements should also be rejected.
 	bad := orbital.Elements{SemiMajorAxis: 100, Epoch: now}
 	_, err = orbital.IsInContact(bad, 0, 0, now, 5.0)
 	assert.True(t, errors.Contains(err, errors.ErrOrbitalPropagate), "invalid elements should error")

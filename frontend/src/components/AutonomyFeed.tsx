@@ -24,7 +24,7 @@ export function AutonomyFeed() {
           const data = await res.json() as AutonomousEvent[] | null
           if (Array.isArray(data)) setEvents(data.slice(0, 8))
         }
-      } catch { /* keep last */ }
+      } catch {  }
       timer = setTimeout(poll, 3000)
     }
     poll()
@@ -40,7 +40,7 @@ export function AutonomyFeed() {
       borderTop: '1px solid var(--border)', backdropFilter: 'blur(6px)',
       zIndex: 85, transition: 'width 0.2s ease', overflow: 'hidden',
     }}>
-      {/* toggle */}
+      
       <button
         onClick={() => setOpen(o => !o)}
         aria-label={open ? 'Collapse autonomy feed' : 'Expand autonomy feed'}

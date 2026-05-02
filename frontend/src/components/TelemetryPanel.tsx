@@ -13,7 +13,7 @@ function usePayload() {
         const res = await fetch('/payload')
         if (res.status === 204) { setPayload(null) }
         else if (res.ok) { setPayload(await res.json()) }
-      } catch { /* keep last */ }
+      } catch {  }
       timer = setTimeout(poll, 5000)
     }
     poll()
@@ -102,7 +102,7 @@ export function TelemetryPanel({ state, selectedSatId, selectedSat, hasTelemetry
       {open && (
         <div style={{ padding: '12px 12px', flex: 1, overflowY: 'auto' }}>
 
-          {/* Satellite header */}
+          
           <div style={{ marginBottom: 12 }}>
             <div style={{
               color: planeColor, fontSize: 13, fontWeight: 700, letterSpacing: 1,
@@ -117,7 +117,7 @@ export function TelemetryPanel({ state, selectedSatId, selectedSat, hasTelemetry
             )}
           </div>
 
-          {/* ── Primary satellite: full CCSDS telemetry ── */}
+          
           {hasTelemetry && (
             <>
               {tleSource === 'sim' && (
@@ -131,7 +131,7 @@ export function TelemetryPanel({ state, selectedSatId, selectedSat, hasTelemetry
                 </div>
               ) : (
                 <>
-                  {/* ── Real position (TLE) or simulated position ── */}
+                  
                   <Section
                     title={tleSource === 'tle' ? 'REAL POSITION' : 'POSITION'}
                     accent={tleSource === 'tle' ? 'var(--green)' : 'var(--cyan)'}
@@ -141,7 +141,7 @@ export function TelemetryPanel({ state, selectedSatId, selectedSat, hasTelemetry
                     <Row label="ALT" value={((selectedSat?.alt_m ?? state.altitude) / 1000).toFixed(1)} unit="km" color={tleSource === 'tle' ? 'var(--green)' : 'var(--cyan)'} />
                   </Section>
 
-                  {/* ── Simulated telemetry separator in TLE mode ── */}
+                  
                   {tleSource === 'tle' && (
                     <div style={{
                       margin: '4px 0 8px',
@@ -192,7 +192,7 @@ export function TelemetryPanel({ state, selectedSatId, selectedSat, hasTelemetry
             </>
           )}
 
-          {/* ── Constellation member: orbital data only ── */}
+          
           {!hasTelemetry && (
             <>
               <div style={{ color: planeColor, fontSize: 9, letterSpacing: 3, marginBottom: 12 }}>

@@ -31,18 +31,18 @@ export function ArcGauge({ value, min, max, label, unit, color = 'var(--cyan)', 
 
   return (
     <svg width={size} height={size} viewBox="0 0 100 100" aria-label={`${label}: ${displayVal} ${unit}`}>
-      {/* Track */}
+      
       <path d={arcPath(1)} fill="none" stroke="var(--border)" strokeWidth={5} strokeLinecap="round" />
-      {/* Value arc */}
+      
       <path d={arcPath(pct)} fill="none" stroke={color} strokeWidth={5} strokeLinecap="round" />
-      {/* Value */}
+      
       <text x={cx} y={cy - 4} textAnchor="middle" fill={color} fontSize={13} fontFamily="var(--font-mono)" fontWeight="bold">
         {displayVal}
       </text>
       <text x={cx} y={cy + 9} textAnchor="middle" fill="var(--text-mid)" fontSize={8} fontFamily="var(--font-mono)">
         {unit}
       </text>
-      {/* Label — increased from 7→9 for readability */}
+      
       <text x={cx} y={cy + 23} textAnchor="middle" fill="var(--text-dim)" fontSize={9} fontFamily="var(--font-mono)" letterSpacing={1}>
         {label}
       </text>

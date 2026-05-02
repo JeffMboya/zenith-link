@@ -9,8 +9,6 @@ import (
 	"github.com/absmach/zenith-link/spacecraft"
 )
 
-// ─── telemetry ───────────────────────────────────────────────────────────────
-
 type telemetryRes struct {
 	Sequence  uint16 `json:"sequence"`
 	Timestamp uint32 `json:"timestamp"`
@@ -29,7 +27,7 @@ type telemetryRes struct {
 	SolarV    uint16 `json:"solar_v,omitempty"`
 	TempC     int16  `json:"temp_c,omitempty"`
 	RSSI      int16  `json:"rssi,omitempty"`
-	// Onboard inference (present only when PresenceInference bit is set).
+
 	InferenceClass *uint8 `json:"inference_class,omitempty"`
 	InferenceConf  *uint8 `json:"inference_conf,omitempty"`
 	InferenceLabel string `json:"inference_label,omitempty"`
@@ -67,8 +65,6 @@ func telemetryFromDomain(tm zenith.Telemetry) telemetryRes {
 	return r
 }
 
-// ─── state ───────────────────────────────────────────────────────────────────
-
 type stateRes struct {
 	Time       time.Time `json:"time"`
 	ECIX       float64   `json:"eci_x"`
@@ -95,8 +91,6 @@ func stateFromDomain(s spacecraft.State) stateRes {
 	}
 }
 
-// ─── command ─────────────────────────────────────────────────────────────────
-
 type commandRes struct {
 	CommandID uint8  `json:"command_id"`
 	Accepted  bool   `json:"accepted"`
@@ -110,8 +104,6 @@ func commandFromDomain(r spacecraft.CommandResult) commandRes {
 		Message:   r.Message,
 	}
 }
-
-// ─── contact windows ─────────────────────────────────────────────────────────
 
 type contactWindowRes struct {
 	AOS             time.Time `json:"aos"`
@@ -137,8 +129,6 @@ func contactWindowsFromDomain(ws []orbital.ContactWindow) contactWindowsRes {
 	}
 	return contactWindowsRes{Count: len(out), Windows: out}
 }
-
-// ─── error ───────────────────────────────────────────────────────────────────
 
 type errorRes struct {
 	Error string `json:"error"`

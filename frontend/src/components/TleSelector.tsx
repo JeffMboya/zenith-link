@@ -20,7 +20,7 @@ export function TleSelector({ source, group, count }: Props) {
   const { importGroup, clearTle, loading, error } = useTleImport()
   const ref = useRef<HTMLDivElement>(null)
 
-  // Close on outside click
+  
   useEffect(() => {
     const handler = (e: MouseEvent) => {
       if (ref.current && !ref.current.contains(e.target as Node)) setOpen(false)
@@ -69,7 +69,7 @@ export function TleSelector({ source, group, count }: Props) {
           borderRadius: 4, boxShadow: '0 8px 24px rgba(0,0,0,0.6)',
           minWidth: 220, overflow: 'hidden',
         }}>
-          {/* Simulated option */}
+          
           <button
             onClick={async () => { await clearTle(); setOpen(false) }}
             style={{

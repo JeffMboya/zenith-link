@@ -16,7 +16,6 @@ import (
 	"github.com/go-chi/chi/v5/middleware"
 )
 
-// NewRouter builds and returns the chi router for the spacecraft service.
 func NewRouter(svc spacecraft.Service) http.Handler {
 	r := chi.NewRouter()
 	r.Use(middleware.RequestID)
@@ -98,8 +97,6 @@ func tmFrameHandler(svc spacecraft.Service) http.HandlerFunc {
 	}
 }
 
-// zenithFrameHandler returns the raw Zenith-Link v2 binary frame (no CCSDS
-// wrapping). Used by relay satellites to fetch and forward telemetry.
 func zenithFrameHandler(svc spacecraft.Service) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		t := queryTime(r)
@@ -114,8 +111,6 @@ func zenithFrameHandler(svc spacecraft.Service) http.HandlerFunc {
 	}
 }
 
-// commandHandler accepts a raw CCSDS TC Transfer Frame (application/octet-stream)
-// and executes the embedded command.
 func commandHandler(svc spacecraft.Service) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		body, err := io.ReadAll(io.LimitReader(r.Body, 1024))
@@ -132,18 +127,10 @@ func commandHandler(svc spacecraft.Service) http.HandlerFunc {
 	}
 }
 
-// windowsHandler returns contact windows for a configurable ground station.
-//
-// Query parameters:
-//
-//	gs_lat    geodetic latitude  [degrees, default -1.2864 Nairobi]
-//	gs_lon    geodetic longitude [degrees, default 36.8172 Nairobi]
-//	hours     look-ahead window  [hours,   default 4,     max 48]
-//	min_elev  minimum elevation  [degrees, default 5.0]
 func windowsHandler(svc spacecraft.Service) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		req := windowsReq{
-			GSLat:      -1.2864, // Nairobi default
+			GSLat:      -1.2864,
 			GSLon:      36.8172,
 			HoursAhead: 4,
 			MinElevDeg: 5.0,
@@ -185,14 +172,6 @@ func windowsHandler(svc spacecraft.Service) http.HandlerFunc {
 	}
 }
 
-// trackHandler returns predicted orbital positions for the next N minutes
-// at a configurable step interval. Used by the frontend to render the
-// forward ground track on the 3D globe.
-//
-// Query parameters:
-//
-//	minutes  look-ahead duration [default 90, max 200]
-//	step_s   sample interval in seconds [default 30, min 10]
 func trackHandler(svc spacecraft.Service) http.HandlerFunc {
 	type trackPoint struct {
 		Lat float64 `json:"lat"`
@@ -232,14 +211,12 @@ func trackHandler(svc spacecraft.Service) http.HandlerFunc {
 	}
 }
 
-// eventsHandler returns the autonomous event ring buffer, newest first.
 func eventsHandler(svc spacecraft.Service) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, http.StatusOK, svc.Events())
 	}
 }
 
-// payloadHandler returns the currently deployed onboard payload, or 204 if none.
 func payloadHandler(svc spacecraft.Service) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		p := svc.PayloadState()
@@ -251,9 +228,6 @@ func payloadHandler(svc spacecraft.Service) http.HandlerFunc {
 	}
 }
 
-// inferenceStateHandler returns the full inference result including per-channel z-scores,
-// pre-fault signals, and real-time NOAA space weather conditions.
-// Polled by the frontend for the ONBOARD AI tooltip, PRE-FAULT banner, and storm level indicator.
 func inferenceStateHandler(svc spacecraft.Service) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		res := svc.LastResult()
@@ -275,7 +249,6 @@ func inferenceStateHandler(svc spacecraft.Service) http.HandlerFunc {
 	}
 }
 
-// queryTime reads an optional "t" Unix-seconds query parameter; defaults to now.
 func queryTime(r *http.Request) time.Time {
 	if s := r.URL.Query().Get("t"); s != "" {
 		if n, err := strconv.ParseInt(s, 10, 64); err == nil {

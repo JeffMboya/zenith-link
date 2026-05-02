@@ -19,7 +19,6 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-// makeRouter creates a router with a default (no spacecraft addr) config.
 func makeRouter() (*mocks.Service, http.Handler) {
 	svc := new(mocks.Service)
 	return svc, api.NewRouter(svc, api.RouterConfig{})
@@ -45,8 +44,6 @@ func fakeLatest() groundstation.LatestState {
 	}
 }
 
-// ─── GET /health ────────────────────────────────────────────────────────────
-
 func TestHealthHandler(t *testing.T) {
 	_, router := makeRouter()
 	req := httptest.NewRequest(http.MethodGet, "/health", nil)
@@ -58,8 +55,6 @@ func TestHealthHandler(t *testing.T) {
 	require.NoError(t, json.NewDecoder(rec.Body).Decode(&body))
 	assert.Equal(t, "ok", body["status"])
 }
-
-// ─── GET /latest ─────────────────────────────────────────────────────────────
 
 func TestLatestHandler(t *testing.T) {
 	tests := []struct {
@@ -92,7 +87,7 @@ func TestLatestHandler(t *testing.T) {
 			setupMock: func(svc *mocks.Service) {
 				st := fakeLatest()
 				st.Telemetry.Presence |= zenith.PresenceInference
-				st.Telemetry.InferenceClass = 4 // RF_DEGRADATION
+				st.Telemetry.InferenceClass = 4
 				st.Telemetry.InferenceConf = 200
 				svc.On("Latest", mock.Anything).Return(st, nil)
 			},
@@ -124,8 +119,6 @@ func TestLatestHandler(t *testing.T) {
 		})
 	}
 }
-
-// ─── POST /receive ───────────────────────────────────────────────────────────
 
 func TestReceiveHandler(t *testing.T) {
 	fakeFrame := []byte{0x5A, 0x4C, 0x02, 0x00, 0x00, 0x01}
@@ -198,17 +191,15 @@ func TestReceiveHandler(t *testing.T) {
 	}
 }
 
-// ─── POST /command ───────────────────────────────────────────────────────────
-
 func TestCommandHandler(t *testing.T) {
 	t.Run("no spacecraft addr configured returns 502", func(t *testing.T) {
-		_, router := makeRouter() // RouterConfig has empty SpacecraftAddr
+		_, router := makeRouter()
 		body := `{"command_id": 1}`
 		req := httptest.NewRequest(http.MethodPost, "/command", bytes.NewBufferString(body))
 		req.Header.Set("Content-Type", "application/json")
 		rec := httptest.NewRecorder()
 		router.ServeHTTP(rec, req)
-		// Should fail because spacecraft address is not set.
+
 		assert.Equal(t, http.StatusBadGateway, rec.Code)
 	})
 
@@ -232,7 +223,7 @@ func TestCommandHandler(t *testing.T) {
 	})
 
 	t.Run("command forwarded to spacecraft and result returned", func(t *testing.T) {
-		// Mock spacecraft HTTP server.
+
 		scServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			assert.Equal(t, "/command", r.URL.Path)
 			assert.Equal(t, "application/octet-stream", r.Header.Get("Content-Type"))
@@ -265,8 +256,6 @@ func TestCommandHandler(t *testing.T) {
 		assert.Equal(t, float64(1), res["command_id"])
 	})
 }
-
-// ─── Subscribe broadcast ──────────────────────────────────────────────────────
 
 func TestSubscribeBroadcast(t *testing.T) {
 	t.Run("telemetry reaches subscriber after Receive", func(t *testing.T) {

@@ -27,70 +27,56 @@ import (
 	"github.com/absmach/zenith-link/pkg/errors"
 )
 
-// Protocol constants.
 const (
-	Version            uint8  = 0       // Version-1 per CCSDS 133.0-B-2
-	PrimaryHeaderSize         = 6       // bytes
-	SecondaryHeaderSize       = 8       // bytes (CDS format)
-	MaxAPID            uint16 = 0x07FF  // 11-bit field maximum; 0x7FF = idle packet
-	IdleAPID           uint16 = 0x07FF
-	MaxSeqCount        uint16 = 0x3FFF  // 14-bit field maximum (16383)
-	MaxDataLength      uint16 = 0xFFFF  // 16-bit field maximum
+	Version             uint8  = 0
+	PrimaryHeaderSize          = 6
+	SecondaryHeaderSize        = 8
+	MaxAPID             uint16 = 0x07FF
+	IdleAPID            uint16 = 0x07FF
+	MaxSeqCount         uint16 = 0x3FFF
+	MaxDataLength       uint16 = 0xFFFF
 )
 
-// PacketType distinguishes telemetry (downlink) from telecommand (uplink).
 type PacketType uint8
 
 const (
-	Telemetry    PacketType = 0
-	Telecommand  PacketType = 1
+	Telemetry   PacketType = 0
+	Telecommand PacketType = 1
 )
 
-// GroupingFlags describes the position of a packet within a sequence.
 type GroupingFlags uint8
 
 const (
-	Continuation  GroupingFlags = 0b00
-	FirstSegment  GroupingFlags = 0b01
-	LastSegment   GroupingFlags = 0b10
-	Unsegmented   GroupingFlags = 0b11
+	Continuation GroupingFlags = 0b00
+	FirstSegment GroupingFlags = 0b01
+	LastSegment  GroupingFlags = 0b10
+	Unsegmented  GroupingFlags = 0b11
 )
 
-// ccsdsCDSEpochDays is the number of days between the CCSDS CDS epoch
-// (1958-01-01T00:00:00 TAI) and the Unix epoch (1970-01-01T00:00:00 UTC).
-// Computed as: 12 years × 365.25 days/year ≈ 4383 days.
-// (Exact: 1958→1970 = 365+365+366+365+365+365+366+365+365+365+366+365 = 4383 days)
 const ccsdsCDSEpochDays = 4383
 
-// PrimaryHeader holds the decoded fields of the 6-byte CCSDS primary header.
 type PrimaryHeader struct {
-	Type                PacketType
-	HasSecondaryHeader  bool
-	APID                uint16
-	GroupingFlags       GroupingFlags
-	SequenceCount       uint16
-	// PacketDataLength is the value stored in the wire field:
-	// len(SecondaryHeader)+len(UserData)−1. Callers normally use Packet.Encode
-	// which computes this automatically.
+	Type               PacketType
+	HasSecondaryHeader bool
+	APID               uint16
+	GroupingFlags      GroupingFlags
+	SequenceCount      uint16
+
 	PacketDataLength uint16
 }
 
-// SecondaryHeader is a CCSDS Day Segmented (CDS) time code.
 type SecondaryHeader struct {
-	Days            uint16 // days since 1958-01-01
-	MillisecondsDay uint32 // milliseconds since midnight (0–86_399_999)
-	SubMilliseconds uint16 // sub-ms resolution: 1 unit = 1/65536 ms ≈ 15.26 ns
+	Days            uint16
+	MillisecondsDay uint32
+	SubMilliseconds uint16
 }
 
-// SpacePacket is a fully decoded CCSDS Space Packet.
 type SpacePacket struct {
 	Primary   PrimaryHeader
-	Secondary *SecondaryHeader // nil when HasSecondaryHeader == false
+	Secondary *SecondaryHeader
 	UserData  []byte
 }
 
-// EncodePrimary serialises the primary header into exactly 6 bytes.
-// It does NOT compute PacketDataLength — callers must set it correctly.
 func EncodePrimary(h PrimaryHeader) ([PrimaryHeaderSize]byte, error) {
 	if h.APID > MaxAPID {
 		return [6]byte{}, errors.Wrap(errors.ErrInvalidAPID, errors.New("value exceeds 11-bit maximum 0x7FF"))
@@ -101,24 +87,20 @@ func EncodePrimary(h PrimaryHeader) ([PrimaryHeaderSize]byte, error) {
 
 	var b [PrimaryHeaderSize]byte
 
-	// Octet 0-1: version(3) | type(1) | shf(1) | APID(11)
 	w0 := uint16(Version)<<13 |
 		uint16(h.Type)<<12 |
 		boolBit(h.HasSecondaryHeader)<<11 |
 		h.APID&MaxAPID
 	binary.BigEndian.PutUint16(b[0:], w0)
 
-	// Octet 2-3: grouping_flags(2) | sequence_count(14)
 	w1 := uint16(h.GroupingFlags)<<14 | h.SequenceCount&MaxSeqCount
 	binary.BigEndian.PutUint16(b[2:], w1)
 
-	// Octet 4-5: packet_data_length(16)
 	binary.BigEndian.PutUint16(b[4:], h.PacketDataLength)
 
 	return b, nil
 }
 
-// DecodePrimary parses exactly 6 bytes into a PrimaryHeader.
 func DecodePrimary(b []byte) (PrimaryHeader, error) {
 	if len(b) < PrimaryHeaderSize {
 		return PrimaryHeader{}, errors.Wrap(errors.ErrMalformedFrame,
@@ -146,7 +128,6 @@ func DecodePrimary(b []byte) (PrimaryHeader, error) {
 	return h, nil
 }
 
-// EncodeSecondary serialises a SecondaryHeader into exactly 8 bytes.
 func EncodeSecondary(h SecondaryHeader) [SecondaryHeaderSize]byte {
 	var b [SecondaryHeaderSize]byte
 	binary.BigEndian.PutUint16(b[0:], h.Days)
@@ -155,7 +136,6 @@ func EncodeSecondary(h SecondaryHeader) [SecondaryHeaderSize]byte {
 	return b
 }
 
-// DecodeSecondary parses 8 bytes into a SecondaryHeader.
 func DecodeSecondary(b []byte) (SecondaryHeader, error) {
 	if len(b) < SecondaryHeaderSize {
 		return SecondaryHeader{}, errors.Wrap(errors.ErrMalformedFrame,
@@ -168,10 +148,9 @@ func DecodeSecondary(b []byte) (SecondaryHeader, error) {
 	}, nil
 }
 
-// CDSFromTime converts a time.Time to a CCSDS CDS secondary header.
 func CDSFromTime(t time.Time) SecondaryHeader {
 	t = t.UTC()
-	// Days since CDS epoch
+
 	unixSec := t.Unix()
 	totalSec := unixSec + int64(ccsdsCDSEpochDays)*86400
 	days := uint16(totalSec / 86400)
@@ -179,7 +158,6 @@ func CDSFromTime(t time.Time) SecondaryHeader {
 	secOfDay := totalSec % 86400
 	msOfDay := uint32(secOfDay*1000) + uint32(t.Nanosecond()/int(time.Millisecond))
 
-	// Sub-milliseconds: nanoseconds within current ms → units of 1/65536 ms
 	nsWithinMs := t.Nanosecond() % int(time.Millisecond)
 	subMs := uint16(int64(nsWithinMs) * 65536 / int64(time.Millisecond))
 
@@ -190,7 +168,6 @@ func CDSFromTime(t time.Time) SecondaryHeader {
 	}
 }
 
-// CDSToTime converts a CCSDS CDS secondary header to a time.Time (UTC).
 func CDSToTime(h SecondaryHeader) time.Time {
 	daysFromUnix := int64(h.Days) - ccsdsCDSEpochDays
 	totalMs := daysFromUnix*86400_000 + int64(h.MillisecondsDay)
@@ -200,11 +177,8 @@ func CDSToTime(h SecondaryHeader) time.Time {
 	return time.Unix(sec, ns).UTC()
 }
 
-// Encode serialises the full Space Packet to a byte slice. The
-// PacketDataLength field in the primary header is computed automatically and
-// does NOT need to be set by the caller.
 func Encode(pkt SpacePacket) ([]byte, error) {
-	// Build the packet data field first so we know its length.
+
 	var dataField []byte
 	if pkt.Primary.HasSecondaryHeader {
 		if pkt.Secondary == nil {
@@ -237,9 +211,6 @@ func Encode(pkt SpacePacket) ([]byte, error) {
 	return out, nil
 }
 
-// Decode parses a complete Space Packet from b.
-// It validates the primary header and PacketDataLength field against the
-// actual buffer length.
 func Decode(b []byte) (SpacePacket, error) {
 	if len(b) < PrimaryHeaderSize {
 		return SpacePacket{}, errors.Wrap(errors.ErrMalformedFrame,
@@ -251,7 +222,6 @@ func Decode(b []byte) (SpacePacket, error) {
 		return SpacePacket{}, err
 	}
 
-	// Total packet length from the DataLength field.
 	expectedTotal := PrimaryHeaderSize + int(primary.PacketDataLength) + 1
 	if len(b) < expectedTotal {
 		return SpacePacket{}, errors.Wrap(errors.ErrDataLenMismatch,
@@ -281,7 +251,6 @@ func Decode(b []byte) (SpacePacket, error) {
 	return pkt, nil
 }
 
-// boolBit converts a bool to uint16 (0 or 1) for bit field construction.
 func boolBit(v bool) uint16 {
 	if v {
 		return 1

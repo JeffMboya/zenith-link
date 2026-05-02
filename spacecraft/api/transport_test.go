@@ -65,8 +65,6 @@ func buildTC(t *testing.T, scid uint16, vcid uint8, data []byte) []byte {
 	return b
 }
 
-// ─── GET /health ────────────────────────────────────────────────────────────
-
 func TestHealthHandler(t *testing.T) {
 	_, router := makeRouter()
 
@@ -79,8 +77,6 @@ func TestHealthHandler(t *testing.T) {
 	require.NoError(t, json.NewDecoder(rec.Body).Decode(&body))
 	assert.Equal(t, "ok", body["status"])
 }
-
-// ─── GET /telemetry ─────────────────────────────────────────────────────────
 
 func TestTelemetryHandler(t *testing.T) {
 	tm := fakeTelemetry()
@@ -120,7 +116,7 @@ func TestTelemetryHandler(t *testing.T) {
 			setupMock: func(svc *mocks.Service) {
 				inf := tm
 				inf.Presence |= zenith.PresenceInference
-				inf.InferenceClass = 2 // THERMAL_EVENT
+				inf.InferenceClass = 2
 				inf.InferenceConf = 200
 				svc.On("Telemetry", mock.Anything, mock.AnythingOfType("time.Time")).
 					Return(inf, nil)
@@ -153,8 +149,6 @@ func TestTelemetryHandler(t *testing.T) {
 		})
 	}
 }
-
-// ─── GET /state ─────────────────────────────────────────────────────────────
 
 func TestStateHandler(t *testing.T) {
 	st := fakeState()
@@ -202,8 +196,6 @@ func TestStateHandler(t *testing.T) {
 		})
 	}
 }
-
-// ─── GET /frame ─────────────────────────────────────────────────────────────
 
 func TestTMFrameHandler(t *testing.T) {
 	tests := []struct {
@@ -275,8 +267,6 @@ func TestTMFrameHandler(t *testing.T) {
 	}
 }
 
-// ─── GET /frame/zenith ───────────────────────────────────────────────────────
-
 func TestZenithFrameHandler(t *testing.T) {
 	fakeFrame := []byte{0x5A, 0x4C, 0x02, 0x00, 0x00, 0x01, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00}
 
@@ -326,10 +316,8 @@ func TestZenithFrameHandler(t *testing.T) {
 	}
 }
 
-// ─── POST /command ───────────────────────────────────────────────────────────
-
 func TestCommandHandler(t *testing.T) {
-	inferTC := buildTC(t, 0x5A, 0, []byte{0x01}) // CmdInferenceRun
+	inferTC := buildTC(t, 0x5A, 0, []byte{0x01})
 	accepted := spacecraft.CommandResult{CommandID: spacecraft.CmdInferenceRun, Accepted: true, Message: "ok"}
 
 	tests := []struct {
@@ -392,8 +380,6 @@ func TestCommandHandler(t *testing.T) {
 		})
 	}
 }
-
-// ─── GET /windows ────────────────────────────────────────────────────────────
 
 func TestWindowsHandler(t *testing.T) {
 	fakeWindows := []orbital.ContactWindow{
@@ -475,8 +461,6 @@ func TestWindowsHandler(t *testing.T) {
 		})
 	}
 }
-
-// ─── GET /inference/state ───────────────────────────────────────────────────
 
 func TestInferenceStateHandler(t *testing.T) {
 	tests := []struct {

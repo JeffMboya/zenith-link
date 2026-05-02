@@ -19,7 +19,6 @@ type loggingMiddleware struct {
 	svc    spacecraft.Service
 }
 
-// NewLogging wraps svc with structured JSON logging on every method call.
 func NewLogging(svc spacecraft.Service, logger *slog.Logger) spacecraft.Service {
 	return &loggingMiddleware{logger: logger, svc: svc}
 }

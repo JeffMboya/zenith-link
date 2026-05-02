@@ -27,33 +27,27 @@ const (
 	httpTimeout  = 10 * time.Second
 )
 
-// Conditions holds the latest space weather readings from NOAA.
 type Conditions struct {
-	Kp        float64   // planetary K-index (0–9)
-	SolarFlux float64   // F10.7 solar flux index (sfu)
+	Kp        float64
+	SolarFlux float64
 	FetchedAt time.Time
-	Available bool // false until first successful fetch
+	Available bool
 }
 
-// Monitor polls NOAA and keeps Conditions current. Safe for concurrent use.
 type Monitor struct {
 	mu         sync.RWMutex
 	conditions Conditions
 	client     *http.Client
 }
 
-// NewMonitor creates a Monitor. Call Start(ctx) to begin background polling.
 func NewMonitor() *Monitor {
 	return &Monitor{
 		client: &http.Client{Timeout: httpTimeout},
 	}
 }
 
-// Start launches the background polling goroutine. Returns immediately.
-// When ctx is cancelled the polling goroutine exits cleanly.
 func (m *Monitor) Start(ctx context.Context) {
-	// Attempt an initial fetch synchronously so data is available right away,
-	// but do not block Start's caller if the network is unreachable.
+
 	go func() {
 		m.fetch()
 		ticker := time.NewTicker(pollInterval)
@@ -69,28 +63,12 @@ func (m *Monitor) Start(ctx context.Context) {
 	}()
 }
 
-// Current returns a snapshot of the latest conditions.
-// Returns zero Conditions with Available=false before the first successful fetch.
 func (m *Monitor) Current() Conditions {
 	m.mu.RLock()
 	defer m.mu.RUnlock()
 	return m.conditions
 }
 
-// RSSIAdjustmentDB returns the RSSI delta in dB due to current space weather.
-//
-// Kp mapping (geomagnetic storm impact on RF link margin):
-//   - Kp 0–3: 0 dB    (quiet)
-//   - Kp 4:   -1 dB   (minor)
-//   - Kp 5:   -3 dB   (moderate)
-//   - Kp 6:   -6 dB   (strong)
-//   - Kp 7+:  -10 dB  (severe/extreme)
-//
-// Solar flux > 180 sfu adds +1 dB: enhanced ionospheric propagation at high
-// solar activity is complex; for demo fidelity we apply a small positive offset
-// to make the signal visibly responsive to solar data.
-//
-// Returns 0 when data is not yet available.
 func (m *Monitor) RSSIAdjustmentDB() float64 {
 	c := m.Current()
 	if !c.Available {
@@ -117,13 +95,6 @@ func (m *Monitor) RSSIAdjustmentDB() float64 {
 	return adj
 }
 
-// StormLevel returns a human-readable geomagnetic storm level string.
-//
-//	"QUIET"    Kp < 4
-//	"MINOR"    4 ≤ Kp < 5
-//	"MODERATE" 5 ≤ Kp < 6
-//	"STRONG"   6 ≤ Kp < 7
-//	"SEVERE"   Kp ≥ 7
 func (m *Monitor) StormLevel() string {
 	c := m.Current()
 	if !c.Available {
@@ -143,8 +114,6 @@ func (m *Monitor) StormLevel() string {
 	}
 }
 
-// fetch performs a single round of NOAA API calls, updating cached conditions.
-// On any error, the previous cached values are preserved and a warning is logged.
 func (m *Monitor) fetch() {
 	kp, err := m.fetchKp()
 	if err != nil {
@@ -174,7 +143,6 @@ func (m *Monitor) fetch() {
 	)
 }
 
-// kpEntry represents one element of the NOAA planetary K-index JSON array.
 type kpEntry struct {
 	TimeTag     string  `json:"time_tag"`
 	Kp          float64 `json:"kp"`
@@ -182,7 +150,6 @@ type kpEntry struct {
 	KpIndex     int     `json:"kp_index"`
 }
 
-// fetchKp retrieves the latest planetary K-index from NOAA.
 func (m *Monitor) fetchKp() (float64, error) {
 	resp, err := m.client.Get(kpURL)
 	if err != nil {
@@ -204,7 +171,6 @@ func (m *Monitor) fetchKp() (float64, error) {
 	return entries[len(entries)-1].Kp, nil
 }
 
-// solarFluxResponse represents the NOAA 10cm flux summary JSON.
 type solarFluxResponse struct {
 	Flux      string `json:"Flux"`
 	Frequency string `json:"Frequency"`
@@ -212,7 +178,6 @@ type solarFluxResponse struct {
 	TimeStamp string `json:"TimeStamp"`
 }
 
-// fetchSolarFlux retrieves the latest F10.7 solar flux from NOAA.
 func (m *Monitor) fetchSolarFlux() (float64, error) {
 	resp, err := m.client.Get(solarFluxURL)
 	if err != nil {
@@ -235,7 +200,6 @@ func (m *Monitor) fetchSolarFlux() (float64, error) {
 	return flux, nil
 }
 
-// httpError is a lightweight error type for non-200 HTTP responses.
 type httpError struct {
 	url  string
 	code int

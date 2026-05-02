@@ -11,13 +11,11 @@ interface Command {
   label: string
   description: string
   category: 'MODE' | 'SYSTEM' | 'TELEMETRY' | 'DIAGNOSTIC' | 'COMPUTE' | 'DEPLOY'
-  commandId: number      // CCSDS TC command ID byte
-  payloadBytes?: number[] // optional payload bytes
-  destructive?: boolean   // requires CONFIRM gate before transmitting
+  commandId: number      
+  payloadBytes?: number[] 
+  destructive?: boolean   
 }
 
-// Command IDs must match spacecraft.go constants.
-// CmdInferenceRun=0x01 CmdReboot=0x02 CmdSetMode=0x03 CmdComputeJob=0x04
 const COMMANDS: Command[] = [
   { id: 'safe_mode',        label: 'SAFE MODE',          description: 'Reduce power, halt non-essential subsystems',          category: 'MODE',       commandId: 0x03, payloadBytes: [0x01], destructive: true },
   { id: 'nominal',          label: 'NOMINAL',             description: 'Return to nominal operations',                        category: 'MODE',       commandId: 0x03, payloadBytes: [0x00] },
@@ -57,7 +55,7 @@ export function CommandPanel() {
   const [selected, setSelected]   = useState(0)
   const [log, setLog]             = useState<LogEntry[]>([])
   const [sending, setSending]     = useState(false)
-  // Confirm gate: holds the command awaiting CONFIRM; null when idle
+  
   const [confirming, setConfirming] = useState<Command | null>(null)
   const [confirmInput, setConfirmInput] = useState('')
   const [showLog, setShowLog]     = useState(false)
@@ -66,7 +64,7 @@ export function CommandPanel() {
   const confirmRef = useRef<HTMLInputElement>(null)
   const logRef     = useRef<HTMLDivElement>(null)
 
-  // Global keyboard: Ctrl+K toggle, Escape closes
+  
   useEffect(() => {
     const handler = (e: KeyboardEvent) => {
       if ((e.ctrlKey || e.metaKey) && e.key === 'k') {
@@ -82,7 +80,7 @@ export function CommandPanel() {
     return () => window.removeEventListener('keydown', handler)
   }, [confirming])
 
-  // Focus: search input on open, confirm input when confirming
+  
   useEffect(() => {
     if (open && !confirming) {
       setQuery(''); setSelected(0)
@@ -94,12 +92,12 @@ export function CommandPanel() {
     if (confirming) setTimeout(() => confirmRef.current?.focus(), 50)
   }, [confirming])
 
-  // Scroll log to bottom
+  
   useEffect(() => {
     if (logRef.current) logRef.current.scrollTop = logRef.current.scrollHeight
   }, [log])
 
-  // Show log section automatically when a new entry arrives
+  
   useEffect(() => {
     if (log.length > 0) setShowLog(true)
   }, [log.length])
@@ -180,7 +178,7 @@ export function CommandPanel() {
 
   return (
     <>
-      {/* Trigger button — bottom-left, shows TX status when sending */}
+      
       <button
         onClick={() => setOpen(true)}
         aria-label="Open command palette (Ctrl+K)"
@@ -205,7 +203,7 @@ export function CommandPanel() {
         )}
       </button>
 
-      {/* Modal */}
+      
       {open && (
         <div
           role="dialog"
@@ -232,7 +230,7 @@ export function CommandPanel() {
               transition: 'border-color 0.15s, box-shadow 0.15s',
             }}
           >
-            {/* ── CONFIRM GATE ── */}
+            
             {confirming ? (
               <>
                 <div style={{
@@ -302,7 +300,7 @@ export function CommandPanel() {
               </>
             ) : (
               <>
-                {/* ── SEARCH ── */}
+                
                 <div style={{ display: 'flex', alignItems: 'center', padding: '12px 16px', borderBottom: '1px solid var(--bg-dark)', gap: 10 }}>
                   <span style={{ color: 'var(--text-dim)', fontSize: 12 }}>›_</span>
                   <input
@@ -319,7 +317,7 @@ export function CommandPanel() {
                   <span style={{ color: 'var(--text-dim)', fontSize: 9, letterSpacing: 1 }}>ESC TO CLOSE</span>
                 </div>
 
-                {/* ── COMMAND LIST ── */}
+                
                 <div style={{ maxHeight: 300, overflowY: 'auto' }}>
                   {filtered.length === 0 && (
                     <div style={{ padding: '20px 16px', color: 'var(--text-dim)', fontSize: 10, textAlign: 'center' }}>
@@ -361,7 +359,7 @@ export function CommandPanel() {
                         <div style={{ color: 'var(--text-dim)', fontSize: 9, marginTop: 1 }}>
                           {cmd.description}
                         </div>
-                        {/* TC frame preview */}
+                        
                         <div style={{ color: 'var(--text-dim)', fontSize: 8, marginTop: 2, opacity: 0.7, fontFamily: 'var(--font-mono)' }}>
                           TC 0x{cmd.commandId.toString(16).padStart(2,'0')}{cmd.payloadBytes?.length ? ' ['+cmd.payloadBytes.map(b=>'0x'+b.toString(16).padStart(2,'0')).join(',')+']' : ''}
                         </div>
@@ -373,7 +371,7 @@ export function CommandPanel() {
                   ))}
                 </div>
 
-                {/* ── KEYBOARD HINTS + LOG TOGGLE ── */}
+                
                 <div style={{
                   borderTop: '1px solid var(--bg-dark)', padding: '6px 16px',
                   display: 'flex', gap: 16, alignItems: 'center',
@@ -400,7 +398,7 @@ export function CommandPanel() {
                   )}
                 </div>
 
-                {/* ── EMBEDDED TX LOG ── */}
+                
                 {showLog && log.length > 0 && (
                   <div
                     ref={logRef}

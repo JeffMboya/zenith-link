@@ -14,7 +14,6 @@
 // 0x29B1; any other value indicates the wrong variant.
 package crc
 
-// table holds the precomputed CRC lookup table for polynomial 0x1021.
 var table [256]uint16
 
 func init() {
@@ -31,27 +30,20 @@ func init() {
 	}
 }
 
-// CCITT16 computes CRC-16/CCITT-FALSE over data.
-// The test vector []byte("123456789") must return 0x29B1.
 func CCITT16(data []byte) uint16 {
 	crc := uint16(0xFFFF)
 	for _, b := range data {
-		crc = (crc<<8) ^ table[byte(crc>>8)^b]
+		crc = (crc << 8) ^ table[byte(crc>>8)^b]
 	}
 	return crc
 }
 
-// Append appends data followed by its two-byte big-endian CRC to dst and
-// returns the extended slice. The returned slice is dst + data + [crc_hi, crc_lo].
 func Append(dst, data []byte) []byte {
 	v := CCITT16(data)
 	dst = append(dst, data...)
 	return append(dst, byte(v>>8), byte(v))
 }
 
-// Verify returns true when the last two bytes of frame are the correct
-// CRC-16/CCITT-FALSE for the preceding bytes.
-// At least 2 bytes are required (0 data bytes + 2 CRC bytes is the minimum).
 func Verify(frame []byte) bool {
 	if len(frame) < 2 {
 		return false

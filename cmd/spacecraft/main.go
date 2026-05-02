@@ -35,8 +35,6 @@ type config struct {
 	HMACKey string `env:"ZENITH_HMAC_KEY,required"`
 }
 
-// adjustForEarlyContact advances mean anomaly so the first Nairobi contact
-// window opens within targetLeadSec seconds of startup. Orbital shape is unchanged.
 func adjustForEarlyContact(elem orbital.Elements, gsLat, gsLon, minElevDeg, targetLeadSec float64, logger *slog.Logger) orbital.Elements {
 	now := time.Now().UTC()
 	windows, err := orbital.ContactWindows(elem, gsLat, gsLon, now, now.Add(24*time.Hour), minElevDeg)
@@ -74,9 +72,6 @@ func main() {
 		os.Exit(1)
 	}
 
-	// Planet Labs Dove-class orbit: 500 km sun-synchronous, 97.4° inclination.
-	// Matches the orbital regime of Planet Labs Flock/SkySat satellites whose
-	// TLE data is loaded as the default constellation.
 	elem := adjustForEarlyContact(orbital.Elements{
 		SemiMajorAxis: 6_878_000,
 		Eccentricity:  0.0001,
@@ -85,7 +80,7 @@ func main() {
 		ArgPerigee:    0.0,
 		MeanAnomaly:   0.0,
 		Epoch:         time.Now().UTC(),
-	}, -1.2864, 36.8172, 5.0, 600.0, logger) // ensure Nairobi pass within 10 min
+	}, -1.2864, 36.8172, 5.0, 600.0, logger)
 
 	svcCfg := spacecraft.Config{
 		SCID:          cfg.SCID,

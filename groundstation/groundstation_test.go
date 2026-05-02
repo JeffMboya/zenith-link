@@ -33,8 +33,6 @@ func defaultTelemetry() zenith.Telemetry {
 	}
 }
 
-// ─── Receive ────────────────────────────────────────────────────────────────
-
 func TestReceive(t *testing.T) {
 	tests := []struct {
 		desc    string
@@ -72,7 +70,7 @@ func TestReceive(t *testing.T) {
 		{
 			desc: "wrong HMAC key",
 			frame: func(t *testing.T) []byte {
-				// Encode with a different key.
+
 				b, err := zenith.Encode(defaultTelemetry(), []byte("different-key"))
 				require.NoError(t, err)
 				return b
@@ -96,8 +94,6 @@ func TestReceive(t *testing.T) {
 		})
 	}
 }
-
-// ─── Latest ─────────────────────────────────────────────────────────────────
 
 func TestLatest(t *testing.T) {
 	t.Run("returns ErrNoData when no frame received", func(t *testing.T) {
@@ -137,8 +133,6 @@ func TestLatest(t *testing.T) {
 	})
 }
 
-// ─── Subscribe ───────────────────────────────────────────────────────────────
-
 func TestSubscribe(t *testing.T) {
 	t.Run("subscriber receives broadcast on Receive", func(t *testing.T) {
 		svc := groundstation.New(groundstation.Config{HMACKey: testKey})
@@ -169,14 +163,12 @@ func TestSubscribe(t *testing.T) {
 
 		cancel()
 
-		// The goroutine removes the subscriber and closes the channel asynchronously.
-		// Wait up to 100 ms for the close.
 		deadline := time.After(100 * time.Millisecond)
 		for {
 			select {
 			case _, ok := <-ch:
 				if !ok {
-					return // channel closed as expected
+					return
 				}
 			case <-deadline:
 				t.Fatal("channel not closed after context cancellation")
@@ -185,8 +177,7 @@ func TestSubscribe(t *testing.T) {
 	})
 
 	t.Run("concurrent Receive and context cancel does not panic", func(t *testing.T) {
-		// Regression: Receive snapshots subscribers then sends outside the lock;
-		// a concurrent cancel+close creates a "send on closed channel" window.
+
 		svc := groundstation.New(groundstation.Config{HMACKey: testKey})
 
 		tm := defaultTelemetry()
@@ -223,7 +214,6 @@ func TestSubscribe(t *testing.T) {
 		_, err = svc.Subscribe(ctx)
 		require.NoError(t, err)
 
-		// Third subscriber should fail.
 		_, err = svc.Subscribe(ctx)
 		assert.Error(t, err)
 	})

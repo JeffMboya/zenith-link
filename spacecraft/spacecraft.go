@@ -32,21 +32,18 @@ import (
 	"github.com/absmach/zenith-link/spacecraft/inference"
 )
 
-// CommandID identifies an uplink command type.
 type CommandID uint8
 
 const (
-	CmdInferenceRun  CommandID = 0x01 // return current onboard health classification
-	CmdReboot        CommandID = 0x02 // reset sequence counters and clear inference state
-	CmdSetMode       CommandID = 0x03 // set operating mode (1-byte payload: mode ID)
-	CmdComputeJob    CommandID = 0x04 // run an onboard compute job (1-byte job type in payload)
-	CmdDeployPayload CommandID = 0x05 // deploy an in-orbit payload over the constrained ISL
+	CmdInferenceRun  CommandID = 0x01
+	CmdReboot        CommandID = 0x02
+	CmdSetMode       CommandID = 0x03
+	CmdComputeJob    CommandID = 0x04
+	CmdDeployPayload CommandID = 0x05
 )
 
-// linkRateBytesPerSec mirrors Satlyt STL-01's 20 KB/s constrained uplink budget.
 const linkRateBytesPerSec = 20 * 1024
 
-// DeploymentProfile describes an in-orbit workload deployable over a constrained ISL.
 type DeploymentProfile struct {
 	ID          uint8
 	Name        string
@@ -63,16 +60,14 @@ var deploymentProfiles = map[uint8]DeploymentProfile{
 	0x06: {0x06, "link-optimizer-v1", 15360, "Dynamic downlink scheduler — prioritizes frames by anomaly class and link margin; mirrors STL-01 downlink prioritization"},
 }
 
-// DeployedPayload tracks what's currently running on the spacecraft.
 type DeployedPayload struct {
 	Name       string    `json:"Name"`
 	SizeBytes  int       `json:"SizeBytes"`
-	Status     string    `json:"Status"`     // "RUNNING" | "FAILED"
+	Status     string    `json:"Status"`
 	DeployedAt time.Time `json:"DeployedAt"`
 	ExecOutput string    `json:"ExecOutput"`
 }
 
-// AutonomousEvent records an autonomous decision made by the spacecraft's onboard system.
 type AutonomousEvent struct {
 	At     time.Time `json:"at"`
 	Class  string    `json:"class"`
@@ -81,70 +76,47 @@ type AutonomousEvent struct {
 
 const maxAutonomousEvents = 20
 
-// Compute job types for CmdComputeJob.
 const (
-	JobHealthScan      uint8 = 0x01 // scan last 30 frames, return anomaly summary
-	JobEclipseForecast uint8 = 0x02 // compute next eclipse entry/exit from current orbit
-	JobLinkBudget      uint8 = 0x03 // compute link margin for all ground stations
+	JobHealthScan      uint8 = 0x01
+	JobEclipseForecast uint8 = 0x02
+	JobLinkBudget      uint8 = 0x03
 )
 
-// Command holds a decoded command extracted from a TC Transfer Frame.
 type Command struct {
 	ID      CommandID
 	Payload []byte
 }
 
-// CommandResult holds the outcome of an executed command.
 type CommandResult struct {
 	CommandID CommandID
 	Accepted  bool
 	Message   string
 }
 
-// Service defines the spacecraft domain operations exposed to API layers.
 type Service interface {
-	// Telemetry returns the current telemetry snapshot at time t.
 	Telemetry(ctx context.Context, t time.Time) (zenith.Telemetry, error)
 
-	// TelemetryFrame returns a fully encoded Zenith-Link v2 frame (with HMAC).
 	TelemetryFrame(ctx context.Context, t time.Time) ([]byte, error)
 
-	// TMFrame returns a CCSDS TM Transfer Frame carrying the current telemetry
-	// as a Space Packet in the data field. frameSize is the total TM frame size
-	// in bytes (including primary header, data field, FECF).
 	TMFrame(ctx context.Context, t time.Time, frameSize int) ([]byte, error)
 
-	// State returns the current orbital state (ECI + geodetic position).
 	State(ctx context.Context, t time.Time) (State, error)
 
-	// ExecuteCommand decodes a raw CCSDS TC Transfer Frame, validates the SCID,
-	// and executes the embedded command.
-	// Returns ErrCommandUnknown for unrecognised command IDs.
 	ExecuteCommand(ctx context.Context, tcFrame []byte) (CommandResult, error)
 
-	// Windows returns contact windows for a ground station at (gsLat, gsLon)
-	// over [start, end] with minimum elevation angle minElevDeg.
 	Windows(ctx context.Context, gsLat, gsLon float64, start, end time.Time, minElevDeg float64) ([]orbital.ContactWindow, error)
 
-	// Events returns recent autonomous spacecraft events, newest first.
 	Events() []AutonomousEvent
 
-	// PayloadState returns the deployed onboard payload, nil if none.
 	PayloadState() *DeployedPayload
 
-	// LastResult returns the cached inference result from the most recent telemetry frame.
-	// Used by the /inference/state endpoint for per-channel z-scores and pre-fault signals.
 	LastResult() inference.Result
 
-	// StormLevel returns the current geomagnetic storm level from NOAA space weather data.
-	// "QUIET" | "MINOR" | "MODERATE" | "STRONG" | "SEVERE"
 	StormLevel() string
 
-	// KpIndex returns the latest planetary K-index from NOAA space weather data.
 	KpIndex() float64
 }
 
-// State captures the combined orbital and telemetry state.
 type State struct {
 	Time       time.Time
 	ECI        orbital.ECIState
@@ -152,23 +124,20 @@ type State struct {
 	InSunlight bool
 }
 
-// Config holds configuration for the spacecraft service.
 type Config struct {
-	// SCID is the 10-bit CCSDS Spacecraft ID.
 	SCID uint16
-	// VCID is the 6-bit Virtual Channel ID used in TM frames.
+
 	VCID uint8
-	// HMACKey is the shared key for Zenith-Link v2 HMAC-SHA256 authentication.
+
 	HMACKey []byte
-	// Elements are the initial Keplerian orbital elements.
+
 	Elements orbital.Elements
-	// TelemetryAPID is the APID used for telemetry space packets.
+
 	TelemetryAPID uint16
-	// SequenceCount is the initial space-packet sequence count (wraps at 0xFFFF).
+
 	SequenceCount uint16
 }
 
-// inferenceState holds the result of the last onboard health classification.
 type inferenceState struct {
 	class uint8
 	conf  uint8
@@ -189,13 +158,12 @@ type service struct {
 	lastInference   *inferenceState
 	deployedPayload *DeployedPayload
 
-	autonomousEvents []AutonomousEvent // newest-first ring, capped at maxAutonomousEvents
+	autonomousEvents []AutonomousEvent
 	prevClass        inference.Class
-	eclipseComputeAt *time.Time // non-nil while in eclipse compute window
+	eclipseComputeAt *time.Time
 	autonomyOnce     sync.Once
 }
 
-// New creates a new spacecraft Service.
 func New(cfg Config) Service {
 	sw := spaceweather.NewMonitor()
 	return &service{
@@ -219,9 +187,6 @@ func (s *service) Telemetry(ctx context.Context, t time.Time) (zenith.Telemetry,
 	currentMode := s.mode
 	s.mu.Unlock()
 
-	// Safe mode (mode=1) sheds high-rate telemetry to conserve link budget:
-	// attitude and angular velocity are dropped, matching real safe-mode behaviour
-	// where ADCS spins down to a minimum tumble-arrest rate.
 	presence := zenith.PresencePosition |
 		zenith.PresenceBatV |
 		zenith.PresenceSolarV |
@@ -238,81 +203,57 @@ func (s *service) Telemetry(ctx context.Context, t time.Time) (zenith.Telemetry,
 		batV = 7600
 	}
 
-	// Simulate attitude as slow oscillations keyed on mission time.
-	// Roll ±5°, Pitch ±10°, Yaw ±180° (slow drift). Units: 0.01° LSB.
-	phi := float64(t.Unix()) / 60.0 // one full oscillation per 2π minutes
-	attRoll := int16(math.Round(math.Sin(phi*0.7)*500))         // ±5°
-	attPitch := int16(math.Round(math.Sin(phi*0.4+1.2)*1000))   // ±10°
-	attYaw := int16(math.Round(math.Sin(phi*0.15+0.8) * 18000)) // ±180°
-	// Chassis 20°C ±3°C slow oscillation. Units: 0.01°C LSB.
+	phi := float64(t.Unix()) / 60.0
+	attRoll := int16(math.Round(math.Sin(phi*0.7) * 500))
+	attPitch := int16(math.Round(math.Sin(phi*0.4+1.2) * 1000))
+	attYaw := int16(math.Round(math.Sin(phi*0.15+0.8) * 18000))
+
 	chassisC := int16(math.Round((20.0 + 3.0*math.Sin(phi*0.3)) * 100))
 
-	// Angular velocity small residuals (reaction wheel noise). Units: 0.01 deg/s.
-	angVelX := int16(math.Round(math.Sin(phi*2.1+0.5) * 15)) // ±0.15 deg/s
-	angVelY := int16(math.Round(math.Sin(phi*1.7+1.1) * 12)) // ±0.12 deg/s
-	angVelZ := int16(math.Round(math.Sin(phi*2.9+2.3) * 8))  // ±0.08 deg/s
+	angVelX := int16(math.Round(math.Sin(phi*2.1+0.5) * 15))
+	angVelY := int16(math.Round(math.Sin(phi*1.7+1.1) * 12))
+	angVelZ := int16(math.Round(math.Sin(phi*2.9+2.3) * 8))
 
-	// Deterministic noise injection, keyed on mission time.
-	//
-	// The base simulation is noiseless sine waves — a purely constant input
-	// produces z-score ≈ 0 on every channel and the anomaly detector can never
-	// trigger POWER_ANOMALY, THERMAL_EVENT, RF_DEGRADATION, or
-	// ATTITUDE_INSTABILITY. These injections add periodic, reproducible fault
-	// signatures so all seven health classes are reachable during a demo run.
-	//
-	// Periods are chosen so anomalies are well-separated from eclipse transitions.
 	unix := t.Unix()
 
-	// Background noise — gives the rolling window non-zero stddev so anomaly
-	// z-score thresholds are proportionally meaningful.
 	bgNoise := math.Sin(float64(unix)*1.61803) * math.Sin(float64(unix)*2.71828)
-	batV = uint16(int(batV) + int(math.Round(bgNoise*50)))   // ±50 mV background
-	chassisC += int16(math.Round(bgNoise * 30))               // ±0.30°C background
-	rssiBase := -85.0 + bgNoise*2.0                           // ±2.0 dBm background
+	batV = uint16(int(batV) + int(math.Round(bgNoise*50)))
+	chassisC += int16(math.Round(bgNoise * 30))
+	rssiBase := -85.0 + bgNoise*2.0
 
-	// Fast-varying noise (5–15 s period) so gauges show visible real-time activity.
-	// Periods chosen to be mutually incommensurate — avoids phase locking.
-	fast1 := math.Sin(float64(unix)*0.523) * math.Cos(float64(unix)*0.314) // ~7 s period
-	fast2 := math.Sin(float64(unix)*0.471) * math.Sin(float64(unix)*0.628) // ~10 s period
-	attRoll  += int16(math.Round(fast1 * 250))  // ±2.5° visible roll flutter
-	attPitch += int16(math.Round(fast2 * 350))  // ±3.5° visible pitch flutter
-	attYaw   += int16(math.Round(fast1 * 600))  // ±6° visible yaw drift
-	angVelX  += int16(math.Round(fast1 * 8))    // ±0.08 deg/s
-	angVelY  += int16(math.Round(fast2 * 6))    // ±0.06 deg/s
-	angVelZ  += int16(math.Round(fast1 * 4))    // ±0.04 deg/s
+	fast1 := math.Sin(float64(unix)*0.523) * math.Cos(float64(unix)*0.314)
+	fast2 := math.Sin(float64(unix)*0.471) * math.Sin(float64(unix)*0.628)
+	attRoll += int16(math.Round(fast1 * 250))
+	attPitch += int16(math.Round(fast2 * 350))
+	attYaw += int16(math.Round(fast1 * 600))
+	angVelX += int16(math.Round(fast1 * 8))
+	angVelY += int16(math.Round(fast2 * 6))
+	angVelZ += int16(math.Round(fast1 * 4))
 
-	// Apply real-time NOAA space weather adjustment to the RF link margin.
-	// Elevated Kp → ionospheric scintillation → reduced RSSI, matching
-	// Satlyt STL-01's RF degradation and downlink prioritisation behaviour.
 	rssiBase += s.sw.RSSIAdjustmentDB()
 
-	// Periodic fault injections — each anomaly class fires for ~20 s every N min.
-	// Only inject during sunlight to keep eclipse and power anomalies separate.
 	if st.InSunlight {
-		// POWER_ANOMALY: 150 mV voltage sag every 10 min → z ≈ -3 against 7600 V baseline
+
 		if unix%600 >= 30 && unix%600 < 52 {
 			batV -= 150
 		}
-		// THERMAL_EVENT: +3.2°C chassis spike every 12 min → z ≈ +3.2
+
 		if unix%720 >= 240 && unix%720 < 258 {
-			chassisC += 320 // +3.20°C in 0.01°C units
+			chassisC += 320
 		}
-		// RF_DEGRADATION: −8.5 dBm RSSI drop every 8 min → z ≈ −2.8
+
 		if unix%480 >= 150 && unix%480 < 168 {
 			rssiBase -= 8.5
 		}
-		// ATTITUDE_INSTABILITY: reaction wheel saturation event — 25° pitch offset
-		// every 9 min pushes |roll|+|pitch| well above the rolling baseline
+
 		if unix%540 >= 360 && unix%540 < 374 {
-			attPitch += 2500 // +25° in 0.01° units
-			angVelY += 600   // +6 deg/s transient
+			attPitch += 2500
+			angVelY += 600
 		}
 	}
 
-	rssiWire := int16(math.Round(rssiBase * 10)) // convert dBm → wire int16 (dBm × 10)
+	rssiWire := int16(math.Round(rssiBase * 10))
 
-	// Push frame to onboard health detector — runs on every telemetry generation,
-	// matching STL-01 continuous anomaly monitoring behaviour.
 	angVelMag := math.Sqrt(float64(angVelX*angVelX+angVelY*angVelY+angVelZ*angVelZ)) / 100.0
 	det := s.detector.Push(inference.Frame{
 		BatV:      float64(batV),
@@ -328,7 +269,6 @@ func (s *service) Telemetry(ctx context.Context, t time.Time) (zenith.Telemetry,
 	s.lastInference = &inferenceState{class: uint8(det.Class), conf: det.Confidence}
 	s.mu.Unlock()
 
-	// Set priority flag for non-nominal classifications so ground station can triage.
 	frameFlags := uint8(0)
 	if det.Class != inference.NOMINAL {
 		frameFlags |= zenith.FlagPriority
@@ -457,8 +397,7 @@ func (s *service) ExecuteCommand(_ context.Context, rawTC []byte) (CommandResult
 }
 
 func (s *service) execute(cmd Command) (CommandResult, error) {
-	// CmdComputeJob manages its own locking to avoid holding s.mu during
-	// the 360-step orbital propagation in JobEclipseForecast.
+
 	if cmd.ID == CmdComputeJob {
 		return s.executeComputeJob(cmd)
 	}
@@ -468,9 +407,7 @@ func (s *service) execute(cmd Command) (CommandResult, error) {
 
 	switch cmd.ID {
 	case CmdInferenceRun:
-		// Return the current onboard health classification from the live detector.
-		// Inference runs automatically on every telemetry frame; this command surfaces
-		// the latest result on demand — matching STL-02 autonomous diagnostics pattern.
+
 		inf := s.lastInference
 		if inf == nil {
 			return CommandResult{CommandID: cmd.ID, Accepted: true, Message: "inference: warming up — no baseline yet"}, nil
@@ -511,10 +448,6 @@ func (s *service) execute(cmd Command) (CommandResult, error) {
 	}
 }
 
-// executeComputeJob handles CmdComputeJob — in-orbit task execution analogous
-// to Satlyt STL-02's onboard compute model ("system interpreted inputs, responded
-// to conditions"). Manages its own locking per job type; must NOT be called
-// while s.mu is already held.
 func (s *service) executeComputeJob(cmd Command) (CommandResult, error) {
 	if len(cmd.Payload) < 1 {
 		return CommandResult{CommandID: cmd.ID, Accepted: false, Message: "CmdComputeJob requires 1-byte job-type payload"}, nil
@@ -524,7 +457,7 @@ func (s *service) executeComputeJob(cmd Command) (CommandResult, error) {
 
 	switch jobType {
 	case JobHealthScan:
-		// Scan the last N detector frames and surface the current health state.
+
 		result := s.detector.LastResult()
 		s.mu.Lock()
 		inf := s.lastInference
@@ -542,8 +475,7 @@ func (s *service) executeComputeJob(cmd Command) (CommandResult, error) {
 		}, nil
 
 	case JobEclipseForecast:
-		// Compute the next eclipse entry and exit from current orbital elements.
-		// s.cfg.Elements is read-only after construction — no lock needed.
+
 		entry, exit := computeEclipseForecast(s.cfg.Elements, now)
 		if entry.IsZero() {
 			return CommandResult{CommandID: cmd.ID, Accepted: true, Message: "ECLIPSE_FORECAST: no eclipse in next 3h"}, nil
@@ -557,18 +489,13 @@ func (s *service) executeComputeJob(cmd Command) (CommandResult, error) {
 		}, nil
 
 	case JobLinkBudget:
-		// Real UHF link budget using the Friis transmission equation.
-		//   Margin = Ptx + Gtx + Grx − FSPL(d,f) − Lsys − Nfloor
-		// where FSPL(dB) = 20·log10(d_km) + 20·log10(f_MHz) + 32.44
-		// Link parameters (typical 1U CubeSat UHF):
-		//   Ptx = 30 dBm (1 W), Gtx = 2 dBi (monopole), Grx = 6 dBi (yagi)
-		//   System losses = 3 dB, Noise floor = kTB at 9600 bps + 5 dB NF ≈ −122 dBm
+
 		const (
 			txPowdBm   = 30.0
-			txGaindBi  =  2.0
-			rxGaindBi  =  6.0
-			sysLossdB  =  3.0
-			noiseFldBm = -122.0 // kTB(9600 Hz) + 5 dB NF
+			txGaindBi  = 2.0
+			rxGaindBi  = 6.0
+			sysLossdB  = 3.0
+			noiseFldBm = -122.0
 			freqMHz    = 437.0
 		)
 
@@ -596,14 +523,11 @@ func (s *service) executeComputeJob(cmd Command) (CommandResult, error) {
 			elevRad, _ := orbital.ElevationAzimuth(ecef, gs.lat, gs.lon)
 			elevDeg := elevRad * 180 / math.Pi
 
-			// Slant range from spacecraft to ground station via elevation geometry.
-			// For elevation < 5° (below horizon), use horizon slant as worst-case.
 			const earthRadKm = 6371.0
 			geo := orbital.ECEFToGeodetic(ecef)
 			altKm := geo.AltitudeM / 1000.0
 			sinElev := math.Sin(math.Max(elevRad, 5.0*math.Pi/180))
-			// Slant range from horizon geometry: d = sqrt((R+h)²−R²·cos²θ) − R·sinθ
-			// Simplified closed form for elevation angle θ:
+
 			slantKm := math.Sqrt((earthRadKm+altKm)*(earthRadKm+altKm)-
 				earthRadKm*earthRadKm*(1-sinElev*sinElev)) - earthRadKm*sinElev
 
@@ -616,7 +540,7 @@ func (s *service) executeComputeJob(cmd Command) (CommandResult, error) {
 				suffix = fmt.Sprintf("@%.0f°", elevDeg)
 			} else {
 				suffix = "(below horizon)"
-				linkMargin = 0 // no link
+				linkMargin = 0
 			}
 			msgs = append(msgs, fmt.Sprintf("%s:%.1fdB%s", gs.name, linkMargin, suffix))
 			if linkMargin > bestMargin {
@@ -647,9 +571,6 @@ func (s *service) Windows(_ context.Context, gsLat, gsLon float64, start, end ti
 	return orbital.ContactWindows(s.cfg.Elements, gsLat, gsLon, start, end, minElevDeg)
 }
 
-// executeDeployPayload simulates an in-orbit payload deployment over a 20 KB/s
-// constrained ISL — mirrors Satlyt STL-01's 26KB Python system upload.
-// Caller must hold s.mu.
 func (s *service) executeDeployPayload(cmd Command) (CommandResult, error) {
 	if len(cmd.Payload) < 1 {
 		return CommandResult{CommandID: cmd.ID, Accepted: false, Message: "CmdDeployPayload requires 1-byte profile ID"}, nil
@@ -668,8 +589,7 @@ func (s *service) executeDeployPayload(cmd Command) (CommandResult, error) {
 			Message:   "unknown profile — valid IDs: " + strings.Join(parts, " "),
 		}, nil
 	}
-	// Profile 0x03 (edge-inference-agent) is optimised for the ECLIPSE_COMPUTE window.
-	// Gate deployment to eclipse periods unless DEMO_ECLIPSE_OVERRIDE is set.
+
 	if profileID == 0x03 && s.eclipseComputeAt == nil && os.Getenv("DEMO_ECLIPSE_OVERRIDE") == "" {
 		return CommandResult{
 			CommandID: cmd.ID,
@@ -694,12 +614,10 @@ func (s *service) executeDeployPayload(cmd Command) (CommandResult, error) {
 	}, nil
 }
 
-// LastResult returns the cached inference result from the most recent telemetry frame.
 func (s *service) LastResult() inference.Result {
 	return s.detector.LastResult()
 }
 
-// PayloadState returns a copy of the currently deployed payload, or nil if none.
 func (s *service) PayloadState() *DeployedPayload {
 	s.mu.Lock()
 	defer s.mu.Unlock()
@@ -710,7 +628,6 @@ func (s *service) PayloadState() *DeployedPayload {
 	return &cp
 }
 
-// Events returns recent autonomous spacecraft events, newest first.
 func (s *service) Events() []AutonomousEvent {
 	s.mu.Lock()
 	defer s.mu.Unlock()
@@ -719,18 +636,10 @@ func (s *service) Events() []AutonomousEvent {
 	return out
 }
 
-// autonomyLoop watches for inference class transitions and dispatches autonomous
-// responses. Runs as a background goroutine started lazily from the first
-// Telemetry() call — matching Satlyt STL-02's "system interpreted inputs,
-// responded to conditions, adapted in real time" behaviour.
 func (s *service) autonomyLoop() {
-	// Derive a context from the process lifetime. The loop runs indefinitely
-	// while the spacecraft service is alive; the context is used only for clean
-	// shutdown propagation to the space weather monitor goroutine.
+
 	ctx := context.Background()
 
-	// Start NOAA space weather background polling. Real Kp and F10.7 data
-	// modulates RSSI in Telemetry() and surfaces storm-level events here.
 	s.sw.Start(ctx)
 
 	prevStormLevel := "QUIET"
@@ -746,7 +655,7 @@ func (s *service) autonomyLoop() {
 		if inf != nil {
 			curr := inference.Class(inf.class)
 			if curr != prev {
-				// Inference class changed — dispatch autonomous response.
+
 				s.handleClassTransition(prev, curr)
 				s.mu.Lock()
 				s.prevClass = curr
@@ -754,8 +663,6 @@ func (s *service) autonomyLoop() {
 			}
 		}
 
-		// Check for space weather storm level transitions.
-		// Emit an autonomous event when the storm level moves to non-QUIET.
 		currStorm := s.sw.StormLevel()
 		if currStorm != prevStormLevel && currStorm != "QUIET" {
 			s.pushEvent(currStorm, "space weather event")
@@ -764,8 +671,6 @@ func (s *service) autonomyLoop() {
 	}
 }
 
-// handleClassTransition runs OUTSIDE s.mu and dispatches autonomous responses
-// for each class transition.
 func (s *service) handleClassTransition(from, to inference.Class) {
 	fromName := inference.ClassName(from)
 	toName := inference.ClassName(to)
@@ -813,9 +718,6 @@ func (s *service) handleClassTransition(from, to inference.Class) {
 	}
 }
 
-// computeEclipseForecast returns the next eclipse entry and exit times within a 3h
-// horizon at 30-second resolution. Pure orbital math — no shared state, safe to call
-// without s.mu held.
 func computeEclipseForecast(elem orbital.Elements, now time.Time) (entry, exit time.Time) {
 	step := 30 * time.Second
 	horizon := 3 * time.Hour
@@ -839,8 +741,6 @@ func computeEclipseForecast(elem orbital.Elements, now time.Time) (entry, exit t
 	return
 }
 
-// runEclipseForecastLocked formats the eclipse forecast for use in autonomous event messages.
-// s.cfg.Elements is read-only after construction — safe without s.mu.
 func (s *service) runEclipseForecastLocked() (string, error) {
 	entry, exit := computeEclipseForecast(s.cfg.Elements, time.Now().UTC())
 	if entry.IsZero() {
@@ -850,7 +750,6 @@ func (s *service) runEclipseForecastLocked() (string, error) {
 	return fmt.Sprintf("eclipse entry=%s dur=%s", entry.Format("15:04:05Z"), dur.Round(time.Second)), nil
 }
 
-// pushEvent appends an autonomous event to the ring buffer, newest-first.
 func (s *service) pushEvent(class, action string) {
 	ev := AutonomousEvent{At: time.Now().UTC(), Class: class, Action: action}
 	slog.Info("[AUTONOMY]", slog.String("class", class), slog.String("action", action))
@@ -862,18 +761,13 @@ func (s *service) pushEvent(class, action string) {
 	s.mu.Unlock()
 }
 
-// StormLevel returns the current geomagnetic storm level from the space weather monitor.
 func (s *service) StormLevel() string { return s.sw.StormLevel() }
 
-// KpIndex returns the latest planetary K-index from the space weather monitor.
 func (s *service) KpIndex() float64 { return s.sw.Current().Kp }
-
-// ─── locked sequence helpers ─────────────────────────────────────────────────
-// All callers must hold s.mu.
 
 func (s *service) nextSeqLocked() uint16 {
 	v := s.seqCount
-	s.seqCount++ // wraps at 0xFFFF via natural uint16 overflow
+	s.seqCount++
 	return v
 }
 

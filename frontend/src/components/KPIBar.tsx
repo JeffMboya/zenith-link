@@ -16,7 +16,6 @@ interface Props {
   tleCount: number
 }
 
-
 interface ContactWindow {
   aos: string
   duration_sec: number
@@ -31,7 +30,7 @@ function useNextPass() {
   const [color, setColor] = useState('var(--text-dim)')
   const [urgent, setUrgent] = useState(false)
 
-  // Poll server every 30s — just stores the raw window timestamps
+  
   useEffect(() => {
     let timer: ReturnType<typeof setTimeout>
     async function poll() {
@@ -45,14 +44,14 @@ function useNextPass() {
         } else {
           setWindow(null)
         }
-      } catch { /* keep last */ }
+      } catch {  }
       timer = setTimeout(poll, WINDOWS_POLL_MS)
     }
     poll()
     return () => clearTimeout(timer)
   }, [])
 
-  // Tick every second — recomputes label from stored window data
+  
   useEffect(() => {
     function tick() {
       if (!window) { setLabel('—'); setColor('var(--text-dim)'); setUrgent(false); return }
@@ -89,7 +88,7 @@ interface ISLNode {
   label: string
   color: string
   detail: string
-  aosSec: number | null   // seconds to next AOS; null = currently in contact
+  aosSec: number | null   
   inContact: boolean
 }
 
@@ -123,7 +122,7 @@ function useISLNodes() {
       setNodes(healthResults.map((res, i) => {
         const label = i === 0 ? 'RELAY-1' : 'RELAY-2'
 
-        // Parse windows for AOS countdown
+        
         let aosSec: number | null = null
         let inContact = false
         const wr = windowResults[i]
@@ -178,7 +177,7 @@ function useInferenceDetail() {
       try {
         const res = await fetch('/inference/state')
         if (res.ok) setDetail(await res.json() as InferenceDetail)
-      } catch { /* keep last */ }
+      } catch {  }
       timer = setTimeout(poll, INFERENCE_POLL_MS)
     }
     poll()
@@ -259,7 +258,7 @@ export function KPIBar({ metrics, satellite, connected, linkLost, tleSource, tle
 
   return (
     <div style={{ position: 'fixed', top: 0, left: 0, right: 0, zIndex: 100 }}>
-    {/* PRE-FAULT warning banner — appears above KPI bar when a channel is trending toward anomaly */}
+    
     {preFaultClass && (
       <div style={{
         background: `color-mix(in srgb, ${preFaultColor} 15%, rgba(4,13,28,0.95))`,
@@ -282,7 +281,7 @@ export function KPIBar({ metrics, satellite, connected, linkLost, tleSource, tle
       background: 'rgba(4,13,28,0.92)', borderBottom: '1px solid var(--border)',
       backdropFilter: 'blur(6px)',
     }}>
-      {/* Logo */}
+      
       <div style={{
         padding: '8px 20px', borderRight: '1px solid var(--border)',
         display: 'flex', flexDirection: 'column', minWidth: 180,
@@ -295,12 +294,12 @@ export function KPIBar({ metrics, satellite, connected, linkLost, tleSource, tle
         </span>
       </div>
 
-      {/* TLE source selector */}
+      
       <div style={{ padding: '0 12px', borderRight: '1px solid var(--border)' }}>
         <TleSelector source={tleSource} group={tleGroup} count={tleCount} />
       </div>
 
-      {/* KPI tiles — 3 tiles: PACKETS (with NACK badge), EFFICIENCY, BYTES SAVED */}
+      
       <div style={{ flex: 1, display: 'flex' }}>
         {metrics
           ? kpis(metrics).map(({ label, value, color, nacks }) => (
@@ -329,7 +328,7 @@ export function KPIBar({ metrics, satellite, connected, linkLost, tleSource, tle
         }
       </div>
 
-      {/* Onboard health — anomaly class from inference engine */}
+      
       <div
         ref={aiTileRef}
         onMouseEnter={() => setAiHover(true)}
@@ -358,7 +357,7 @@ export function KPIBar({ metrics, satellite, connected, linkLost, tleSource, tle
             </span>
           )}
         </div>
-        {/* Z-score tooltip */}
+        
         {aiHover && inferenceDetail?.channels && (
           <div style={{
             position: 'absolute', top: '100%', right: 0, zIndex: 200,
@@ -393,7 +392,7 @@ export function KPIBar({ metrics, satellite, connected, linkLost, tleSource, tle
         )}
       </div>
 
-      {/* ISL mesh nodes */}
+      
       <div style={{
         padding: '4px 12px', borderLeft: '1px solid var(--border)',
         display: 'flex', flexDirection: 'column', gap: 2, justifyContent: 'center',
@@ -418,7 +417,7 @@ export function KPIBar({ metrics, satellite, connected, linkLost, tleSource, tle
         <span style={{ color: 'var(--text-dim)', fontSize: 7, letterSpacing: 2 }}>ISL MESH</span>
       </div>
 
-      {/* NEXT PASS — elevated tile */}
+      
       <div style={{
         padding: '6px 16px', borderLeft: '1px solid var(--border)',
         display: 'flex', flexDirection: 'column', alignItems: 'center', minWidth: 118,
@@ -431,7 +430,7 @@ export function KPIBar({ metrics, satellite, connected, linkLost, tleSource, tle
         <span style={{ color: 'var(--text-dim)', fontSize: 9, letterSpacing: 2, marginTop: 2 }}>NEXT PASS</span>
       </div>
 
-      {/* Link status */}
+      
       <div style={{
         padding: '6px 16px', borderLeft: '1px solid var(--border)',
         display: 'flex', alignItems: 'center', gap: 6,

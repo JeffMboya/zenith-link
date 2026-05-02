@@ -50,7 +50,6 @@ import (
 	"github.com/absmach/zenith-link/pkg/errors"
 )
 
-// Protocol constants.
 const (
 	Magic   uint16 = 0x5A4C
 	Version uint8  = 2
@@ -59,34 +58,27 @@ const (
 	PresenceSize = 2
 	HMACSize     = 32
 
-	MinFrameSize = HeaderSize + PresenceSize + HMACSize // 44 bytes — no payload fields
+	MinFrameSize = HeaderSize + PresenceSize + HMACSize
 
-	// Flag bits (Flags byte).
-	FlagStoreFwd   uint8 = 0x01 // frame was stored and forwarded
-	FlagCompressed uint8 = 0x02 // payload is delta-compressed
-	FlagPriority   uint8 = 0x04 // priority downlink — anomaly detected onboard
+	FlagStoreFwd   uint8 = 0x01
+	FlagCompressed uint8 = 0x02
+	FlagPriority   uint8 = 0x04
 
-	// Presence bitmask positions (bit 15 = MSB of the uint16).
-	PresencePosition  uint16 = 1 << 15 // LatE7 / LonE7 / AltM
-	PresenceAttitude  uint16 = 1 << 14 // roll / pitch / yaw
-	PresenceAngVel    uint16 = 1 << 13 // angular velocity X/Y/Z
+	PresencePosition  uint16 = 1 << 15
+	PresenceAttitude  uint16 = 1 << 14
+	PresenceAngVel    uint16 = 1 << 13
 	PresenceBatV      uint16 = 1 << 12
 	PresenceSolarV    uint16 = 1 << 11
 	PresenceTempC     uint16 = 1 << 10
 	PresenceRSSI      uint16 = 1 << 9
-	PresenceInference uint16 = 1 << 8 // InferenceClass / InferenceConf
+	PresenceInference uint16 = 1 << 8
 )
 
-// InferenceClassNames maps an InferenceClass value to a human-readable label.
-// Classes are spacecraft health states — index-stable, matches inference.ClassNames.
-// Index 7 ("UNKNOWN") is the catch-all for any value ≥ 7.
 var InferenceClassNames = [8]string{
 	"NOMINAL", "POWER_ANOMALY", "THERMAL_EVENT", "ATTITUDE_INSTABILITY",
 	"RF_DEGRADATION", "ECLIPSE_ENTRY", "ECLIPSE_COMPUTE", "UNKNOWN",
 }
 
-// InferenceClassName returns the label for a class byte, defaulting to "unknown"
-// for any value ≥ 7.
 func InferenceClassName(class uint8) string {
 	if int(class) < len(InferenceClassNames) {
 		return InferenceClassNames[class]
@@ -94,46 +86,34 @@ func InferenceClassName(class uint8) string {
 	return "UNKNOWN"
 }
 
-// Telemetry holds the decoded telemetry fields from a Zenith-Link frame.
-// Zero value for a field means the field was absent unless the corresponding
-// presence bit is set.
 type Telemetry struct {
 	Sequence  uint16
 	Timestamp uint32
 	Flags     uint8
 	Presence  uint16
 
-	// Position (present when PresencePosition bit is set).
-	LatE7 int32 // latitude  × 1e7
-	LonE7 int32 // longitude × 1e7
-	AltM  int32 // altitude  [m]
+	LatE7 int32
+	LonE7 int32
+	AltM  int32
 
-	// Attitude (present when PresenceAttitude bit is set).
-	AttRoll  int16 // [0.01 deg]
-	AttPitch int16 // [0.01 deg]
-	AttYaw   int16 // [0.01 deg]
+	AttRoll  int16
+	AttPitch int16
+	AttYaw   int16
 
-	// Angular velocity (present when PresenceAngVel bit is set).
-	AngVelX int16 // [0.01 deg/s]
-	AngVelY int16 // [0.01 deg/s]
-	AngVelZ int16 // [0.01 deg/s]
+	AngVelX int16
+	AngVelY int16
+	AngVelZ int16
 
-	// Power (individual presence bits).
-	BatV   uint16 // battery voltage [mV]
-	SolarV uint16 // solar voltage [mV]
+	BatV   uint16
+	SolarV uint16
 
-	// Environmental.
-	TempC int16 // temperature [0.01 °C]
-	RSSI  int16 // RSSI [dBm × 10]
+	TempC int16
+	RSSI  int16
 
-	// Onboard AI inference result (present when PresenceInference bit is set).
-	InferenceClass uint8 // 0–6; see InferenceClassNames
-	InferenceConf  uint8 // confidence [0=0%, 255≈100%]
+	InferenceClass uint8
+	InferenceConf  uint8
 }
 
-// Encode serialises a Telemetry struct into a Zenith-Link v2 frame and
-// appends the 32-byte HMAC-SHA256 trailer using hmacKey.
-// hmacKey must not be nil or empty.
 func Encode(tm Telemetry, hmacKey []byte) ([]byte, error) {
 	if len(hmacKey) == 0 {
 		return nil, errors.Wrap(errors.ErrHMACFailure, errors.New("HMAC key must not be empty"))
@@ -144,17 +124,14 @@ func Encode(tm Telemetry, hmacKey []byte) ([]byte, error) {
 
 	buf := make([]byte, 0, totalSize)
 
-	// ─── Header ──────────────────────────────────────────────────────────────
 	buf = binary.BigEndian.AppendUint16(buf, Magic)
 	buf = append(buf, Version)
 	buf = append(buf, tm.Flags)
 	buf = binary.BigEndian.AppendUint16(buf, tm.Sequence)
 	buf = binary.BigEndian.AppendUint32(buf, tm.Timestamp)
 
-	// ─── Presence bitmask ────────────────────────────────────────────────────
 	buf = binary.BigEndian.AppendUint16(buf, tm.Presence)
 
-	// ─── Payload ─────────────────────────────────────────────────────────────
 	if tm.Presence&PresencePosition != 0 {
 		buf = binary.BigEndian.AppendUint32(buf, uint32(tm.LatE7))
 		buf = binary.BigEndian.AppendUint32(buf, uint32(tm.LonE7))
@@ -186,7 +163,6 @@ func Encode(tm Telemetry, hmacKey []byte) ([]byte, error) {
 		buf = append(buf, tm.InferenceClass, tm.InferenceConf)
 	}
 
-	// ─── HMAC-SHA256 trailer ─────────────────────────────────────────────────
 	mac := hmac.New(sha256.New, hmacKey)
 	mac.Write(buf)
 	buf = mac.Sum(buf)
@@ -194,10 +170,6 @@ func Encode(tm Telemetry, hmacKey []byte) ([]byte, error) {
 	return buf, nil
 }
 
-// Decode parses and authenticates a Zenith-Link v2 frame.
-// Returns ErrHMACFailure if the HMAC does not match.
-// Returns ErrBadMagic if the magic number is wrong.
-// Returns ErrBadVersion if the version byte is not 2.
 func Decode(b []byte, hmacKey []byte) (Telemetry, error) {
 	if len(hmacKey) == 0 {
 		return Telemetry{}, errors.Wrap(errors.ErrHMACFailure, errors.New("HMAC key must not be empty"))
@@ -207,7 +179,6 @@ func Decode(b []byte, hmacKey []byte) (Telemetry, error) {
 			errors.New("frame shorter than minimum Zenith-Link size"))
 	}
 
-	// ─── HMAC verification (before any other parsing) ─────────────────────
 	bodyEnd := len(b) - HMACSize
 	mac := hmac.New(sha256.New, hmacKey)
 	mac.Write(b[:bodyEnd])
@@ -216,7 +187,6 @@ func Decode(b []byte, hmacKey []byte) (Telemetry, error) {
 		return Telemetry{}, errors.ErrHMACFailure
 	}
 
-	// ─── Header ──────────────────────────────────────────────────────────────
 	magic := binary.BigEndian.Uint16(b[0:])
 	if magic != Magic {
 		return Telemetry{}, errors.Wrap(errors.ErrBadMagic,
@@ -233,10 +203,8 @@ func Decode(b []byte, hmacKey []byte) (Telemetry, error) {
 		Timestamp: binary.BigEndian.Uint32(b[6:]),
 	}
 
-	// ─── Presence bitmask ────────────────────────────────────────────────────
 	tm.Presence = binary.BigEndian.Uint16(b[HeaderSize:])
 
-	// Verify payload length matches presence bits.
 	expectedPayload := presencePayloadSize(tm.Presence)
 	actualPayload := bodyEnd - HeaderSize - PresenceSize
 	if actualPayload != expectedPayload {
@@ -244,7 +212,6 @@ func Decode(b []byte, hmacKey []byte) (Telemetry, error) {
 			errors.New("payload length does not match presence bitmask"))
 	}
 
-	// ─── Payload ─────────────────────────────────────────────────────────────
 	pos := HeaderSize + PresenceSize
 
 	if tm.Presence&PresencePosition != 0 {
@@ -295,18 +262,16 @@ func Decode(b []byte, hmacKey []byte) (Telemetry, error) {
 	return tm, nil
 }
 
-// presencePayloadSize returns the number of payload bytes required for the
-// given presence bitmask.
 func presencePayloadSize(presence uint16) int {
 	size := 0
 	if presence&PresencePosition != 0 {
-		size += 12 // int32 × 3
+		size += 12
 	}
 	if presence&PresenceAttitude != 0 {
-		size += 6 // int16 × 3
+		size += 6
 	}
 	if presence&PresenceAngVel != 0 {
-		size += 6 // int16 × 3
+		size += 6
 	}
 	if presence&PresenceBatV != 0 {
 		size += 2
@@ -321,7 +286,7 @@ func presencePayloadSize(presence uint16) int {
 		size += 2
 	}
 	if presence&PresenceInference != 0 {
-		size += 2 // uint8 class + uint8 conf
+		size += 2
 	}
 	return size
 }

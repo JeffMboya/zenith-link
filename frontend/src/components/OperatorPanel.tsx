@@ -85,7 +85,7 @@ export function OperatorPanel({ primaryOnline, primarySatId, tleSource }: Props)
   const relay1 = useRelayStatus('/relay/health', '/relay/windows')
   const relay2 = useRelayStatus('/relay2/health', '/relay2/windows')
 
-  // Events polling — active regardless of tab so badge count stays live
+  
   useEffect(() => {
     let timer: ReturnType<typeof setTimeout>
     async function poll() {
@@ -95,7 +95,7 @@ export function OperatorPanel({ primaryOnline, primarySatId, tleSource }: Props)
           const data = await res.json() as AutonomousEvent[] | null
           if (Array.isArray(data)) setEvents(data.slice(0, 20))
         }
-      } catch { /* keep last */ }
+      } catch {  }
       timer = setTimeout(poll, 3000)
     }
     poll()
@@ -133,7 +133,7 @@ export function OperatorPanel({ primaryOnline, primarySatId, tleSource }: Props)
       overflow: 'hidden',
       display: 'flex', flexDirection: 'column',
     }}>
-      {/* Toggle button — always visible in the collapsed strip */}
+      
       <button
         onClick={() => setOpen(o => !o)}
         title={open ? 'Collapse panel' : 'Expand panel'}
@@ -162,7 +162,7 @@ export function OperatorPanel({ primaryOnline, primarySatId, tleSource }: Props)
         )}
       </button>
 
-      {/* Tab bar — only when open */}
+      
       {open && (
         <div style={{ display: 'flex', borderBottom: '1px solid var(--border)', flexShrink: 0 }}>
           {TABS.map(t => (
@@ -194,14 +194,14 @@ export function OperatorPanel({ primaryOnline, primarySatId, tleSource }: Props)
         </div>
       )}
 
-      {/* Content area */}
+      
       {open && (
         <div style={{ flex: 1, overflowY: 'auto', padding: '8px 0' }}>
 
-          {/* ── FLEET ── */}
+          
           {tab === 'FLEET' && (
             <div>
-              {/* Primary spacecraft */}
+              
               <div style={{ padding: '6px 14px 4px', color: 'var(--text-dim)', fontSize: 7, letterSpacing: 2 }}>
                 PRIMARY SPACECRAFT
               </div>
@@ -231,7 +231,7 @@ export function OperatorPanel({ primaryOnline, primarySatId, tleSource }: Props)
                 </div>
               </div>
 
-              {/* ISL relay nodes */}
+              
               <div style={{ padding: '10px 14px 4px', color: 'var(--text-dim)', fontSize: 7, letterSpacing: 2 }}>
                 ISL RELAY NODES
               </div>
@@ -264,7 +264,7 @@ export function OperatorPanel({ primaryOnline, primarySatId, tleSource }: Props)
                 </div>
               ))}
 
-              {/* Constellation note */}
+              
               <div style={{
                 margin: '10px 14px 0',
                 padding: '8px 10px',
@@ -283,7 +283,7 @@ export function OperatorPanel({ primaryOnline, primarySatId, tleSource }: Props)
             </div>
           )}
 
-          {/* ── EVENTS ── */}
+          
           {tab === 'EVENTS' && (
             <div>
               <div style={{ padding: '0 14px 8px', color: 'var(--text-dim)', fontSize: 7, letterSpacing: 2 }}>

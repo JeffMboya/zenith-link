@@ -5,19 +5,18 @@ export interface ConstellationSat {
   lat: number
   lon: number
   alt_m: number
-  plane: string       // 'A'|'B'|'C'|'D' for simulated; group name for TLE
+  plane: string       
   source: 'sim' | 'tle'
 }
 
 export interface ConstellationState {
   satellites: ConstellationSat[]
   source: 'sim' | 'tle'
-  group: string       // '' for sim, e.g. 'stations' | 'starlink' for TLE
+  group: string       
 }
 
 const EMPTY: ConstellationState = { satellites: [], source: 'sim', group: '' }
 
-// Polls /constellation at 1Hz.
 export function useConstellation(): ConstellationState {
   const [state, setState] = useState<ConstellationState>(EMPTY)
   const timer = useRef<ReturnType<typeof setTimeout> | null>(null)
@@ -33,7 +32,7 @@ export function useConstellation(): ConstellationState {
         if (active && d.satellites?.length) {
           setState({ satellites: d.satellites, source: d.source, group: d.group })
         }
-      } catch { /* keep last */ }
+      } catch {  }
       if (active) timer.current = setTimeout(tick, 1000)
     }
 

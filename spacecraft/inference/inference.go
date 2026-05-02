@@ -18,7 +18,6 @@ import (
 	"sync"
 )
 
-// Class identifies the spacecraft health classification output by the detector.
 type Class uint8
 
 const (
@@ -31,13 +30,11 @@ const (
 	ECLIPSE_COMPUTE      Class = 6
 )
 
-// ClassNames maps Class values to labels. Index-stable — used in the wire protocol.
 var ClassNames = [7]string{
 	"NOMINAL", "POWER_ANOMALY", "THERMAL_EVENT",
 	"ATTITUDE_INSTABILITY", "RF_DEGRADATION", "ECLIPSE_ENTRY", "ECLIPSE_COMPUTE",
 }
 
-// ClassName returns the label for a Class value.
 func ClassName(c Class) string {
 	if int(c) < len(ClassNames) {
 		return ClassNames[c]
@@ -45,90 +42,73 @@ func ClassName(c Class) string {
 	return "UNKNOWN"
 }
 
-// Frame holds engineering-unit telemetry values for one detector sample.
-// Callers must convert raw wire-protocol integers to engineering units before pushing.
 type Frame struct {
-	BatV      float64 // battery voltage [mV]
-	SolarV    float64 // solar panel voltage [mV]
-	TempC     float64 // chassis temperature [°C]
-	RSSI      float64 // received signal strength [dBm]
-	AttRoll   float64 // roll angle [deg]
-	AttPitch  float64 // pitch angle [deg]
-	AngVelMag float64 // angular velocity magnitude [deg/s]
+	BatV      float64
+	SolarV    float64
+	TempC     float64
+	RSSI      float64
+	AttRoll   float64
+	AttPitch  float64
+	AngVelMag float64
 }
 
-// ChannelDetail holds the z-score and baseline stats for one telemetry channel.
 type ChannelDetail struct {
-	Z    float64 `json:"z"`    // current z-score against rolling baseline
-	Mean float64 `json:"mean"` // rolling mean
-	Std  float64 `json:"std"`  // rolling std (floored)
+	Z    float64 `json:"z"`
+	Mean float64 `json:"mean"`
+	Std  float64 `json:"std"`
 }
 
-// ResultChannels carries per-channel z-scores for the UI tooltip and pre-fault logic.
-// Fixed struct (not map) — zero heap allocation per telemetry frame.
 type ResultChannels struct {
 	BatV     ChannelDetail `json:"bat_v"`
 	ChassisC ChannelDetail `json:"chassis_c"`
 	RSSI     ChannelDetail `json:"rssi"`
-	AttVel   ChannelDetail `json:"att_vel"` // angular velocity magnitude z-score
+	AttVel   ChannelDetail `json:"att_vel"`
 }
 
-// Result is the detector output for one frame.
 type Result struct {
 	Class          Class
-	Confidence     uint8 // 0–255 (255 ≈ 100%)
+	Confidence     uint8
 	Channels       ResultChannels
-	PreFaultClass  string  // non-empty when a channel is trending toward threshold
-	PreFaultChan   string  // which channel is trending ("bat_v", "chassis_c", etc.)
-	ModelError     float64 // autoencoder reconstruction MSE (0 until warmed)
-	ModelThreshold float64 // calibrated MSE threshold (0 until warmup complete)
+	PreFaultClass  string
+	PreFaultChan   string
+	ModelError     float64
+	ModelThreshold float64
 }
 
 const (
 	windowSize    = 30
 	zThreshold    = 2.0
-	eclipseSettle = 3   // consecutive shadow frames before ECLIPSE_COMPUTE fires
-	preFaultSlope = 0.3 // z-score increase per frame that triggers a PRE-FAULT warning
+	eclipseSettle = 3
+	preFaultSlope = 0.3
 )
 
-// Per-channel stddev floors prevent z-score explosions on near-constant signals
-// (e.g. BatV step-functions between 7400 and 7600 mV at eclipse boundaries).
 const (
-	stdFloorBatV  = 50.0 // mV
-	stdFloorTempC = 1.0  // °C
-	stdFloorRSSI  = 3.0  // dBm
-	stdFloorAtt   = 1.0  // deg/s (applied to AngVelMag)
+	stdFloorBatV  = 50.0
+	stdFloorTempC = 1.0
+	stdFloorRSSI  = 3.0
+	stdFloorAtt   = 1.0
 )
 
 type chanStats struct{ mean, std float64 }
 
-// zHistory tracks the last 3 z-scores per channel to detect rising trends.
-// Indices: 0=BatV, 1=ChassisC, 2=RSSI, 3=AttVel. Oldest→newest left→right.
-// Ring: head points to the slot for the next write (oldest value).
 const zHistLen = 3
 
-// Detector maintains a rolling telemetry baseline and classifies spacecraft health.
-// Safe for concurrent use.
 type Detector struct {
 	mu            sync.Mutex
 	history       [windowSize]Frame
 	count         int
 	head          int
-	eclipseStreak int // consecutive frames with SolarV < 100 mV
+	eclipseStreak int
 	lastResult    Result
-	zHistory      [4][zHistLen]float64 // ring buffer: [channel][frame], oldest first
-	zHead         int                  // next write slot in zHistory ring
-	ae            *Autoencoder         // onboard neural-net anomaly supplement
+	zHistory      [4][zHistLen]float64
+	zHead         int
+	ae            *Autoencoder
 }
 
-// NewDetector creates a Detector with a freshly initialised Autoencoder.
-// Use this instead of a bare struct literal so the autoencoder is ready to train.
 func NewDetector() *Detector {
 	return &Detector{ae: newAutoencoder()}
 }
 
-// Push adds a telemetry frame to the rolling window and returns the health classification.
-// The first 4 frames return NOMINAL with reduced confidence while the window warms up.
 func (d *Detector) Push(f Frame) Result {
 	d.mu.Lock()
 	defer d.mu.Unlock()
@@ -153,17 +133,12 @@ func (d *Detector) Push(f Frame) Result {
 	return d.lastResult
 }
 
-// LastResult returns the cached result from the most recent Push call.
-// Does not re-classify. Returns NOMINAL/128 if no frame has been pushed yet.
 func (d *Detector) LastResult() Result {
 	d.mu.Lock()
 	defer d.mu.Unlock()
 	return d.lastResult
 }
 
-// Latest returns the classification of the last pushed frame without modifying state.
-// Returns NOMINAL/128 if fewer than 5 frames have been pushed.
-// Deprecated: use LastResult() for the cached result without re-classification.
 func (d *Detector) Latest() Result {
 	d.mu.Lock()
 	defer d.mu.Unlock()
@@ -175,14 +150,12 @@ func (d *Detector) Latest() Result {
 }
 
 func (d *Detector) classify(f Frame) Result {
-	// Train the autoencoder on every frame — including eclipse frames — to maintain
-	// training continuity across all operating modes.
+
 	var aeMSE float64
 	if d.ae != nil {
 		aeMSE, _ = d.ae.Push(f.BatV, f.TempC, f.RSSI, f.AngVelMag)
 	}
 
-	// Eclipse is detected from SolarV — unambiguous and avoids BatV transition noise.
 	if f.SolarV < 100 {
 		var res Result
 		if d.eclipseStreak >= eclipseSettle {
@@ -197,17 +170,16 @@ func (d *Detector) classify(f Frame) Result {
 		return res
 	}
 
-	batSt  := d.rollingStats(func(fr Frame) float64 { return fr.BatV }, stdFloorBatV)
+	batSt := d.rollingStats(func(fr Frame) float64 { return fr.BatV }, stdFloorBatV)
 	tempSt := d.rollingStats(func(fr Frame) float64 { return fr.TempC }, stdFloorTempC)
 	rssiSt := d.rollingStats(func(fr Frame) float64 { return fr.RSSI }, stdFloorRSSI)
-	attSt  := d.rollingStats(func(fr Frame) float64 { return fr.AngVelMag }, stdFloorAtt)
+	attSt := d.rollingStats(func(fr Frame) float64 { return fr.AngVelMag }, stdFloorAtt)
 
-	batZ  := (f.BatV - batSt.mean) / batSt.std
+	batZ := (f.BatV - batSt.mean) / batSt.std
 	tempZ := (f.TempC - tempSt.mean) / tempSt.std
 	rssiZ := (f.RSSI - rssiSt.mean) / rssiSt.std
-	attZ  := (f.AngVelMag - attSt.mean) / attSt.std
+	attZ := (f.AngVelMag - attSt.mean) / attSt.std
 
-	// Update zHistory ring — channel order: BatV, ChassisC, RSSI, AttVel.
 	d.zHistory[0][d.zHead] = batZ
 	d.zHistory[1][d.zHead] = tempZ
 	d.zHistory[2][d.zHead] = rssiZ
@@ -221,7 +193,6 @@ func (d *Detector) classify(f Frame) Result {
 		AttVel:   ChannelDetail{Z: attZ, Mean: attSt.mean, Std: attSt.std},
 	}
 
-	// Pre-fault detection: check if any channel's z-score slope is rising toward threshold.
 	preFaultClass, preFaultChan := d.checkPreFault()
 
 	var res Result
@@ -243,9 +214,6 @@ func (d *Detector) classify(f Frame) Result {
 	res.PreFaultClass = preFaultClass
 	res.PreFaultChan = preFaultChan
 
-	// Autoencoder supplement: if the network is warmed and reconstruction error
-	// exceeds the calibrated threshold, flag MODEL_ANOMALY on an otherwise-NOMINAL frame.
-	// This catches correlated multi-channel drift that the per-channel z-score misses.
 	if d.ae != nil {
 		res.ModelError = aeMSE
 		res.ModelThreshold = d.ae.Threshold()
@@ -258,19 +226,16 @@ func (d *Detector) classify(f Frame) Result {
 	return res
 }
 
-// checkPreFault checks the zHistory ring for a rising slope on any channel.
-// Returns the anomaly class and channel name if a trend is detected, empty strings otherwise.
-// Caller must hold d.mu.
 func (d *Detector) checkPreFault() (class, chanName string) {
-	// Need at least zHistLen pushes to have a valid slope.
+
 	if d.count < zHistLen+5 {
 		return "", ""
 	}
-	// Read oldest→newest from ring. zHead points to the next write slot (oldest value).
+
 	type channelCheck struct {
-		name      string
-		class     string
-		negate    bool // true = negative direction is anomalous (BatV, RSSI drop)
+		name   string
+		class  string
+		negate bool
 	}
 	checks := [4]channelCheck{
 		{"bat_v", "POWER_ANOMALY", true},
@@ -279,9 +244,9 @@ func (d *Detector) checkPreFault() (class, chanName string) {
 		{"att_vel", "ATTITUDE_INSTABILITY", false},
 	}
 	for i, ch := range checks {
-		z0 := d.zHistory[i][d.zHead]                    // oldest
-		z1 := d.zHistory[i][(d.zHead+1)%zHistLen]       // middle
-		z2 := d.zHistory[i][(d.zHead+2)%zHistLen]       // newest (just written)
+		z0 := d.zHistory[i][d.zHead]
+		z1 := d.zHistory[i][(d.zHead+1)%zHistLen]
+		z2 := d.zHistory[i][(d.zHead+2)%zHistLen]
 		slope := (z2 - z0) / 2.0
 		if ch.negate {
 			slope = -slope

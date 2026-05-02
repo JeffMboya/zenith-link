@@ -10,7 +10,6 @@ import (
 
 var _ groundstation.Service = (*Service)(nil)
 
-// Service is a mock of the groundstation Service interface.
 type Service struct {
 	mock.Mock
 }

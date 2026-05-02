@@ -27,15 +27,14 @@ const GS_COLORS: Record<string, string> = {
   'Punta Arenas': '#c060f0',
 }
 
-// Colour per orbital plane (simulated) or TLE group
 const PLANE_COLOR: Record<string, Color> = {
-  // Simulated planes
+  
   A:   Color.CYAN.withAlpha(0.9),
   B:   Color.fromCssColorString('#00e878').withAlpha(0.9),
   C:   Color.fromCssColorString('#f0a800').withAlpha(0.9),
   D:   Color.fromCssColorString('#c060f0').withAlpha(0.9),
-  ISL: Color.fromCssColorString('#f06040').withAlpha(0.9), // relay satellites — orange-red
-  // TLE groups — single colour per group
+  ISL: Color.fromCssColorString('#f06040').withAlpha(0.9), 
+  
   stations: Color.WHITE.withAlpha(0.95),
   starlink: Color.fromCssColorString('#00c8f0').withAlpha(0.8),
   planet:   Color.fromCssColorString('#00e8c0').withAlpha(0.8),
@@ -80,9 +79,9 @@ export function Globe3D({ data, orbitalPos, constellation, selectedSatId, onSele
   const satelliteIdsRef = useRef<Set<string>>(new Set())
   const forwardTrack = useForwardTrack()
 
-  // Imagery + camera — no dependency array so it retries every render until the
-  // Cesium viewer is actually initialised (viewerRef.current may be null on first paint).
-  // imageryInit.current prevents it from running more than once.
+  
+  
+  
   useEffect(() => {
     if (imageryInit.current) return
     const viewer = viewerRef.current?.cesiumElement
@@ -100,15 +99,15 @@ export function Globe3D({ data, orbitalPos, constellation, selectedSatId, onSele
     })
   })
 
-  // Keep satellite IDs set in sync so click handler can identify sat entities.
+  
   useEffect(() => {
     const ids = new Set(constellation.map(s => s.id))
     ids.add(primarySatId)
     satelliteIdsRef.current = ids
   }, [constellation, primarySatId])
 
-  // Click handler — re-registers when onSelectSat changes so the closure is always fresh.
-  // Also no-ops until the viewer is ready.
+  
+  
   useEffect(() => {
     if (clickHandlerRef.current) {
       clickHandlerRef.current.destroy()
@@ -133,12 +132,12 @@ export function Globe3D({ data, orbitalPos, constellation, selectedSatId, onSele
     }
   }, [onSelectSat])
 
-  // In TLE mode, use the primary constellation satellite's real position.
+  
   const primaryConstellationSat = tleSource === 'tle'
     ? constellation.find(s => s.id === primarySatId)
     : null
 
-  // Fly to satellite once we have the first position — full globe view
+  
   const firstPos = primaryConstellationSat
     ? { lat: primaryConstellationSat.lat, lon: primaryConstellationSat.lon, alt: primaryConstellationSat.alt_m }
     : orbitalPos ?? (data?.satellite
@@ -156,7 +155,7 @@ export function Globe3D({ data, orbitalPos, constellation, selectedSatId, onSele
     })
   }, [firstPos])
 
-  // Primary satellite position: real TLE in TLE mode, simulated propagator in sim mode
+  
   const satLat = primaryConstellationSat?.lat ?? orbitalPos?.lat ?? data?.satellite.latitude ?? 0
   const satLon = primaryConstellationSat?.lon ?? orbitalPos?.lon ?? data?.satellite.longitude ?? 0
   const satAlt = primaryConstellationSat?.alt_m ?? orbitalPos?.alt ?? data?.satellite.altitude ?? 550_000
@@ -185,7 +184,7 @@ export function Globe3D({ data, orbitalPos, constellation, selectedSatId, onSele
       infoBox={false}
       style={{ position: 'fixed', top: 0, left: 0, width: '100%', height: '100%' }}
     >
-      {/* Forward track — white, low alpha; stands out against both ocean and land */}
+      
       {futureTrack.length >= 2 && (
         <Entity name="forward-track">
           <PolylineGraphics
@@ -196,7 +195,7 @@ export function Globe3D({ data, orbitalPos, constellation, selectedSatId, onSele
         </Entity>
       )}
 
-      {/* Past ground track — white, brighter */}
+      
       {pastTrack.length >= 2 && (
         <Entity name="past-track">
           <PolylineGraphics
@@ -207,7 +206,7 @@ export function Globe3D({ data, orbitalPos, constellation, selectedSatId, onSele
         </Entity>
       )}
 
-      {/* Primary satellite — real position (TLE) or simulated (propagator) */}
+      
       <Entity position={satPos} name={primarySatId}>
         <PointGraphics
           color={Color.CYAN}
@@ -229,7 +228,7 @@ export function Globe3D({ data, orbitalPos, constellation, selectedSatId, onSele
         />
       </Entity>
 
-      {/* Ground stations */}
+      
       {data?.ground_stations.map(gs => (
         <Entity
           key={gs.name}
@@ -253,7 +252,7 @@ export function Globe3D({ data, orbitalPos, constellation, selectedSatId, onSele
         </Entity>
       ))}
 
-      {/* Contact lines */}
+      
       {data?.ground_stations.filter(gs => gs.inView).map(gs => (
         <Entity key={`link-${gs.name}`} name={`link-${gs.name}`}>
           <PolylineGraphics
@@ -264,7 +263,7 @@ export function Globe3D({ data, orbitalPos, constellation, selectedSatId, onSele
         </Entity>
       ))}
 
-      {/* ISL mesh beams — AT-1 ↔ SC-2 ↔ SC-3 */}
+      
       {(() => {
         const sc2 = constellation.find(s => s.id === 'SC-2')
         const sc3 = constellation.find(s => s.id === 'SC-3')
@@ -304,11 +303,11 @@ export function Globe3D({ data, orbitalPos, constellation, selectedSatId, onSele
         )
       })()}
 
-      {/* Constellation members — dot only by default; label only on selected satellite */}
+      
       {constellation.filter(s => s.id !== primarySatId).map(s => {
         const color = PLANE_COLOR[s.plane] ?? Color.WHITE.withAlpha(0.7)
         const isSelected = s.id === selectedSatId
-        // For TLE satellites, shorten the display name (e.g. "ISS (ZARYA)" → "ISS")
+        
         const shortName = s.id.split(' ')[0].replace(/[()]/g, '').slice(0, 8)
         return (
           <Entity

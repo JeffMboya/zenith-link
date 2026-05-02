@@ -13,18 +13,16 @@ import (
 
 func defaultHeader() tmframe.PrimaryHeader {
 	return tmframe.PrimaryHeader{
-		SCID:                    0x5A,
-		VCID:                    0,
-		OCFFlag:                 false,
-		MasterChannelFrameCount: 0,
+		SCID:                     0x5A,
+		VCID:                     0,
+		OCFFlag:                  false,
+		MasterChannelFrameCount:  0,
 		VirtualChannelFrameCount: 0,
-		SyncFlag:                false,
-		SegmentLengthID:         0b11,
-		FirstHeaderPointer:      0,
+		SyncFlag:                 false,
+		SegmentLengthID:          0b11,
+		FirstHeaderPointer:       0,
 	}
 }
-
-// ─── EncodePrimary ──────────────────────────────────────────────────────────
 
 func TestEncodePrimary(t *testing.T) {
 	tests := []struct {
@@ -36,14 +34,7 @@ func TestEncodePrimary(t *testing.T) {
 		{
 			desc: "SCID=0x5A VCID=0 no OCF FHP=0",
 			hdr:  defaultHeader(),
-			// Byte 0-1: 00|01011010|000|0 = 0x0590?
-			// TFVN(2)=00, SCID(10)=0x5A=0b01011010, VCID(3)=000, OCF=0
-			// w0 = 00 | 0001011010 | 000 | 0
-			//    = 0b00_0001011010_000_0 = 0x0590? Let me recalculate:
-			// bits: 00 0001011010 000 0
-			// = 0000 0101 1010 0000 = 0x05A0
-			// Byte 2: MCFC=0, Byte 3: VCFC=0
-			// Byte 4-5: 0|0|0|11|000_0000_0000 = 0b0_0_0_11_000_0000_0000 = 0x1800
+
 			want: [6]byte{0x05, 0xA0, 0x00, 0x00, 0x18, 0x00},
 		},
 		{
@@ -55,7 +46,7 @@ func TestEncodePrimary(t *testing.T) {
 				SegmentLengthID:    0b11,
 				FirstHeaderPointer: 0,
 			},
-			// w0 bit[0] = 1
+
 			want: [6]byte{0x05, 0xA1, 0x00, 0x00, 0x18, 0x00},
 		},
 		{
@@ -65,17 +56,16 @@ func TestEncodePrimary(t *testing.T) {
 				SegmentLengthID:    0b11,
 				FirstHeaderPointer: tmframe.FHPNoPacketStart,
 			},
-			// Byte 4-5 lower 11 bits = 0x07FE
-			// With SegLenID=0b11: 0b0_0_0_11_111_1111_1110 = 0x1FFE
+
 			want: [6]byte{0x05, 0xA0, 0x00, 0x00, 0x1F, 0xFE},
 		},
 		{
 			desc: "MCFC and VCFC incremented",
 			hdr: tmframe.PrimaryHeader{
-				SCID:                    0x001,
-				MasterChannelFrameCount: 100,
+				SCID:                     0x001,
+				MasterChannelFrameCount:  100,
 				VirtualChannelFrameCount: 200,
-				SegmentLengthID:         0b11,
+				SegmentLengthID:          0b11,
 			},
 			want: [6]byte{0x00, 0x10, 0x64, 0xC8, 0x18, 0x00},
 		},
@@ -103,8 +93,6 @@ func TestEncodePrimary(t *testing.T) {
 		})
 	}
 }
-
-// ─── DecodePrimary ──────────────────────────────────────────────────────────
 
 func TestDecodePrimary(t *testing.T) {
 	tests := []struct {
@@ -161,8 +149,6 @@ func TestDecodePrimary(t *testing.T) {
 		})
 	}
 }
-
-// ─── Encode / Decode ────────────────────────────────────────────────────────
 
 func TestEncode(t *testing.T) {
 	hdr := defaultHeader()
@@ -309,13 +295,13 @@ func TestDecode(t *testing.T) {
 
 func TestEncodeDecodeRoundTrip(t *testing.T) {
 	hdr := tmframe.PrimaryHeader{
-		SCID:                    0x5A,
-		VCID:                    2,
-		OCFFlag:                 false,
-		MasterChannelFrameCount: 77,
+		SCID:                     0x5A,
+		VCID:                     2,
+		OCFFlag:                  false,
+		MasterChannelFrameCount:  77,
 		VirtualChannelFrameCount: 33,
-		SegmentLengthID:         0b11,
-		FirstHeaderPointer:      0,
+		SegmentLengthID:          0b11,
+		FirstHeaderPointer:       0,
 	}
 	f := tmframe.TransferFrame{
 		Primary:   hdr,
@@ -332,11 +318,9 @@ func TestEncodeDecodeRoundTrip(t *testing.T) {
 	assert.Equal(t, hdr.VCID, decoded.Primary.VCID)
 	assert.Equal(t, hdr.MasterChannelFrameCount, decoded.Primary.MasterChannelFrameCount)
 	assert.Equal(t, hdr.VirtualChannelFrameCount, decoded.Primary.VirtualChannelFrameCount)
-	// Data field is zero-padded to fill the frame.
+
 	assert.Equal(t, f.DataField, decoded.DataField[:len(f.DataField)])
 }
-
-// ─── ExtractSpacePackets ─────────────────────────────────────────────────────
 
 func buildSpacePacket(apid uint16, userData []byte) []byte {
 	pkt := spacepacket.SpacePacket{
@@ -383,7 +367,7 @@ func TestExtractSpacePackets(t *testing.T) {
 		},
 		{
 			desc: "pending fragment completed by this frame",
-			// Split pkt1 at byte 5: first 5 bytes as pending
+
 			pending:   pkt1[:5],
 			dataField: pkt1[5:],
 			fhp:       tmframe.FHPNoPacketStart,
@@ -392,7 +376,7 @@ func TestExtractSpacePackets(t *testing.T) {
 		{
 			desc:      "FHP skips leading fragment bytes",
 			dataField: append([]byte{0xFF, 0xFF}, pkt1...),
-			fhp:       2, // first 2 bytes are tail of previous packet
+			fhp:       2,
 			wantPkts:  1,
 		},
 		{
@@ -403,9 +387,8 @@ func TestExtractSpacePackets(t *testing.T) {
 			wantPkts:  0,
 		},
 		{
-			desc:      "complete pending packet (remaining=0) emits packet without error",
-			// pkt1 is 9 bytes; passing it as pending with empty dataField means
-			// remaining=0 → packet is already complete and should be emitted.
+			desc: "complete pending packet (remaining=0) emits packet without error",
+
 			pending:   append([]byte{}, pkt1...),
 			dataField: []byte{},
 			fhp:       tmframe.FHPNoPacketStart,
@@ -413,8 +396,7 @@ func TestExtractSpacePackets(t *testing.T) {
 		},
 		{
 			desc: "malformed pending packet: more bytes buffered than declared length — returns error",
-			// pkt1 is 9 bytes with PacketDataLength=2 (totalLen=9).
-			// Appending one extra byte gives len(pending)=10 > totalLen=9 → remaining=-1 → error.
+
 			pending:   append(append([]byte{}, pkt1...), 0xFF),
 			dataField: []byte{},
 			fhp:       tmframe.FHPNoPacketStart,

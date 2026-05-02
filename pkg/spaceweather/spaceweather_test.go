@@ -6,8 +6,6 @@ import (
 	"github.com/absmach/zenith-link/pkg/spaceweather"
 )
 
-// TestRSSIAdjustmentDB verifies the dB adjustment table for the full Kp range.
-// No network calls — the monitor is created but never started.
 func TestRSSIAdjustmentDB(t *testing.T) {
 	tests := []struct {
 		desc      string
@@ -22,7 +20,7 @@ func TestRSSIAdjustmentDB(t *testing.T) {
 		{desc: "Kp=6 strong — -6 dB", kp: 6, solarFlux: 100, wantDB: -6},
 		{desc: "Kp=7 severe — -10 dB", kp: 7, solarFlux: 100, wantDB: -10},
 		{desc: "Kp=8 severe — -10 dB", kp: 8, solarFlux: 100, wantDB: -10},
-		// High solar flux bonus
+
 		{desc: "Kp=3 + solar flux > 180 — +1 dB net", kp: 3, solarFlux: 200, wantDB: 1},
 		{desc: "Kp=5 + solar flux > 180 — -2 dB net", kp: 5, solarFlux: 200, wantDB: -2},
 	}
@@ -30,12 +28,7 @@ func TestRSSIAdjustmentDB(t *testing.T) {
 	for _, tc := range tests {
 		t.Run(tc.desc, func(t *testing.T) {
 			m := spaceweather.NewMonitor()
-			// Inject synthetic conditions without a network fetch via the exported
-			// interface: we call a helper that sets Available=true internally by
-			// wrapping the monitor in a type that exposes InjectForTest.
-			//
-			// Since Conditions is exported and Monitor.Current() returns a copy,
-			// we use the test-helper shim instead of unexported fields.
+
 			spaceweather.InjectForTest(m, tc.kp, tc.solarFlux)
 
 			got := m.RSSIAdjustmentDB()
@@ -47,7 +40,6 @@ func TestRSSIAdjustmentDB(t *testing.T) {
 	}
 }
 
-// TestStormLevel verifies all five storm level labels.
 func TestStormLevel(t *testing.T) {
 	tests := []struct {
 		kp   float64
@@ -77,8 +69,6 @@ func TestStormLevel(t *testing.T) {
 	}
 }
 
-// TestConditions_NotAvailableBeforeFirstFetch checks that a freshly created
-// Monitor reports Available=false before any NOAA data has been fetched.
 func TestConditions_NotAvailableBeforeFirstFetch(t *testing.T) {
 	m := spaceweather.NewMonitor()
 	c := m.Current()

@@ -56,10 +56,10 @@ type config struct {
 }
 
 type relayBuffer struct {
-	mu          sync.RWMutex
-	frame       []byte
-	fetchedAt   time.Time
-	upstreamNode string // "SC-2-relay" or "SC-1"
+	mu           sync.RWMutex
+	frame        []byte
+	fetchedAt    time.Time
+	upstreamNode string
 }
 
 func (b *relayBuffer) store(frame []byte, node string) {
@@ -76,7 +76,6 @@ func (b *relayBuffer) load() ([]byte, time.Time, string) {
 	return b.frame, b.fetchedAt, b.upstreamNode
 }
 
-// relay1Health is a minimal subset of Relay-1's /health response.
 type relay1Health struct {
 	BufferHasData bool `json:"buffer_has_data"`
 }
@@ -93,22 +92,16 @@ func main() {
 		os.Exit(1)
 	}
 
-	// Medium-inclination orbit at 550 km, 53°, RAAN=π (180° offset from SC-1).
-	// Fills the coverage gap between ISS-like SC-1 (400 km, 51.6°) and polar
-	// Relay-1 (700 km, 98°), giving the constellation three distinct ground tracks.
-	// MeanAnomaly is adjusted at startup so the first Nairobi contact window
-	// opens within ~90 seconds (offset from Relay-1 by targetLeadSec+30s to stagger).
 	sc3Elements := adjustForEarlyContact(orbital.Elements{
-		SemiMajorAxis: 6_921_000, // 550 km altitude
+		SemiMajorAxis: 6_921_000,
 		Eccentricity:  0.0001,
 		Inclination:   53.0 * math.Pi / 180,
-		RAAN:          math.Pi, // 180° from SC-1, maximising coverage gap fill
+		RAAN:          math.Pi,
 		ArgPerigee:    0.0,
 		MeanAnomaly:   0.0,
 		Epoch:         time.Now().UTC(),
 	}, cfg.GSLat, cfg.GSLon, cfg.MinElevDeg, 90, logger)
-	// Shift half an orbit so SC-3's contact windows are staggered ~47 min after
-	// Relay-1's, halving the maximum blackout window between ISL deliveries.
+
 	sc3Elements.MeanAnomaly = math.Mod(sc3Elements.MeanAnomaly+math.Pi, 2*math.Pi)
 
 	buf := &relayBuffer{}
@@ -136,12 +129,8 @@ func main() {
 		})
 	})
 
-	// /windows returns upcoming ground-station contact windows for SC-3 (Relay-2).
 	mux.HandleFunc("/windows", relayWindowsHandler(sc3Elements, cfg.GSLat, cfg.GSLon, cfg.MinElevDeg))
 
-	// /telemetry returns a live simulated health snapshot of this relay node (SC-3).
-	// Orbital state is propagated from sc3Elements; power and thermal values
-	// reflect the 550 km medium-inclination orbit.
 	mux.HandleFunc("/telemetry", relay2TelemetryHandler(sc3Elements, cfg.RelaySCID))
 
 	srv := &http.Server{
@@ -172,10 +161,6 @@ func main() {
 	_ = srv.Shutdown(shutdownCtx)
 }
 
-// pollLoop fetches frames on a timer, preferring Relay-1 over SC-1 direct.
-// This implements the peer-to-peer routing decision: check whether SC-2 already
-// has a buffered frame before going directly to SC-1. Reduces duplicate polling
-// on the primary spacecraft and demonstrates mesh-layer routing.
 func pollLoop(ctx context.Context, client *http.Client, cfg config, buf *relayBuffer, logger *slog.Logger) {
 	ticker := time.NewTicker(time.Duration(cfg.PollIntervalSec) * time.Second)
 	defer ticker.Stop()
@@ -192,7 +177,6 @@ func pollLoop(ctx context.Context, client *http.Client, cfg config, buf *relayBu
 	}
 }
 
-// fetchBest tries Relay-1 first; falls back to SC-1 if Relay-1 has no data.
 func fetchBest(ctx context.Context, client *http.Client, cfg config, buf *relayBuffer, logger *slog.Logger) {
 	if relay1HasData(ctx, client, cfg.Relay1Addr) {
 		if fetchFrom(ctx, client, cfg.Relay1Addr+"/frame/zenith", "SC-2-relay", buf, logger) {
@@ -236,7 +220,7 @@ func fetchFrom(ctx context.Context, client *http.Client, url, node string, buf *
 	if resp.StatusCode != http.StatusOK {
 		return false
 	}
-	throttled := link.NewThrottle(io.LimitReader(resp.Body, 8192), 20480) // 20 KB/s ISL link budget
+	throttled := link.NewThrottle(io.LimitReader(resp.Body, 8192), 20480)
 	frame, err := io.ReadAll(throttled)
 	if err != nil || len(frame) == 0 {
 		return false
@@ -287,23 +271,19 @@ func forwardLoop(ctx context.Context, client *http.Client, cfg config, elem orbi
 	}
 }
 
-// relay2TelemetryHandler returns a handler that emits a live telemetry snapshot
-// for SC-3, derived from orbital phase at request time. Lets Globe3D and the
-// satellite selector show realistic SC-3 health data without a dedicated radio.
 func relay2TelemetryHandler(elem orbital.Elements, scid uint16) http.HandlerFunc {
-	const orbitalPeriodSec = 5700.0 // 550 km → ~95-min period
+	const orbitalPeriodSec = 5700.0
 
 	return func(w http.ResponseWriter, _ *http.Request) {
 		elapsed := time.Since(elem.Epoch).Seconds()
 		phase := math.Mod(elapsed/orbitalPeriodSec, 1.0)
 
-		// ~35% of orbit in eclipse for 550 km altitude
 		inEclipse := phase > 0.65
 
 		var batV, solarV, tempC float64
 		if inEclipse {
 			solarV = 0
-			// slight discharge and cooling during eclipse shadow
+
 			shadowFrac := (phase - 0.65) / 0.35
 			batV = 7500 - 300*shadowFrac
 			tempC = 18 - 12*shadowFrac
@@ -329,7 +309,6 @@ func relay2TelemetryHandler(elem orbital.Elements, scid uint16) http.HandlerFunc
 	}
 }
 
-// relayWindowsHandler returns upcoming Nairobi contact windows for this relay.
 func relayWindowsHandler(elem orbital.Elements, gsLat, gsLon, minElevDeg float64) http.HandlerFunc {
 	type winRes struct {
 		AOS         time.Time `json:"aos"`
@@ -364,8 +343,6 @@ func relayWindowsHandler(elem orbital.Elements, gsLat, gsLon, minElevDeg float64
 	}
 }
 
-// adjustForEarlyContact advances the mean anomaly so the first Nairobi contact
-// window opens within targetLeadSec seconds of startup. Orbital shape is unchanged.
 func adjustForEarlyContact(elem orbital.Elements, gsLat, gsLon, minElevDeg, targetLeadSec float64, logger *slog.Logger) orbital.Elements {
 	now := time.Now().UTC()
 	windows, err := orbital.ContactWindows(elem, gsLat, gsLon, now, now.Add(120*time.Minute), minElevDeg)

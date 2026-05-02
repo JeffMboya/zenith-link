@@ -5,13 +5,11 @@ package errors
 
 import "errors"
 
-// Error is a string-keyed sentinel with an optional cause chain.
 type Error struct {
 	msg string
 	err error
 }
 
-// New creates a new standalone error.
 func New(msg string) error {
 	return &Error{msg: msg}
 }
@@ -25,8 +23,6 @@ func (e *Error) Error() string {
 
 func (e *Error) Unwrap() error { return e.err }
 
-// Wrap attaches a cause to a sentinel error, returning a new error that
-// preserves both messages in its Error() string.
 func Wrap(sentinel, cause error) error {
 	if sentinel == nil {
 		return cause
@@ -34,7 +30,7 @@ func Wrap(sentinel, cause error) error {
 	if cause == nil {
 		return sentinel
 	}
-	// Unwrap sentinel to its base message so repeated wrapping stays flat.
+
 	var se *Error
 	if errors.As(sentinel, &se) {
 		return &Error{msg: se.msg, err: cause}
@@ -42,9 +38,6 @@ func Wrap(sentinel, cause error) error {
 	return &Error{msg: sentinel.Error(), err: cause}
 }
 
-// Contains reports whether err contains target anywhere in its unwrap chain,
-// matching on the *message* of Error values so the chain survives multiple
-// Wrap calls.
 func Contains(err, target error) bool {
 	if err == nil || target == nil {
 		return err == target
@@ -66,11 +59,8 @@ func Contains(err, target error) bool {
 	return false
 }
 
-// Is implements the errors.Is contract so that errors.Is(Wrap(e, cause), e)
-// returns true.
 func Is(err, target error) bool { return Contains(err, target) }
 
-// Sentinel errors used across the entire Zenith-Link stack.
 var (
 	ErrMalformedFrame   = New("malformed frame")
 	ErrBadMagic         = New("bad magic word")

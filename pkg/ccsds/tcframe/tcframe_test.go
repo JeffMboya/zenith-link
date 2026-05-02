@@ -19,8 +19,6 @@ func defaultHeader() tcframe.PrimaryHeader {
 	}
 }
 
-// ─── EncodePrimary ──────────────────────────────────────────────────────────
-
 func TestEncodePrimary(t *testing.T) {
 	tests := []struct {
 		desc    string
@@ -31,13 +29,7 @@ func TestEncodePrimary(t *testing.T) {
 		{
 			desc: "basic TC frame SCID=0x5A VCID=0 N(S)=0",
 			hdr:  defaultHeader(),
-			// Byte 0: 00|0|0|00|00 = 0x00 (TFVN=00, BYP=0, CTRL=0, RSVD=00, SCID9-8=00)
-			// Wait: SCID=0x5A=0b01011010, SCID[9:8]=0b00, SCID[7:0]=0b01011010=0x5A
-			// Byte 0: 00_0_0_00_00 = 0x00
-			// Byte 1: 0x5A
-			// Byte 2: VCID=0x00
-			// Bytes 3-4: FrameLength (set by Encode, not by EncodePrimary directly)
-			// Byte 5: N(S)=0
+
 			want: [6]byte{0x00, 0x5A, 0x00, 0x00, 0x00, 0x00},
 		},
 		{
@@ -46,8 +38,7 @@ func TestEncodePrimary(t *testing.T) {
 				BypassFlag: true,
 				SCID:       0x001,
 			},
-			// Byte 0: 00_1_0_00_00 = 0x20
-			// Byte 1: 0x01
+
 			want: [6]byte{0x20, 0x01, 0x00, 0x00, 0x00, 0x00},
 		},
 		{
@@ -56,7 +47,7 @@ func TestEncodePrimary(t *testing.T) {
 				ControlCommandFlag: true,
 				SCID:               0x001,
 			},
-			// Byte 0: 00_0_1_00_00 = 0x10
+
 			want: [6]byte{0x10, 0x01, 0x00, 0x00, 0x00, 0x00},
 		},
 		{
@@ -66,22 +57,21 @@ func TestEncodePrimary(t *testing.T) {
 				ControlCommandFlag: true,
 				SCID:               0x001,
 			},
-			// Byte 0: 00_1_1_00_00 = 0x30
+
 			want: [6]byte{0x30, 0x01, 0x00, 0x00, 0x00, 0x00},
 		},
 		{
 			desc: "SCID uses high bits",
 			hdr: tcframe.PrimaryHeader{
-				SCID: 0x03FF, // max SCID
+				SCID: 0x03FF,
 			},
-			// SCID[9:8]=0b11 → Byte 0 bits[1:0] = 0b11
-			// Byte 0 = 0x03, Byte 1 = 0xFF
+
 			want: [6]byte{0x03, 0xFF, 0x00, 0x00, 0x00, 0x00},
 		},
 		{
 			desc: "VCID=63 maximum",
 			hdr:  tcframe.PrimaryHeader{SCID: 0x001, VCID: 0x3F},
-			// Byte 2 = 0x3F
+
 			want: [6]byte{0x00, 0x01, 0x3F, 0x00, 0x00, 0x00},
 		},
 		{
@@ -113,8 +103,6 @@ func TestEncodePrimary(t *testing.T) {
 		})
 	}
 }
-
-// ─── DecodePrimary ──────────────────────────────────────────────────────────
 
 func TestDecodePrimary(t *testing.T) {
 	tests := []struct {
@@ -167,8 +155,6 @@ func TestDecodePrimary(t *testing.T) {
 	}
 }
 
-// ─── Encode / Decode ────────────────────────────────────────────────────────
-
 func TestEncode(t *testing.T) {
 	tests := []struct {
 		desc    string
@@ -183,7 +169,7 @@ func TestEncode(t *testing.T) {
 				DataField: []byte{0xDE, 0xAD, 0xBE, 0xEF},
 			},
 			check: func(t *testing.T, b []byte) {
-				// 6 header + 4 data + 2 FECF = 12
+
 				assert.Equal(t, 12, len(b))
 			},
 		},
@@ -231,9 +217,9 @@ func TestEncodeDecodeRoundTrip(t *testing.T) {
 			desc: "basic TC frame",
 			frame: tcframe.TransferFrame{
 				Primary: tcframe.PrimaryHeader{
-					BypassFlag: true,
-					SCID:       0x5A,
-					VCID:       3,
+					BypassFlag:          true,
+					SCID:                0x5A,
+					VCID:                3,
 					FrameSequenceNumber: 42,
 				},
 				DataField: []byte{0x01, 0x02, 0x03},
@@ -307,13 +293,12 @@ func TestDecode_Errors(t *testing.T) {
 			desc: "FrameLength mismatch",
 			input: func() []byte {
 				b := append([]byte(nil), good...)
-				// Change FrameLength to a wrong value.
+
 				b[3] = 0xFF
-				// Recompute CRC so CRC check passes but FrameLength still mismatches.
-				// (We leave CRC wrong to test that CRC is checked first.)
+
 				return b
 			}(),
-			wantErr: errors.ErrCRCMismatch, // CRC checked before FrameLength
+			wantErr: errors.ErrCRCMismatch,
 		},
 	}
 

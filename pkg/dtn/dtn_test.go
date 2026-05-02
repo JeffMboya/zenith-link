@@ -5,8 +5,6 @@ import (
 	"time"
 )
 
-// TestBundle_EncodeDecode verifies that all Bundle fields round-trip through
-// Encode → DecodeBundle without loss.
 func TestBundle_EncodeDecode(t *testing.T) {
 	original := &Bundle{
 		ID:          42_000_000_000,
@@ -51,8 +49,6 @@ func TestBundle_EncodeDecode(t *testing.T) {
 	}
 }
 
-// TestBundle_Expired verifies that a bundle with a very short lifetime expires
-// immediately after creation.
 func TestBundle_Expired(t *testing.T) {
 	b := &Bundle{
 		ID:        1,
@@ -73,7 +69,6 @@ func TestBundle_Expired(t *testing.T) {
 	}
 }
 
-// TestStore_PriorityOrder verifies that Next() returns highest-priority bundle first.
 func TestStore_PriorityOrder(t *testing.T) {
 	s := NewStore()
 
@@ -109,11 +104,9 @@ func TestStore_PriorityOrder(t *testing.T) {
 	}
 }
 
-// TestStore_ExpiredPruned verifies that expired bundles are not returned by Next().
 func TestStore_ExpiredPruned(t *testing.T) {
 	s := NewStore()
 
-	// An already-expired bundle.
 	s.Put(&Bundle{
 		ID:        20,
 		Priority:  2,
@@ -135,8 +128,6 @@ func TestStore_ExpiredPruned(t *testing.T) {
 	}
 }
 
-// TestStore_Idempotent verifies that putting the same bundle ID twice doesn't
-// create a duplicate.
 func TestStore_Idempotent(t *testing.T) {
 	s := NewStore()
 
@@ -148,14 +139,13 @@ func TestStore_Idempotent(t *testing.T) {
 		Payload:   []byte{0xAA},
 	}
 	s.Put(b)
-	s.Put(b) // second Put with same ID should be a no-op
+	s.Put(b)
 
 	if s.Len() != 1 {
 		t.Errorf("expected Len() == 1 after duplicate Put, got %d", s.Len())
 	}
 }
 
-// TestEID_String verifies that EID.String() and ParseEID round-trip correctly.
 func TestEID_String(t *testing.T) {
 	original := EID{Node: 1, Service: 1}
 	str := original.String()
@@ -171,7 +161,6 @@ func TestEID_String(t *testing.T) {
 		t.Errorf("ParseEID round-trip: got %v, want %v", parsed, original)
 	}
 
-	// Additional cases.
 	cases := []struct {
 		input string
 		want  EID
@@ -190,7 +179,6 @@ func TestEID_String(t *testing.T) {
 		}
 	}
 
-	// Invalid format should return error.
 	if _, err := ParseEID("invalid"); err == nil {
 		t.Error("ParseEID(\"invalid\"): expected error, got nil")
 	}

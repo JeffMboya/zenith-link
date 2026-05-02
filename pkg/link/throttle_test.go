@@ -9,9 +9,6 @@ import (
 	"github.com/absmach/zenith-link/pkg/link"
 )
 
-// TestThrottle_RateLimited transfers 4096 bytes at 4096 B/s and verifies that
-// the elapsed time is at least 0.8 s and at most 2.0 s. The lower bound
-// accounts for timer granularity; the upper bound allows for slow CI runners.
 func TestThrottle_RateLimited(t *testing.T) {
 	const (
 		dataSize    = 4096
@@ -48,7 +45,6 @@ func TestThrottle_RateLimited(t *testing.T) {
 	}
 }
 
-// TestFrameTransferDuration verifies that 20480 bytes at 20480 B/s = 1 second.
 func TestFrameTransferDuration(t *testing.T) {
 	const (
 		size = 20480

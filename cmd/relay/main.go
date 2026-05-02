@@ -53,24 +53,21 @@ type config struct {
 	PollIntervalSec int     `env:"POLL_INTERVAL_SEC"  envDefault:"30"`
 }
 
-// relayNode holds the DTN bundle store and orbital parameters for this relay.
 type relayNode struct {
 	store    *dtn.Store
 	elements orbital.Elements
 	scid     uint16
 }
 
-// extractPriority reads the Zenith-Link v2 Flags byte (offset 3 per the wire
-// format) and returns 2 if FlagPriority (0x04) is set, else 1 (normal).
 func extractPriority(frame []byte) uint8 {
 	if len(frame) < zenith.HeaderSize {
 		return 1
 	}
-	// Wire layout: Magic[0:2] | Version[2] | Flags[3] | Sequence[4:6] | Timestamp[6:10]
+
 	if frame[3]&zenith.FlagPriority != 0 {
-		return 2 // expedited
+		return 2
 	}
-	return 1 // normal
+	return 1
 }
 
 func main() {
@@ -85,15 +82,11 @@ func main() {
 		os.Exit(1)
 	}
 
-	// Sun-synchronous polar orbit at 700 km — complements the ISS-like SC-1.
-	// Inclination 98° gives retrograde sun-sync; RAAN chosen for coverage offset.
-	// MeanAnomaly is adjusted at startup so the first Nairobi contact window
-	// opens within ~90 seconds, making the ISL demo reliable without warping physics.
 	relayElements := adjustForEarlyContact(orbital.Elements{
-		SemiMajorAxis: 7_078_000,   // 700 km altitude
+		SemiMajorAxis: 7_078_000,
 		Eccentricity:  0.0001,
 		Inclination:   98.0 * math.Pi / 180,
-		RAAN:          math.Pi / 2, // 90° offset from SC-1 for complementary coverage
+		RAAN:          math.Pi / 2,
 		ArgPerigee:    0.0,
 		MeanAnomaly:   0.0,
 		Epoch:         time.Now().UTC(),
@@ -110,13 +103,10 @@ func main() {
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer stop()
 
-	// Poll SC-1 for its latest Zenith-Link frame and wrap it in a DTN bundle.
 	go pollSC1(ctx, client, cfg, node, logger)
 
-	// Forward bundles to GS when in contact.
 	go forwardLoop(ctx, client, cfg, node, logger)
 
-	// Periodically prune expired bundles from the store.
 	go func() {
 		ticker := time.NewTicker(time.Minute)
 		defer ticker.Stop()
@@ -154,9 +144,6 @@ func main() {
 		})
 	})
 
-	// Expose the payload of the next queued bundle for peer-to-peer relay routing.
-	// Relay-2 (SC-3) calls this to fetch a frame from SC-2's DTN store before
-	// polling SC-1 directly, reducing load on the primary spacecraft.
 	mux.HandleFunc("/frame/zenith", func(w http.ResponseWriter, _ *http.Request) {
 		b := node.store.Next()
 		if b == nil {
@@ -168,13 +155,8 @@ func main() {
 		_, _ = w.Write(b.Payload)
 	})
 
-	// /windows returns upcoming ground-station contact windows for SC-2 (Relay-1).
-	// Used by the frontend to show AOS countdown in the ISL mesh tile.
 	mux.HandleFunc("/windows", relayWindowsHandler(relayElements, cfg.GSLat, cfg.GSLon, cfg.MinElevDeg))
 
-	// /telemetry returns a live simulated health snapshot for SC-2 (Relay-1).
-	// Orbital state is derived from relayElements; values reflect the 700 km
-	// sun-synchronous polar orbit.
 	mux.HandleFunc("/telemetry", relayTelemetryHandler(relayElements, cfg.RelaySCID))
 
 	srv := &http.Server{
@@ -207,13 +189,10 @@ func main() {
 	_ = srv.Shutdown(shutdownCtx)
 }
 
-// pollSC1 fetches SC-1's raw Zenith-Link frame every PollIntervalSec seconds,
-// wraps it in a DTN bundle, and places it in the node's DTN store.
 func pollSC1(ctx context.Context, client *http.Client, cfg config, node *relayNode, logger *slog.Logger) {
 	ticker := time.NewTicker(time.Duration(cfg.PollIntervalSec) * time.Second)
 	defer ticker.Stop()
 
-	// Fetch immediately on startup.
 	fetchAndStore(ctx, client, cfg, node, logger)
 
 	for {
@@ -257,8 +236,8 @@ func fetchAndStore(ctx context.Context, client *http.Client, cfg config, node *r
 
 	b := &dtn.Bundle{
 		ID:          uint64(time.Now().UnixNano()),
-		Source:      dtn.EID{Node: 1, Service: 1}, // SC-1, telemetry
-		Destination: dtn.EID{Node: 0, Service: 1}, // Ground station, telemetry
+		Source:      dtn.EID{Node: 1, Service: 1},
+		Destination: dtn.EID{Node: 0, Service: 1},
 		CreatedAt:   time.Now().UTC(),
 		Lifetime:    2 * time.Hour,
 		Payload:     frame,
@@ -273,8 +252,6 @@ func fetchAndStore(ctx context.Context, client *http.Client, cfg config, node *r
 	)
 }
 
-// forwardLoop checks contact windows every 10 seconds and forwards the highest-
-// priority bundle in the DTN store to the ground station when the relay is in view.
 func forwardLoop(ctx context.Context, client *http.Client, cfg config, node *relayNode, logger *slog.Logger) {
 	ticker := time.NewTicker(10 * time.Second)
 	defer ticker.Stop()
@@ -305,8 +282,6 @@ func forwardLoop(ctx context.Context, client *http.Client, cfg config, node *rel
 				continue
 			}
 
-			// Drain all buffered bundles during contact window (rate-limit: 5s between
-			// successive forwards so the GS isn't flooded but link is kept busy).
 			for {
 				if time.Since(lastForwarded) < 5*time.Second {
 					break
@@ -336,16 +311,13 @@ func forwardLoop(ctx context.Context, client *http.Client, cfg config, node *rel
 	}
 }
 
-// relayTelemetryHandler returns a handler that emits a live telemetry snapshot
-// for SC-2 (Relay-1). Values are derived from orbital phase at request time.
 func relayTelemetryHandler(elem orbital.Elements, scid uint16) http.HandlerFunc {
-	const orbitalPeriodSec = 5913.0 // 700 km sun-sync → ~98.5-min period
+	const orbitalPeriodSec = 5913.0
 
 	return func(w http.ResponseWriter, _ *http.Request) {
 		elapsed := time.Since(elem.Epoch).Seconds()
 		phase := math.Mod(elapsed/orbitalPeriodSec, 1.0)
 
-		// Sun-sync at 700 km: ~38% of orbit in eclipse
 		inEclipse := phase > 0.62
 
 		var batV, solarV, tempC float64
@@ -376,9 +348,6 @@ func relayTelemetryHandler(elem orbital.Elements, scid uint16) http.HandlerFunc 
 	}
 }
 
-// relayWindowsHandler returns the next contact windows for this relay as seen
-// from the ground station. The frontend uses this to show the AOS countdown
-// in the ISL mesh tile, replacing a generic "no data" state with an orbital ETA.
 func relayWindowsHandler(elem orbital.Elements, gsLat, gsLon, minElevDeg float64) http.HandlerFunc {
 	type winRes struct {
 		AOS         time.Time `json:"aos"`
@@ -413,11 +382,6 @@ func relayWindowsHandler(elem orbital.Elements, gsLat, gsLon, minElevDeg float64
 	}
 }
 
-// adjustForEarlyContact ensures the first Nairobi contact window opens within
-// targetLeadSec seconds of startup by advancing the mean anomaly. The orbital
-// shape and period are unchanged — the satellite simply starts at a different
-// point in its orbit. This makes ISL relay forwarding reliable for demos
-// without waiting up to 100 minutes for a contact window to naturally open.
 func adjustForEarlyContact(elem orbital.Elements, gsLat, gsLon, minElevDeg, targetLeadSec float64, logger *slog.Logger) orbital.Elements {
 	now := time.Now().UTC()
 	windows, err := orbital.ContactWindows(elem, gsLat, gsLon, now, now.Add(120*time.Minute), minElevDeg)
@@ -435,8 +399,7 @@ func adjustForEarlyContact(elem orbital.Elements, gsLat, gsLon, minElevDeg, targ
 		return elem
 	}
 
-	// T = 2π√(a³/μ); advance by (timeToAOS - targetLeadSec) seconds of orbit.
-	const mu = 3.986004418e14 // Earth gravitational parameter [m³/s²]
+	const mu = 3.986004418e14
 	a := elem.SemiMajorAxis
 	T := 2 * math.Pi * math.Sqrt(a*a*a/mu)
 	advance := timeToAOS - targetLeadSec
@@ -458,7 +421,7 @@ func forwardFrame(ctx context.Context, client *http.Client, cfg config, frame []
 		return err
 	}
 	req.Header.Set("Content-Type", "application/octet-stream")
-	// Identify the relay source so the ground station can log it.
+
 	req.Header.Set("X-Relayed-By", "SC-2-relay")
 
 	resp, err := client.Do(req)

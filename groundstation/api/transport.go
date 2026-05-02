@@ -29,37 +29,27 @@ var upgrader = websocket.Upgrader{
 	CheckOrigin: func(_ *http.Request) bool { return true },
 }
 
-// RouterConfig holds transport-level configuration for the groundstation router.
 type RouterConfig struct {
-	// SpacecraftAddr is the base URL of the spacecraft service (e.g. "http://spacecraft:8080").
-	// Required for command forwarding and proxy. If empty, POST /command returns 503.
 	SpacecraftAddr string
-	// SCID is the spacecraft's 10-bit CCSDS ID — embedded in forwarded TC frames.
+
 	SCID uint16
-	// VCID is the spacecraft's 6-bit virtual channel ID.
+
 	VCID uint8
-	// GSLat is the ground station geodetic latitude [degrees] used in log output.
+
 	GSLat float64
-	// GSLon is the ground station geodetic longitude [degrees] used in log output.
+
 	GSLon float64
-	// StaticDir is the path to the compiled frontend dist directory. When non-empty,
-	// the router serves the frontend and acts as a single-origin entry point for
-	// production deployments (e.g. Fly.io). Spacecraft and relay endpoints are
-	// reverse-proxied so the frontend can reach them via a single port.
+
 	StaticDir string
-	// Relay1Addr is the base URL of the ISL Relay-1 service (port 8082).
-	// Only used when StaticDir is set (production mode).
+
 	Relay1Addr string
-	// Relay2Addr is the base URL of the ISL Relay-2 service (port 8083).
-	// Only used when StaticDir is set (production mode).
+
 	Relay2Addr string
 }
 
-// commandForwarder encodes JSON commands into TC Transfer Frames and POSTs
-// them to the spacecraft's /command endpoint.
 type commandForwarder struct {
 	cfg    RouterConfig
-	seq    atomic.Uint32 // modulo-256 TC sequence counter
+	seq    atomic.Uint32
 	client *http.Client
 }
 
@@ -68,7 +58,6 @@ func (cf *commandForwarder) forward(ctx context.Context, commandID uint8, payloa
 		return commandFwdRes{}, fmt.Errorf("spacecraft address not configured")
 	}
 
-	// Build TC data field: [commandID, ...payload].
 	data := make([]byte, 1+len(payload))
 	data[0] = commandID
 	copy(data[1:], payload)
@@ -113,7 +102,6 @@ func (cf *commandForwarder) forward(ctx context.Context, commandID uint8, payloa
 	return res, nil
 }
 
-// NewRouter builds and returns the chi router for the groundstation service.
 func NewRouter(svc groundstation.Service, cfg RouterConfig) http.Handler {
 	fwd := &commandForwarder{
 		cfg:    cfg,
@@ -130,10 +118,8 @@ func NewRouter(svc groundstation.Service, cfg RouterConfig) http.Handler {
 	r.Get("/ws", wsHandler(svc))
 	r.Post("/command", commandHandler(fwd))
 
-	// Production mode: serve the compiled frontend and reverse-proxy spacecraft /
-	// relay endpoints so everything is reachable from a single port.
 	if cfg.StaticDir != "" {
-		// Spacecraft endpoints
+
 		if cfg.SpacecraftAddr != "" {
 			scProxy := mustReverseProxy(cfg.SpacecraftAddr)
 			for _, prefix := range []string{"/windows", "/state", "/track", "/constellation", "/tle", "/events", "/payload", "/inference"} {
@@ -141,17 +127,17 @@ func NewRouter(svc groundstation.Service, cfg RouterConfig) http.Handler {
 				r.Handle(prefix+"/*", scProxy)
 			}
 		}
-		// Relay-1 endpoints
+
 		if cfg.Relay1Addr != "" {
 			r1Proxy := mustReverseProxyStrip(cfg.Relay1Addr, "/relay")
 			r.Handle("/relay/*", r1Proxy)
 		}
-		// Relay-2 endpoints
+
 		if cfg.Relay2Addr != "" {
 			r2Proxy := mustReverseProxyStrip(cfg.Relay2Addr, "/relay2")
 			r.Handle("/relay2/*", r2Proxy)
 		}
-		// Frontend: serve dist/ for all remaining paths (SPA catch-all).
+
 		fs := http.FileServer(http.Dir(cfg.StaticDir))
 		r.Handle("/*", spaHandler(fs, cfg.StaticDir))
 	}
@@ -159,7 +145,6 @@ func NewRouter(svc groundstation.Service, cfg RouterConfig) http.Handler {
 	return r
 }
 
-// mustReverseProxy creates a reverse proxy targeting baseURL. Panics on bad URL.
 func mustReverseProxy(baseURL string) http.Handler {
 	u, err := url.Parse(baseURL)
 	if err != nil {
@@ -168,8 +153,6 @@ func mustReverseProxy(baseURL string) http.Handler {
 	return httputil.NewSingleHostReverseProxy(u)
 }
 
-// mustReverseProxyStrip creates a reverse proxy that strips the given path prefix
-// before forwarding. E.g. /relay/health → /health on the target.
 func mustReverseProxyStrip(baseURL, stripPrefix string) http.Handler {
 	u, err := url.Parse(baseURL)
 	if err != nil {
@@ -179,8 +162,6 @@ func mustReverseProxyStrip(baseURL, stripPrefix string) http.Handler {
 	return http.StripPrefix(stripPrefix, proxy)
 }
 
-// spaHandler serves static files from dir, falling back to index.html for
-// paths that don't match a file — standard SPA routing behaviour.
 func spaHandler(fs http.Handler, dir string) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		path := dir + r.URL.Path
@@ -233,8 +214,6 @@ func receiveHandler(svc groundstation.Service) http.HandlerFunc {
 			return
 		}
 
-		// Priority frames carry an onboard anomaly classification — log prominently
-		// so operators can triage before the full telemetry panel loads.
 		if tm.Flags&zenith.FlagPriority != 0 {
 			label := zenith.InferenceClassName(tm.InferenceClass)
 			slog.Warn("[PRIORITY DOWNLINK] anomaly flagged by spacecraft",
@@ -251,15 +230,6 @@ func receiveHandler(svc groundstation.Service) http.HandlerFunc {
 	}
 }
 
-// commandHandler accepts a JSON command request, builds a TC Transfer Frame,
-// and forwards it to the spacecraft service.
-//
-// Request body:
-//
-//	{
-//	  "command_id": 1,
-//	  "payload_b64": "<base64-encoded bytes, optional>"
-//	}
 func commandHandler(fwd *commandForwarder) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		var req commandReq
@@ -287,8 +257,6 @@ func commandHandler(fwd *commandForwarder) http.HandlerFunc {
 	}
 }
 
-// wsHandler upgrades an HTTP connection to WebSocket and streams telemetry
-// updates to the client until the connection is closed.
 func wsHandler(svc groundstation.Service) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		conn, err := upgrader.Upgrade(w, r, nil)
@@ -321,8 +289,6 @@ func wsHandler(svc groundstation.Service) http.HandlerFunc {
 	}
 }
 
-// ─── helpers ─────────────────────────────────────────────────────────────────
-
 func writeJSON(w http.ResponseWriter, code int, v any) {
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(code)
@@ -338,8 +304,6 @@ func writeError(w http.ResponseWriter, code int, err error) {
 	}
 	writeJSON(w, code, map[string]string{"error": msg})
 }
-
-// ─── request / response types ─────────────────────────────────────────────────
 
 type commandReq struct {
 	CommandID  uint8  `json:"command_id"`
@@ -359,27 +323,27 @@ type latestRes struct {
 }
 
 type telemetryRes struct {
-	Sequence       uint16  `json:"sequence"`
-	Timestamp      uint32  `json:"timestamp"`
-	Flags          uint8   `json:"flags"`
-	Presence       uint16  `json:"presence"`
-	LatE7          int32   `json:"lat_e7,omitempty"`
-	LonE7          int32   `json:"lon_e7,omitempty"`
-	AltM           int32   `json:"alt_m,omitempty"`
-	AttRoll        int16   `json:"att_roll,omitempty"`
-	AttPitch       int16   `json:"att_pitch,omitempty"`
-	AttYaw         int16   `json:"att_yaw,omitempty"`
-	AngVelX        int16   `json:"ang_vel_x,omitempty"`
-	AngVelY        int16   `json:"ang_vel_y,omitempty"`
-	AngVelZ        int16   `json:"ang_vel_z,omitempty"`
-	BatV           uint16  `json:"bat_v,omitempty"`
-	SolarV         uint16  `json:"solar_v,omitempty"`
-	TempC          int16   `json:"temp_c,omitempty"`
-	RSSI           int16   `json:"rssi,omitempty"`
-	InferenceClass *uint8  `json:"inference_class,omitempty"`
-	InferenceConf  *uint8  `json:"inference_conf,omitempty"`
-	InferenceLabel string  `json:"inference_label,omitempty"`
-	RelayedBy      string  `json:"relayed_by,omitempty"`
+	Sequence       uint16 `json:"sequence"`
+	Timestamp      uint32 `json:"timestamp"`
+	Flags          uint8  `json:"flags"`
+	Presence       uint16 `json:"presence"`
+	LatE7          int32  `json:"lat_e7,omitempty"`
+	LonE7          int32  `json:"lon_e7,omitempty"`
+	AltM           int32  `json:"alt_m,omitempty"`
+	AttRoll        int16  `json:"att_roll,omitempty"`
+	AttPitch       int16  `json:"att_pitch,omitempty"`
+	AttYaw         int16  `json:"att_yaw,omitempty"`
+	AngVelX        int16  `json:"ang_vel_x,omitempty"`
+	AngVelY        int16  `json:"ang_vel_y,omitempty"`
+	AngVelZ        int16  `json:"ang_vel_z,omitempty"`
+	BatV           uint16 `json:"bat_v,omitempty"`
+	SolarV         uint16 `json:"solar_v,omitempty"`
+	TempC          int16  `json:"temp_c,omitempty"`
+	RSSI           int16  `json:"rssi,omitempty"`
+	InferenceClass *uint8 `json:"inference_class,omitempty"`
+	InferenceConf  *uint8 `json:"inference_conf,omitempty"`
+	InferenceLabel string `json:"inference_label,omitempty"`
+	RelayedBy      string `json:"relayed_by,omitempty"`
 }
 
 func telemetryFromDomain(tm zenith.Telemetry) telemetryRes {

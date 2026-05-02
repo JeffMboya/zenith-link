@@ -7,7 +7,6 @@ export interface OrbitalPos {
   inSunlight: boolean
 }
 
-// Polls /state at 1Hz to keep satellite globe position smooth between telemetry frames.
 export function useOrbitalPosition(): OrbitalPos | null {
   const [pos, setPos] = useState<OrbitalPos | null>(null)
   const timer = useRef<ReturnType<typeof setTimeout> | null>(null)
@@ -21,7 +20,7 @@ export function useOrbitalPosition(): OrbitalPos | null {
         if (!res.ok) return
         const d = await res.json() as { lat_deg: number; lon_deg: number; alt_m: number; in_sunlight: boolean }
         if (active) setPos({ lat: d.lat_deg, lon: d.lon_deg, alt: d.alt_m, inSunlight: d.in_sunlight })
-      } catch { /* network hiccup — keep last position */ }
+      } catch {  }
       if (active) timer.current = setTimeout(tick, 1000)
     }
 

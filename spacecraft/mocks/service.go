@@ -13,7 +13,6 @@ import (
 
 var _ spacecraft.Service = (*Service)(nil)
 
-// Service is a mock of the spacecraft Service interface.
 type Service struct {
 	mock.Mock
 }

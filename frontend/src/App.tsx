@@ -44,14 +44,14 @@ export default function App() {
 
   const [selectedSatId, setSelectedSatId] = useState('AT-1')
 
-  // Auto-import Planet Labs TLEs on mount — real orbital positions by default
+  
   useEffect(() => {
     fetch('/tle/import?group=planet&limit=100', { method: 'POST' }).catch(() => {})
   }, [])
 
-  // Designate the first Planet Labs satellite as primary when TLE mode activates.
-  // primarySatId drives: the big globe dot position, the telemetry panel header,
-  // and the hasTelemetry flag (enriched telemetry from spacecraft backend).
+  
+  
+  
   const [primarySatId, setPrimarySatId] = useState<string>('AT-1')
   const primarySet = useRef(false)
 
@@ -78,9 +78,9 @@ export default function App() {
 
   const selectedSat = constellation.satellites.find(s => s.id === selectedSatId) ?? null
 
-  // hasTelemetry: true for the primary satellite — it gets enriched telemetry
-  // from the spacecraft backend regardless of whether its position is real (TLE)
-  // or simulated. All other constellation members are position-only.
+  
+  
+  
   const hasTelemetry = selectedSatId === primarySatId
 
   return (
