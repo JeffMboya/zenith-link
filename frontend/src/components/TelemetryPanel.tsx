@@ -120,9 +120,11 @@ export function TelemetryPanel({ state, selectedSatId, selectedSat, hasTelemetry
           {/* ── Primary satellite: full CCSDS telemetry ── */}
           {hasTelemetry && (
             <>
-              <div style={{ color: 'var(--cyan)', fontSize: 9, letterSpacing: 3, marginBottom: 12 }}>
-                {tleSource === 'tle' ? 'REAL POSITION · SIMULATED TELEMETRY' : 'TELEMETRY · GROUND MIRROR'}
-              </div>
+              {tleSource === 'sim' && (
+                <div style={{ color: 'var(--cyan)', fontSize: 9, letterSpacing: 3, marginBottom: 12 }}>
+                  TELEMETRY · GROUND MIRROR
+                </div>
+              )}
               {!state ? (
                 <div style={{ color: 'var(--text-dim)', fontSize: 10, marginTop: 8, textAlign: 'center' }}>
                   AWAITING FIRST FRAME...
