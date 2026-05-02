@@ -129,6 +129,29 @@ export function TelemetryPanel({ state, selectedSatId, selectedSat, hasTelemetry
                 </div>
               ) : (
                 <>
+                  {/* ── Real position (TLE) or simulated position ── */}
+                  <Section
+                    title={tleSource === 'tle' ? 'REAL POSITION' : 'POSITION'}
+                    accent={tleSource === 'tle' ? 'var(--green)' : 'var(--cyan)'}
+                  >
+                    <Row label="LAT" value={(selectedSat?.lat ?? state.latitude).toFixed(4)}                             unit="°"  color={tleSource === 'tle' ? 'var(--green)' : 'var(--text-body)'} />
+                    <Row label="LON" value={(selectedSat?.lon ?? state.longitude).toFixed(4)}                             unit="°"  color={tleSource === 'tle' ? 'var(--green)' : 'var(--text-body)'} />
+                    <Row label="ALT" value={((selectedSat?.alt_m ?? state.altitude) / 1000).toFixed(1)} unit="km" color={tleSource === 'tle' ? 'var(--green)' : 'var(--cyan)'} />
+                  </Section>
+
+                  {/* ── Simulated telemetry separator in TLE mode ── */}
+                  {tleSource === 'tle' && (
+                    <div style={{
+                      margin: '4px 0 8px',
+                      paddingLeft: 6,
+                      borderLeft: '2px solid var(--amber)',
+                      color: 'var(--amber)',
+                      fontSize: 9, letterSpacing: 3,
+                    }}>
+                      SIMULATED TELEMETRY
+                    </div>
+                  )}
+
                   <Section title="ATTITUDE">
                     <div style={{ display: 'flex', justifyContent: 'space-between', flexWrap: 'wrap', gap: 4 }}>
                       <ArcGauge value={state.pitch}  min={-30}  max={30}   label="PITCH" unit="°"   color="var(--cyan)"   size={68} />
@@ -153,11 +176,6 @@ export function TelemetryPanel({ state, selectedSatId, selectedSat, hasTelemetry
                       <Row label="CHASSIS" value={state.chassis_temp.toFixed(1)} unit="°C" color={state.chassis_temp > 50 ? 'var(--amber)' : 'var(--text-body)'} />
                       <Row label="CPU"     value={state.cpu_temp.toFixed(1)}     unit="°C" color={state.cpu_temp > 70 ? 'var(--red)' : 'var(--text-body)'} />
                     </div>
-                  </Section>
-                  <Section title="POSITION">
-                    <Row label="LAT" value={(selectedSat?.lat ?? state.latitude).toFixed(4)}                            unit="°" />
-                    <Row label="LON" value={(selectedSat?.lon ?? state.longitude).toFixed(4)}                            unit="°" />
-                    <Row label="ALT" value={((selectedSat?.alt_m ?? state.altitude) / 1000).toFixed(1)} unit="km" color="var(--cyan)" />
                   </Section>
                   {payload && (
                     <Section title="PAYLOAD" accent="var(--teal)">

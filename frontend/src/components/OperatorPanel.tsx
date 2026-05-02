@@ -146,9 +146,11 @@ function fmtAOS(sec: number): string {
 
 interface Props {
   primaryOnline: boolean
+  primarySatId: string
+  tleSource: 'sim' | 'tle'
 }
 
-export function OperatorPanel({ primaryOnline }: Props) {
+export function OperatorPanel({ primaryOnline, primarySatId, tleSource }: Props) {
   const [open, setOpen] = useState(true)
   const [tab, setTab] = useState<Tab>('FLEET')
   const [deployLog, setDeployLog] = useState<{ profileId: number; msg: string; ok: boolean } | null>(null)
@@ -305,7 +307,7 @@ export function OperatorPanel({ primaryOnline }: Props) {
                 PRIMARY SPACECRAFT
               </div>
               <div
-                onClick={() => window.dispatchEvent(new CustomEvent('select-sat', { detail: 'AT-1' }))}
+                onClick={() => window.dispatchEvent(new CustomEvent('select-sat', { detail: primarySatId }))}
                 style={{
                   padding: '8px 14px', borderBottom: '1px solid var(--bg-dark)',
                   cursor: 'pointer', display: 'flex', alignItems: 'flex-start', gap: 10,
@@ -314,17 +316,17 @@ export function OperatorPanel({ primaryOnline }: Props) {
                 <StatusDot online={primaryOnline} active={primaryOnline} />
                 <div style={{ flex: 1 }}>
                   <div style={{ color: 'var(--cyan)', fontSize: 10, fontWeight: 700, letterSpacing: 1, marginBottom: 2 }}>
-                    AT-1 (SC-1)
+                    {tleSource === 'tle' ? primarySatId : 'AT-1 (SC-1)'}
                   </div>
                   <div style={{ color: 'var(--text-dim)', fontSize: 8, letterSpacing: 0.5, marginBottom: 4 }}>
-                    400 km · 51.6° · ISS-LIKE ORBIT
+                    {tleSource === 'tle' ? '~500 km · 97.4° · PLANET LABS TLE' : '500 km · 97.4° · SUN-SYNC SIM'}
                   </div>
                   <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
                     <span style={{ color: primaryOnline ? 'var(--green)' : 'var(--red)', fontSize: 8, fontWeight: 700, letterSpacing: 1 }}>
                       {primaryOnline ? '● LIVE' : '● OFFLINE'}
                     </span>
                     <span style={{ color: 'var(--text-dim)', fontSize: 8, letterSpacing: 1 }}>
-                      FULL TELEMETRY
+                      {tleSource === 'tle' ? 'ENRICHED TELEMETRY' : 'FULL TELEMETRY'}
                     </span>
                   </div>
                 </div>
@@ -373,7 +375,10 @@ export function OperatorPanel({ primaryOnline }: Props) {
               }}>
                 <div style={{ color: 'var(--text-dim)', fontSize: 7, letterSpacing: 2, marginBottom: 4 }}>CONSTELLATION</div>
                 <div style={{ color: 'var(--text-mid)', fontSize: 8, lineHeight: 1.5 }}>
-                  AT-1 primary + SC-2 / SC-3 ISL relay nodes. Switch to live TLE data via the KPI bar to overlay real constellations.
+                  {tleSource === 'tle'
+                    ? `Live Planet Labs constellation. Primary: ${primarySatId}. SC-2 / SC-3 are ISL relay nodes.`
+                    : 'AT-1 simulated primary + SC-2 / SC-3 ISL relay nodes. Switch to live TLE data via the KPI bar.'
+                  }
                 </div>
               </div>
             </div>
@@ -451,7 +456,7 @@ export function OperatorPanel({ primaryOnline }: Props) {
                       opacity: deploying !== null && deploying !== card.profileId ? 0.4 : 1,
                     }}
                   >
-                    {deploying === card.profileId ? 'UPLOADING...' : 'DEPLOY TO AT-1'}
+                    {deploying === card.profileId ? 'UPLOADING...' : `DEPLOY TO ${tleSource === 'tle' ? primarySatId.split(' ')[0] : 'AT-1'}`}
                   </button>
                 </div>
               ))}
