@@ -27,7 +27,14 @@ interface RawTelemetry {
   inference_label?: string
 }
 
-function toStateUpdate(raw: RawTelemetry, track: { lat: number; lon: number; alt: number }[]): StateUpdate {
+function toStateUpdate(
+  raw: RawTelemetry,
+  track: { lat: number; lon: number; alt: number }[],
+  zenithBytes: number,
+  jsonBytes: number,
+  packets: number,
+  nacks: number,
+): StateUpdate {
   return {
     type: 'state_update',
     ts: raw.timestamp,
@@ -52,13 +59,13 @@ function toStateUpdate(raw: RawTelemetry, track: { lat: number; lon: number; alt
       inference_label: raw.inference_label,
     },
     metrics: {
-      packets_received: raw.sequence,
+      packets_received: packets,
       packets_dropped_simulated: 0,
-      nacks_issued: 0,
-      acks_issued: raw.sequence,
+      nacks_issued: nacks,
+      acks_issued: packets,
       full_syncs_received: 0,
-      bytes_received_zenith: raw.sequence * 70,
-      bytes_equivalent_json: raw.sequence * 300,
+      bytes_received_zenith: zenithBytes,
+      bytes_equivalent_json: jsonBytes,
     },
     ground_track: track,
     ground_stations: [
@@ -69,6 +76,8 @@ function toStateUpdate(raw: RawTelemetry, track: { lat: number; lon: number; alt
   }
 }
 
+const ZENITH_FRAME_BYTES = 78  // 10 header + 2 presence + 34 payload + 32 HMAC
+
 export function useWebSocket() {
   const [latest, setLatest] = useState<StateUpdate | null>(null)
   const [connected, setConnected] = useState(false)
@@ -77,6 +86,10 @@ export function useWebSocket() {
   const reconnectTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
   const trackRef = useRef<{ lat: number; lon: number; alt: number }[]>([])
   const everConnected = useRef(false)
+  const zenithBytesRef = useRef(0)
+  const jsonBytesRef = useRef(0)
+  const packetsRef = useRef(0)
+  const nacksRef = useRef(0)
 
   const connect = useCallback(() => {
     const proto = window.location.protocol === 'https:' ? 'wss' : 'ws'
@@ -93,9 +106,12 @@ export function useWebSocket() {
       try {
         const raw = JSON.parse(e.data) as RawTelemetry
         if (typeof raw.sequence !== 'number') return
+        zenithBytesRef.current += ZENITH_FRAME_BYTES
+        jsonBytesRef.current += e.data.length  // actual JSON bytes on the wire
+        packetsRef.current += 1
         const pt = { lat: raw.lat_e7 / 1e7, lon: raw.lon_e7 / 1e7, alt: raw.alt_m }
         trackRef.current = [...trackRef.current.slice(-(MAX_TRACK_POINTS - 1)), pt]
-        setLatest(toStateUpdate(raw, trackRef.current))
+        setLatest(toStateUpdate(raw, trackRef.current, zenithBytesRef.current, jsonBytesRef.current, packetsRef.current, nacksRef.current))
       } catch {
         // malformed frame — ignore
       }
