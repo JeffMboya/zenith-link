@@ -4,19 +4,19 @@ LDFLAGS = -lm
 
 .PHONY: all test clean
 
-all: test_zenith_link
+all: test_orbitron
 
-test_zenith_link: test_zenith_link.c zenith_link.c zenith_link.h
-	$(CC) $(CFLAGS) -o $@ test_zenith_link.c zenith_link.c $(LDFLAGS)
+test_orbitron: test_orbitron.c orbitron.c orbitron.h
+	$(CC) $(CFLAGS) -o $@ test_orbitron.c orbitron.c $(LDFLAGS)
 
-test: test_zenith_link
-	./test_zenith_link
+test: test_orbitron
+	./test_orbitron
 
 # ARM Cortex-M4 cross-compile (requires arm-none-eabi-gcc)
-cortex-m4: zenith_link.c zenith_link.h
+cortex-m4: orbitron.c orbitron.h
 	arm-none-eabi-gcc -mcpu=cortex-m4 -mthumb -mfpu=fpv4-sp-d16 -mfloat-abi=hard \
-	  -Os -std=c99 -Wall -c zenith_link.c -o zenith_link_cortexm4.o
-	@arm-none-eabi-size zenith_link_cortexm4.o
+	  -Os -std=c99 -Wall -c orbitron.c -o orbitron_cortexm4.o
+	@arm-none-eabi-size orbitron_cortexm4.o
 
 clean:
-	rm -f test_zenith_link zenith_link_cortexm4.o
+	rm -f test_orbitron orbitron_cortexm4.o

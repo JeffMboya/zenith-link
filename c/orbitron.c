@@ -1,5 +1,5 @@
 /**
- * zenith_link.c — implementation of the Zenith-Link binary telemetry protocol.
+ * orbitron.c — implementation of the Orbitron binary telemetry protocol.
  *
  * Targets ARM Cortex-M4 / bare-metal C99.
  * No dynamic allocation. All buffers are caller-supplied.
@@ -8,7 +8,7 @@
  * Constant-time HMAC comparison to prevent timing attacks.
  */
 
-#include "zenith_link.h"
+#include "orbitron.h"
 
 #include <math.h>    /* fabsf */
 #include <string.h>  /* memcpy, memset */
@@ -54,7 +54,7 @@ static void _sha256_block(uint32_t h[8], const uint8_t blk[64])
     h[4]+=e; h[5]+=f; h[6]+=g; h[7]+=hh;
 }
 
-void zl_sha256(const uint8_t *msg, size_t len, uint8_t digest[32])
+void orb_sha256(const uint8_t *msg, size_t len, uint8_t digest[32])
 {
     uint32_t h[8] = {
         0x6a09e667,0xbb67ae85,0x3c6ef372,0xa54ff53a,
@@ -94,7 +94,7 @@ void zl_sha256(const uint8_t *msg, size_t len, uint8_t digest[32])
     }
 }
 
-void zl_hmac_sha256(
+void orb_hmac_sha256(
     const uint8_t *key, size_t key_len,
     const uint8_t *msg, size_t msg_len,
     uint8_t tag[32])
@@ -104,7 +104,7 @@ void zl_hmac_sha256(
 
     /* If key longer than block, hash it first */
     if (key_len > 64) {
-        zl_sha256(key, key_len, temp_key);
+        orb_sha256(key, key_len, temp_key);
         key = temp_key;
         key_len = 32;
     }
@@ -159,7 +159,7 @@ void zl_hmac_sha256(
     uint8_t outer_input[64 + 32];
     memcpy(outer_input,      k_opad, 64);
     memcpy(outer_input + 64, inner,  32);
-    zl_sha256(outer_input, 96, tag);
+    orb_sha256(outer_input, 96, tag);
 }
 
 /* ── Constant-time comparison ───────────────────────────────────────────── */
@@ -173,102 +173,102 @@ static bool _ct_eq(const uint8_t *a, const uint8_t *b, size_t n)
 
 /* ── Delta detection ─────────────────────────────────────────────────────── */
 
-bool zl_changed(float new_val, float old_val)
+bool orb_changed(float new_val, float old_val)
 {
     if (old_val == 0.0f)
         return fabsf(new_val) > 1e-4f;
     float rel = fabsf((new_val - old_val) / old_val);
-    return rel * ZL_DELTA_THRESHOLD_DEN > ZL_DELTA_THRESHOLD_NUM;
+    return rel * ORB_DELTA_THRESHOLD_DEN > ORB_DELTA_THRESHOLD_NUM;
 }
 
-uint8_t zl_compute_presence(
-    const zl_state_t *s,
-    const zl_state_t *p,
+uint8_t orb_compute_presence(
+    const orb_state_t *s,
+    const orb_state_t *p,
     bool              saturated)
 {
     uint8_t pres = 0;
 
-    if (zl_changed(s->pitch,   p->pitch)   ||
-        zl_changed(s->yaw,     p->yaw)     ||
-        zl_changed(s->roll,    p->roll))        pres |= ZL_PRESENCE_ATTITUDE;
+    if (orb_changed(s->pitch,   p->pitch)   ||
+        orb_changed(s->yaw,     p->yaw)     ||
+        orb_changed(s->roll,    p->roll))        pres |= ORB_PRESENCE_ATTITUDE;
 
-    if (zl_changed(s->omega_x, p->omega_x) ||
-        zl_changed(s->omega_y, p->omega_y) ||
-        zl_changed(s->omega_z, p->omega_z))     pres |= ZL_PRESENCE_ANGULAR_VEL;
+    if (orb_changed(s->omega_x, p->omega_x) ||
+        orb_changed(s->omega_y, p->omega_y) ||
+        orb_changed(s->omega_z, p->omega_z))     pres |= ORB_PRESENCE_ANGULAR_VEL;
 
-    if (zl_changed((float)s->latitude,  (float)p->latitude)  ||
-        zl_changed((float)s->longitude, (float)p->longitude) ||
-        zl_changed((float)s->altitude,  (float)p->altitude))  pres |= ZL_PRESENCE_POSITION;
+    if (orb_changed((float)s->latitude,  (float)p->latitude)  ||
+        orb_changed((float)s->longitude, (float)p->longitude) ||
+        orb_changed((float)s->altitude,  (float)p->altitude))  pres |= ORB_PRESENCE_POSITION;
 
-    if (zl_changed(s->battery_voltage, p->battery_voltage))   pres |= ZL_PRESENCE_BATTERY_VOLTAGE;
-    if (zl_changed(s->rssi,            p->rssi))              pres |= ZL_PRESENCE_RSSI;
+    if (orb_changed(s->battery_voltage, p->battery_voltage))   pres |= ORB_PRESENCE_BATTERY_VOLTAGE;
+    if (orb_changed(s->rssi,            p->rssi))              pres |= ORB_PRESENCE_RSSI;
 
     if (!saturated) {
-        if (zl_changed(s->solar_voltage, p->solar_voltage))   pres |= ZL_PRESENCE_SOLAR_VOLTAGE;
-        if (zl_changed(s->chassis_temp,  p->chassis_temp))    pres |= ZL_PRESENCE_CHASSIS_TEMP;
-        if (zl_changed(s->cpu_temp,      p->cpu_temp))        pres |= ZL_PRESENCE_CPU_TEMP;
+        if (orb_changed(s->solar_voltage, p->solar_voltage))   pres |= ORB_PRESENCE_SOLAR_VOLTAGE;
+        if (orb_changed(s->chassis_temp,  p->chassis_temp))    pres |= ORB_PRESENCE_CHASSIS_TEMP;
+        if (orb_changed(s->cpu_temp,      p->cpu_temp))        pres |= ORB_PRESENCE_CPU_TEMP;
     }
     return pres;
 }
 
 /* ── Encoder ─────────────────────────────────────────────────────────────── */
 
-int zl_encode(
+int orb_encode(
     uint8_t          *buf,
     size_t            buf_len,
-    const zl_state_t *state,
-    const zl_state_t *prev,
+    const orb_state_t *state,
+    const orb_state_t *prev,
     uint32_t          seq,
     uint64_t          ts_us,
     bool              saturated,
     const uint8_t    *hmac_key,
     size_t            key_len)
 {
-    if (buf_len < ZL_MAX_FRAME_SIZE)
-        return ZL_ERR_BUF_TOO_SMALL;
+    if (buf_len < ORB_MAX_FRAME_SIZE)
+        return ORB_ERR_BUF_TOO_SMALL;
 
     bool is_full = (prev == NULL);
-    uint8_t flags    = is_full ? ZL_FLAG_FULL_SYNC : 0;
-    if (saturated) flags |= ZL_FLAG_CRIT_MODE;
+    uint8_t flags    = is_full ? ORB_FLAG_FULL_SYNC : 0;
+    if (saturated) flags |= ORB_FLAG_CRIT_MODE;
 
-    uint8_t presence = is_full ? ZL_PRESENCE_ALL
-                               : zl_compute_presence(state, prev, saturated);
+    uint8_t presence = is_full ? ORB_PRESENCE_ALL
+                               : orb_compute_presence(state, prev, saturated);
 
     /* Header */
     size_t o = 0;
-    zl_w16(buf + o, ZL_MAGIC);          o += 2;
-    buf[o++] = ZL_VERSION;
-    zl_w32(buf + o, seq);               o += 4;
-    zl_w64(buf + o, ts_us);             o += 8;
+    orb_w16(buf + o, ORB_MAGIC);          o += 2;
+    buf[o++] = ORB_VERSION;
+    orb_w32(buf + o, seq);               o += 4;
+    orb_w64(buf + o, ts_us);             o += 8;
     buf[o++] = flags;
     /* Presence byte */
     buf[o++] = presence;
 
     /* Payload */
-#define W16S(v)  do { int16_t _v = (int16_t)(v); zl_w16(buf+o,(uint16_t)_v); o+=2; } while(0)
-#define W16U(v)  do { zl_w16(buf+o,(uint16_t)(v)); o+=2; } while(0)
-#define W32S(v)  do { int32_t _v = (int32_t)(v); zl_w32(buf+o,(uint32_t)_v); o+=4; } while(0)
+#define W16S(v)  do { int16_t _v = (int16_t)(v); orb_w16(buf+o,(uint16_t)_v); o+=2; } while(0)
+#define W16U(v)  do { orb_w16(buf+o,(uint16_t)(v)); o+=2; } while(0)
+#define W32S(v)  do { int32_t _v = (int32_t)(v); orb_w32(buf+o,(uint32_t)_v); o+=4; } while(0)
 
-    if (presence & ZL_PRESENCE_ATTITUDE) {
-        W16S((int32_t)(state->pitch   * ZL_SCALE_ANGLE));
-        W16S((int32_t)(state->yaw     * ZL_SCALE_ANGLE));
-        W16S((int32_t)(state->roll    * ZL_SCALE_ANGLE));
+    if (presence & ORB_PRESENCE_ATTITUDE) {
+        W16S((int32_t)(state->pitch   * ORB_SCALE_ANGLE));
+        W16S((int32_t)(state->yaw     * ORB_SCALE_ANGLE));
+        W16S((int32_t)(state->roll    * ORB_SCALE_ANGLE));
     }
-    if (presence & ZL_PRESENCE_ANGULAR_VEL) {
-        W16S((int32_t)(state->omega_x * ZL_SCALE_ANG_VEL));
-        W16S((int32_t)(state->omega_y * ZL_SCALE_ANG_VEL));
-        W16S((int32_t)(state->omega_z * ZL_SCALE_ANG_VEL));
+    if (presence & ORB_PRESENCE_ANGULAR_VEL) {
+        W16S((int32_t)(state->omega_x * ORB_SCALE_ANG_VEL));
+        W16S((int32_t)(state->omega_y * ORB_SCALE_ANG_VEL));
+        W16S((int32_t)(state->omega_z * ORB_SCALE_ANG_VEL));
     }
-    if (presence & ZL_PRESENCE_POSITION) {
-        W32S((int64_t)(state->latitude  * ZL_SCALE_LAT_LON));
-        W32S((int64_t)(state->longitude * ZL_SCALE_LAT_LON));
-        W32S((int64_t)(state->altitude  * ZL_SCALE_ALT));
+    if (presence & ORB_PRESENCE_POSITION) {
+        W32S((int64_t)(state->latitude  * ORB_SCALE_LAT_LON));
+        W32S((int64_t)(state->longitude * ORB_SCALE_LAT_LON));
+        W32S((int64_t)(state->altitude  * ORB_SCALE_ALT));
     }
-    if (presence & ZL_PRESENCE_SOLAR_VOLTAGE)   W16U((uint32_t)(state->solar_voltage   * ZL_SCALE_VOLTAGE));
-    if (presence & ZL_PRESENCE_BATTERY_VOLTAGE) W16U((uint32_t)(state->battery_voltage * ZL_SCALE_VOLTAGE));
-    if (presence & ZL_PRESENCE_CHASSIS_TEMP)    W16S((int32_t)(state->chassis_temp    * ZL_SCALE_TEMP));
-    if (presence & ZL_PRESENCE_CPU_TEMP)        W16S((int32_t)(state->cpu_temp        * ZL_SCALE_TEMP));
-    if (presence & ZL_PRESENCE_RSSI)            W16S((int32_t)(state->rssi            * ZL_SCALE_RSSI));
+    if (presence & ORB_PRESENCE_SOLAR_VOLTAGE)   W16U((uint32_t)(state->solar_voltage   * ORB_SCALE_VOLTAGE));
+    if (presence & ORB_PRESENCE_BATTERY_VOLTAGE) W16U((uint32_t)(state->battery_voltage * ORB_SCALE_VOLTAGE));
+    if (presence & ORB_PRESENCE_CHASSIS_TEMP)    W16S((int32_t)(state->chassis_temp    * ORB_SCALE_TEMP));
+    if (presence & ORB_PRESENCE_CPU_TEMP)        W16S((int32_t)(state->cpu_temp        * ORB_SCALE_TEMP));
+    if (presence & ORB_PRESENCE_RSSI)            W16S((int32_t)(state->rssi            * ORB_SCALE_RSSI));
 
 #undef W16S
 #undef W16U
@@ -276,8 +276,8 @@ int zl_encode(
 
     /* HMAC-SHA256 trailer */
     if (hmac_key && key_len > 0) {
-        zl_hmac_sha256(hmac_key, key_len, buf, o, buf + o);
-        o += ZL_HMAC_SIZE;
+        orb_hmac_sha256(hmac_key, key_len, buf, o, buf + o);
+        o += ORB_HMAC_SIZE;
     }
 
     return (int)o;
@@ -285,86 +285,86 @@ int zl_encode(
 
 /* ── Decoder ─────────────────────────────────────────────────────────────── */
 
-zl_err_t zl_decode(
+orb_err_t orb_decode(
     const uint8_t *buf,
     size_t         buf_len,
-    zl_frame_t    *out,
-    zl_state_t    *mirror,
+    orb_frame_t    *out,
+    orb_state_t    *mirror,
     const uint8_t *hmac_key,
     size_t         key_len)
 {
-    if (buf_len < ZL_HEADER_SIZE + ZL_PRESENCE_SIZE)
-        return ZL_ERR_MALFORMED;
+    if (buf_len < ORB_HEADER_SIZE + ORB_PRESENCE_SIZE)
+        return ORB_ERR_MALFORMED;
 
     /* HMAC verification */
     out->hmac_ok = true;
     size_t payload_end = buf_len;
     if (hmac_key && key_len > 0) {
-        if (buf_len < ZL_HMAC_SIZE + 1)
-            return ZL_ERR_MALFORMED;
-        payload_end = buf_len - ZL_HMAC_SIZE;
+        if (buf_len < ORB_HMAC_SIZE + 1)
+            return ORB_ERR_MALFORMED;
+        payload_end = buf_len - ORB_HMAC_SIZE;
         uint8_t expected[32];
-        zl_hmac_sha256(hmac_key, key_len, buf, payload_end, expected);
+        orb_hmac_sha256(hmac_key, key_len, buf, payload_end, expected);
         if (!_ct_eq(expected, buf + payload_end, 32)) {
             out->hmac_ok = false;
-            return ZL_ERR_HMAC_FAIL;
+            return ORB_ERR_HMAC_FAIL;
         }
     }
 
     /* Parse header */
     size_t o = 0;
-    uint16_t magic   = zl_r16(buf + o); o += 2;
+    uint16_t magic   = orb_r16(buf + o); o += 2;
     uint8_t  version = buf[o++];
-    if (magic != ZL_MAGIC)      return ZL_ERR_BAD_MAGIC;
-    if (version != ZL_VERSION && version != 1) return ZL_ERR_BAD_VERSION;
+    if (magic != ORB_MAGIC)      return ORB_ERR_BAD_MAGIC;
+    if (version != ORB_VERSION && version != 1) return ORB_ERR_BAD_VERSION;
 
-    out->seq          = zl_r32(buf + o); o += 4;
-    out->timestamp_us = zl_r64(buf + o); o += 8;
+    out->seq          = orb_r32(buf + o); o += 4;
+    out->timestamp_us = orb_r64(buf + o); o += 8;
     out->flags        = buf[o++];
     out->presence     = buf[o++];
 
     /* Unpack fields, updating mirror in-place */
-#define R16S()   (o += 2, zl_r16s(buf + o - 2))
-#define R16U()   (o += 2, zl_r16(buf + o - 2))
-#define R32S()   (o += 4, zl_r32s(buf + o - 4))
+#define R16S()   (o += 2, orb_r16s(buf + o - 2))
+#define R16U()   (o += 2, orb_r16(buf + o - 2))
+#define R32S()   (o += 4, orb_r32s(buf + o - 4))
 
-    if (out->presence & ZL_PRESENCE_ATTITUDE) {
-        if (o + 6 > payload_end) return ZL_ERR_MALFORMED;
-        mirror->pitch = (float)R16S() / ZL_SCALE_ANGLE;
-        mirror->yaw   = (float)R16S() / ZL_SCALE_ANGLE;
-        mirror->roll  = (float)R16S() / ZL_SCALE_ANGLE;
+    if (out->presence & ORB_PRESENCE_ATTITUDE) {
+        if (o + 6 > payload_end) return ORB_ERR_MALFORMED;
+        mirror->pitch = (float)R16S() / ORB_SCALE_ANGLE;
+        mirror->yaw   = (float)R16S() / ORB_SCALE_ANGLE;
+        mirror->roll  = (float)R16S() / ORB_SCALE_ANGLE;
     }
-    if (out->presence & ZL_PRESENCE_ANGULAR_VEL) {
-        if (o + 6 > payload_end) return ZL_ERR_MALFORMED;
-        mirror->omega_x = (float)R16S() / ZL_SCALE_ANG_VEL;
-        mirror->omega_y = (float)R16S() / ZL_SCALE_ANG_VEL;
-        mirror->omega_z = (float)R16S() / ZL_SCALE_ANG_VEL;
+    if (out->presence & ORB_PRESENCE_ANGULAR_VEL) {
+        if (o + 6 > payload_end) return ORB_ERR_MALFORMED;
+        mirror->omega_x = (float)R16S() / ORB_SCALE_ANG_VEL;
+        mirror->omega_y = (float)R16S() / ORB_SCALE_ANG_VEL;
+        mirror->omega_z = (float)R16S() / ORB_SCALE_ANG_VEL;
     }
-    if (out->presence & ZL_PRESENCE_POSITION) {
-        if (o + 12 > payload_end) return ZL_ERR_MALFORMED;
-        mirror->latitude  = (double)R32S() / ZL_SCALE_LAT_LON;
-        mirror->longitude = (double)R32S() / ZL_SCALE_LAT_LON;
-        mirror->altitude  = (double)R32S() / ZL_SCALE_ALT;
+    if (out->presence & ORB_PRESENCE_POSITION) {
+        if (o + 12 > payload_end) return ORB_ERR_MALFORMED;
+        mirror->latitude  = (double)R32S() / ORB_SCALE_LAT_LON;
+        mirror->longitude = (double)R32S() / ORB_SCALE_LAT_LON;
+        mirror->altitude  = (double)R32S() / ORB_SCALE_ALT;
     }
-    if (out->presence & ZL_PRESENCE_SOLAR_VOLTAGE) {
-        if (o + 2 > payload_end) return ZL_ERR_MALFORMED;
-        mirror->solar_voltage = (float)R16U() / ZL_SCALE_VOLTAGE;
+    if (out->presence & ORB_PRESENCE_SOLAR_VOLTAGE) {
+        if (o + 2 > payload_end) return ORB_ERR_MALFORMED;
+        mirror->solar_voltage = (float)R16U() / ORB_SCALE_VOLTAGE;
     }
-    if (out->presence & ZL_PRESENCE_BATTERY_VOLTAGE) {
-        if (o + 2 > payload_end) return ZL_ERR_MALFORMED;
-        mirror->battery_voltage = (float)R16U() / ZL_SCALE_VOLTAGE;
+    if (out->presence & ORB_PRESENCE_BATTERY_VOLTAGE) {
+        if (o + 2 > payload_end) return ORB_ERR_MALFORMED;
+        mirror->battery_voltage = (float)R16U() / ORB_SCALE_VOLTAGE;
     }
-    if (out->presence & ZL_PRESENCE_CHASSIS_TEMP) {
-        if (o + 2 > payload_end) return ZL_ERR_MALFORMED;
-        mirror->chassis_temp = (float)R16S() / ZL_SCALE_TEMP;
+    if (out->presence & ORB_PRESENCE_CHASSIS_TEMP) {
+        if (o + 2 > payload_end) return ORB_ERR_MALFORMED;
+        mirror->chassis_temp = (float)R16S() / ORB_SCALE_TEMP;
     }
-    if (out->presence & ZL_PRESENCE_CPU_TEMP) {
-        if (o + 2 > payload_end) return ZL_ERR_MALFORMED;
-        mirror->cpu_temp = (float)R16S() / ZL_SCALE_TEMP;
+    if (out->presence & ORB_PRESENCE_CPU_TEMP) {
+        if (o + 2 > payload_end) return ORB_ERR_MALFORMED;
+        mirror->cpu_temp = (float)R16S() / ORB_SCALE_TEMP;
     }
-    if (out->presence & ZL_PRESENCE_RSSI) {
-        if (o + 2 > payload_end) return ZL_ERR_MALFORMED;
-        mirror->rssi = (float)R16S() / ZL_SCALE_RSSI;
+    if (out->presence & ORB_PRESENCE_RSSI) {
+        if (o + 2 > payload_end) return ORB_ERR_MALFORMED;
+        mirror->rssi = (float)R16S() / ORB_SCALE_RSSI;
     }
 
 #undef R16S
@@ -372,5 +372,5 @@ zl_err_t zl_decode(
 #undef R32S
 
     out->fields = *mirror;
-    return ZL_OK;
+    return ORB_OK;
 }
