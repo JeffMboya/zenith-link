@@ -48,21 +48,21 @@ var deltaFrame = orbitron.Telemetry{
 
 var benchKey = []byte("benchmark-key-32-bytes-xxxxxxxxxxx")
 
-func BenchmarkZenithEncode_Full(b *testing.B) {
+func BenchmarkOrbitronEncode_Full(b *testing.B) {
 	b.ReportAllocs()
 	for i := 0; i < b.N; i++ {
 		_, _ = orbitron.Encode(fullFrame, benchKey)
 	}
 }
 
-func BenchmarkZenithEncode_Delta(b *testing.B) {
+func BenchmarkOrbitronEncode_Delta(b *testing.B) {
 	b.ReportAllocs()
 	for i := 0; i < b.N; i++ {
 		_, _ = orbitron.Encode(deltaFrame, benchKey)
 	}
 }
 
-func BenchmarkZenithDecode_Full(b *testing.B) {
+func BenchmarkOrbitronDecode_Full(b *testing.B) {
 	frame, _ := orbitron.Encode(fullFrame, benchKey)
 	b.ReportAllocs()
 	b.ResetTimer()
@@ -71,7 +71,7 @@ func BenchmarkZenithDecode_Full(b *testing.B) {
 	}
 }
 
-func BenchmarkZenithDecode_Delta(b *testing.B) {
+func BenchmarkOrbitronDecode_Delta(b *testing.B) {
 	frame, _ := orbitron.Encode(deltaFrame, benchKey)
 	b.ReportAllocs()
 	b.ResetTimer()
@@ -131,8 +131,8 @@ func BenchmarkJSONUnmarshal_Full(b *testing.B) {
 }
 
 func TestFrameSizeComparison(t *testing.T) {
-	zenithFull, _ := orbitron.Encode(fullFrame, benchKey)
-	zenithDelta, _ := orbitron.Encode(deltaFrame, benchKey)
+	orbitronFull, _ := orbitron.Encode(fullFrame, benchKey)
+	orbitronDelta, _ := orbitron.Encode(deltaFrame, benchKey)
 	jsonFull, _ := json.Marshal(makeJSONFrame())
 
 	t.Logf("")
@@ -141,11 +141,11 @@ func TestFrameSizeComparison(t *testing.T) {
 	t.Logf("├─────────────────────────┬────────────────────┤")
 	t.Logf("│  Format                 │  Bytes / frame     │")
 	t.Logf("├─────────────────────────┼────────────────────┤")
-	t.Logf("│  Orbitron v2 (full)  │  %3d               │", len(zenithFull))
-	t.Logf("│  Orbitron v2 (delta) │  %3d               │", len(zenithDelta))
+	t.Logf("│  Orbitron v2 (full)  │  %3d               │", len(orbitronFull))
+	t.Logf("│  Orbitron v2 (delta) │  %3d               │", len(orbitronDelta))
 	t.Logf("│  JSON (stdlib, full)    │  %3d               │", len(jsonFull))
 	t.Logf("├─────────────────────────┼────────────────────┤")
-	t.Logf("│  Savings vs JSON        │  %.0f%%              │", float64(len(jsonFull)-len(zenithFull))/float64(len(jsonFull))*100)
+	t.Logf("│  Savings vs JSON        │  %.0f%%              │", float64(len(jsonFull)-len(orbitronFull))/float64(len(jsonFull))*100)
 	t.Logf("└─────────────────────────┴────────────────────┘")
 	t.Logf("")
 }

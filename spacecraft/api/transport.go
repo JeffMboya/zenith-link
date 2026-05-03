@@ -25,7 +25,7 @@ func NewRouter(svc spacecraft.Service) http.Handler {
 	r.Get("/telemetry", telemetryHandler(svc))
 	r.Get("/state", stateHandler(svc))
 	r.Get("/frame", tmFrameHandler(svc))
-	r.Get("/frame/orbitron", zenithFrameHandler(svc))
+	r.Get("/frame/orbitron", orbitronFrameHandler(svc))
 	r.Post("/command", commandHandler(svc))
 	r.Get("/windows", windowsHandler(svc))
 	r.Get("/track", trackHandler(svc))
@@ -97,7 +97,7 @@ func tmFrameHandler(svc spacecraft.Service) http.HandlerFunc {
 	}
 }
 
-func zenithFrameHandler(svc spacecraft.Service) http.HandlerFunc {
+func orbitronFrameHandler(svc spacecraft.Service) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		t := queryTime(r)
 		b, err := svc.TelemetryFrame(r.Context(), t)

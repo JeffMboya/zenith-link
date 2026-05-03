@@ -1,4 +1,4 @@
-// Package zenith implements the Orbitron binary telemetry protocol v2.
+// Package orbitron implements the Orbitron binary telemetry protocol v2.
 //
 // Wire format:
 //

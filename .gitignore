@@ -1,6 +1,6 @@
 frontend/node_modules/
 .env
-c/test_zenith_link
+c/test_orbitron
 *.o
 *.out
 .gstack/

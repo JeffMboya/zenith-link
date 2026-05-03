@@ -267,7 +267,7 @@ func TestTMFrameHandler(t *testing.T) {
 	}
 }
 
-func TestZenithFrameHandler(t *testing.T) {
+func TestOrbitronFrameHandler(t *testing.T) {
 	fakeFrame := []byte{0x5A, 0x4C, 0x02, 0x00, 0x00, 0x01, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00}
 
 	tests := []struct {

@@ -4,11 +4,11 @@
 #
 # Usage:
 #   ssh root@<droplet-ip>
-#   curl -fsSL https://raw.githubusercontent.com/JeffMboya/zenith-link/main/scripts/deploy-do.sh | bash
+#   curl -fsSL https://raw.githubusercontent.com/JeffMboya/orbitron/main/scripts/deploy-do.sh | bash
 set -euo pipefail
 
-REPO="https://github.com/JeffMboya/zenith-link.git"
-APP_DIR="/opt/zenith-link"
+REPO="https://github.com/JeffMboya/orbitron.git"
+APP_DIR="/opt/orbitron"
 
 # ------------------------------------------------------------------
 # 1. Swap — CesiumJS/Vite build peaks at ~700 MB. On a 512 MB Droplet
@@ -52,7 +52,7 @@ fi
 # ------------------------------------------------------------------
 # 3. Repo
 # ------------------------------------------------------------------
-echo "==> Cloning zenith-link..."
+echo "==> Cloning orbitron..."
 if [ -d "$APP_DIR/.git" ]; then
   git -C "$APP_DIR" pull
 else
@@ -66,8 +66,8 @@ cd "$APP_DIR"
 if [ ! -f .env ]; then
   cp .env.example .env
   HMAC_KEY=$(openssl rand -hex 32)
-  sed -i "s/^ZENITH_HMAC_KEY=$/ZENITH_HMAC_KEY=$HMAC_KEY/" .env
-  echo "==> Generated ZENITH_HMAC_KEY — saved to $APP_DIR/.env"
+  sed -i "s/^ORBITRON_HMAC_KEY=$/ORBITRON_HMAC_KEY=$HMAC_KEY/" .env
+  echo "==> Generated ORBITRON_HMAC_KEY — saved to $APP_DIR/.env"
   echo "    Add VITE_CESIUM_TOKEN= to .env for 3D globe terrain (optional)."
 else
   echo "==> .env already exists — skipping key generation."
@@ -84,7 +84,7 @@ docker compose -f docker/docker-compose.prod.yaml --env-file "$APP_DIR/.env" up 
 DROPLET_IP=$(curl -s http://checkip.amazonaws.com 2>/dev/null || hostname -I | awk '{print $1}')
 echo ""
 echo "================================================================"
-echo "  Zenith-Link is live at: http://${DROPLET_IP}"
+echo "  Orbitron is live at: http://${DROPLET_IP}"
 echo "================================================================"
 echo ""
 echo "Useful commands (run from $APP_DIR):"
