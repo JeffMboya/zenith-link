@@ -10,7 +10,7 @@ import (
 	"math"
 	"time"
 
-	"github.com/absmach/satlyt-demo/pkg/errors"
+	"github.com/absmach/orbitron/pkg/errors"
 )
 
 const contactSampleStep = 10 * time.Second

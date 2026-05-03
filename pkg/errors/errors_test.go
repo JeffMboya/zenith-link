@@ -3,7 +3,7 @@ package errors_test
 import (
 	"testing"
 
-	"github.com/absmach/satlyt-demo/pkg/errors"
+	"github.com/absmach/orbitron/pkg/errors"
 	"github.com/stretchr/testify/assert"
 )
 

@@ -4,10 +4,10 @@ import (
 	"context"
 	"time"
 
-	"github.com/absmach/satlyt-demo/pkg/orbital"
-	"github.com/absmach/satlyt-demo/pkg/satlyt"
-	"github.com/absmach/satlyt-demo/spacecraft"
-	"github.com/absmach/satlyt-demo/spacecraft/inference"
+	"github.com/absmach/orbitron/pkg/orbital"
+	"github.com/absmach/orbitron/pkg/orbitron"
+	"github.com/absmach/orbitron/spacecraft"
+	"github.com/absmach/orbitron/spacecraft/inference"
 	"github.com/stretchr/testify/mock"
 )
 
@@ -17,9 +17,9 @@ type Service struct {
 	mock.Mock
 }
 
-func (m *Service) Telemetry(ctx context.Context, t time.Time) (satlyt.Telemetry, error) {
+func (m *Service) Telemetry(ctx context.Context, t time.Time) (orbitron.Telemetry, error) {
 	args := m.Called(ctx, t)
-	return args.Get(0).(satlyt.Telemetry), args.Error(1)
+	return args.Get(0).(orbitron.Telemetry), args.Error(1)
 }
 
 func (m *Service) TelemetryFrame(ctx context.Context, t time.Time) ([]byte, error) {

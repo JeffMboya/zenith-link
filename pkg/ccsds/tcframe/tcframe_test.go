@@ -3,8 +3,8 @@ package tcframe_test
 import (
 	"testing"
 
-	"github.com/absmach/satlyt-demo/pkg/ccsds/tcframe"
-	"github.com/absmach/satlyt-demo/pkg/errors"
+	"github.com/absmach/orbitron/pkg/ccsds/tcframe"
+	"github.com/absmach/orbitron/pkg/errors"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )

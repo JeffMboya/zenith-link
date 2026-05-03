@@ -4,9 +4,9 @@ import (
 	"net/http"
 	"time"
 
-	"github.com/absmach/satlyt-demo/pkg/orbital"
-	"github.com/absmach/satlyt-demo/pkg/satlyt"
-	"github.com/absmach/satlyt-demo/spacecraft"
+	"github.com/absmach/orbitron/pkg/orbital"
+	"github.com/absmach/orbitron/pkg/orbitron"
+	"github.com/absmach/orbitron/spacecraft"
 )
 
 type telemetryRes struct {
@@ -35,7 +35,7 @@ type telemetryRes struct {
 
 func (r telemetryRes) Code() int { return http.StatusOK }
 
-func telemetryFromDomain(tm satlyt.Telemetry) telemetryRes {
+func telemetryFromDomain(tm orbitron.Telemetry) telemetryRes {
 	r := telemetryRes{
 		Sequence:  tm.Sequence,
 		Timestamp: tm.Timestamp,
@@ -55,12 +55,12 @@ func telemetryFromDomain(tm satlyt.Telemetry) telemetryRes {
 		TempC:     tm.TempC,
 		RSSI:      tm.RSSI,
 	}
-	if tm.Presence&satlyt.PresenceInference != 0 {
+	if tm.Presence&orbitron.PresenceInference != 0 {
 		c := tm.InferenceClass
 		cf := tm.InferenceConf
 		r.InferenceClass = &c
 		r.InferenceConf = &cf
-		r.InferenceLabel = satlyt.InferenceClassName(c)
+		r.InferenceLabel = orbitron.InferenceClassName(c)
 	}
 	return r
 }

@@ -9,11 +9,11 @@ import (
 	"testing"
 	"time"
 
-	"github.com/absmach/satlyt-demo/groundstation"
-	"github.com/absmach/satlyt-demo/groundstation/api"
-	"github.com/absmach/satlyt-demo/groundstation/mocks"
-	"github.com/absmach/satlyt-demo/pkg/errors"
-	"github.com/absmach/satlyt-demo/pkg/satlyt"
+	"github.com/absmach/orbitron/groundstation"
+	"github.com/absmach/orbitron/groundstation/api"
+	"github.com/absmach/orbitron/groundstation/mocks"
+	"github.com/absmach/orbitron/pkg/errors"
+	"github.com/absmach/orbitron/pkg/orbitron"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/mock"
 	"github.com/stretchr/testify/require"
@@ -24,11 +24,11 @@ func makeRouter() (*mocks.Service, http.Handler) {
 	return svc, api.NewRouter(svc, api.RouterConfig{})
 }
 
-func fakeTelemetry() satlyt.Telemetry {
-	return satlyt.Telemetry{
+func fakeTelemetry() orbitron.Telemetry {
+	return orbitron.Telemetry{
 		Sequence:  7,
 		Timestamp: 1_700_000_000,
-		Presence:  satlyt.PresencePosition | satlyt.PresenceBatV,
+		Presence:  orbitron.PresencePosition | orbitron.PresenceBatV,
 		LatE7:     377_498_000,
 		LonE7:     -1_224_194_000,
 		AltM:      415_000,
@@ -86,7 +86,7 @@ func TestLatestHandler(t *testing.T) {
 			desc: "latest with inference result includes label",
 			setupMock: func(svc *mocks.Service) {
 				st := fakeLatest()
-				st.Telemetry.Presence |= satlyt.PresenceInference
+				st.Telemetry.Presence |= orbitron.PresenceInference
 				st.Telemetry.InferenceClass = 4
 				st.Telemetry.InferenceConf = 200
 				svc.On("Latest", mock.Anything).Return(st, nil)
@@ -162,7 +162,7 @@ func TestReceiveHandler(t *testing.T) {
 			body: []byte{0x00},
 			setupMock: func(svc *mocks.Service) {
 				svc.On("Receive", mock.Anything, []byte{0x00}).
-					Return(satlyt.Telemetry{}, errors.ErrFrameTooSmall)
+					Return(orbitron.Telemetry{}, errors.ErrFrameTooSmall)
 			},
 			wantStatus: http.StatusUnprocessableEntity,
 		},
@@ -268,7 +268,7 @@ func TestSubscribeBroadcast(t *testing.T) {
 		ch, err := svc.Subscribe(ctx)
 		require.NoError(t, err)
 
-		frame, err := satlyt.Encode(fakeTelemetry(), key)
+		frame, err := orbitron.Encode(fakeTelemetry(), key)
 		require.NoError(t, err)
 
 		_, err = svc.Receive(context.Background(), frame)

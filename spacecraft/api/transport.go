@@ -9,9 +9,9 @@ import (
 	"strconv"
 	"time"
 
-	"github.com/absmach/satlyt-demo/pkg/ccsds/tmframe"
-	"github.com/absmach/satlyt-demo/spacecraft"
-	"github.com/absmach/satlyt-demo/spacecraft/inference"
+	"github.com/absmach/orbitron/pkg/ccsds/tmframe"
+	"github.com/absmach/orbitron/spacecraft"
+	"github.com/absmach/orbitron/spacecraft/inference"
 	"github.com/go-chi/chi/v5"
 	"github.com/go-chi/chi/v5/middleware"
 )
@@ -25,7 +25,7 @@ func NewRouter(svc spacecraft.Service) http.Handler {
 	r.Get("/telemetry", telemetryHandler(svc))
 	r.Get("/state", stateHandler(svc))
 	r.Get("/frame", tmFrameHandler(svc))
-	r.Get("/frame/satlyt", zenithFrameHandler(svc))
+	r.Get("/frame/orbitron", zenithFrameHandler(svc))
 	r.Post("/command", commandHandler(svc))
 	r.Get("/windows", windowsHandler(svc))
 	r.Get("/track", trackHandler(svc))

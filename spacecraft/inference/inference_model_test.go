@@ -3,7 +3,7 @@ package inference_test
 import (
 	"testing"
 
-	"github.com/absmach/satlyt-demo/spacecraft/inference"
+	"github.com/absmach/orbitron/spacecraft/inference"
 )
 
 func nominalAE() (batV, tempC, rssi, angVel float64) {

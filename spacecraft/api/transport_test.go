@@ -8,14 +8,14 @@ import (
 	"testing"
 	"time"
 
-	"github.com/absmach/satlyt-demo/pkg/ccsds/tcframe"
-	"github.com/absmach/satlyt-demo/pkg/errors"
-	"github.com/absmach/satlyt-demo/pkg/orbital"
-	"github.com/absmach/satlyt-demo/pkg/satlyt"
-	"github.com/absmach/satlyt-demo/spacecraft"
-	"github.com/absmach/satlyt-demo/spacecraft/api"
-	"github.com/absmach/satlyt-demo/spacecraft/inference"
-	"github.com/absmach/satlyt-demo/spacecraft/mocks"
+	"github.com/absmach/orbitron/pkg/ccsds/tcframe"
+	"github.com/absmach/orbitron/pkg/errors"
+	"github.com/absmach/orbitron/pkg/orbital"
+	"github.com/absmach/orbitron/pkg/orbitron"
+	"github.com/absmach/orbitron/spacecraft"
+	"github.com/absmach/orbitron/spacecraft/api"
+	"github.com/absmach/orbitron/spacecraft/inference"
+	"github.com/absmach/orbitron/spacecraft/mocks"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/mock"
 	"github.com/stretchr/testify/require"
@@ -39,11 +39,11 @@ func fakeState() spacecraft.State {
 	}
 }
 
-func fakeTelemetry() satlyt.Telemetry {
-	return satlyt.Telemetry{
+func fakeTelemetry() orbitron.Telemetry {
+	return orbitron.Telemetry{
 		Sequence:  1,
 		Timestamp: uint32(time.Date(2024, 1, 1, 12, 0, 0, 0, time.UTC).Unix()),
-		Presence:  satlyt.PresencePosition,
+		Presence:  orbitron.PresencePosition,
 		LatE7:     377_498_000,
 		LonE7:     -1_224_194_000,
 		AltM:      415_000,
@@ -98,7 +98,7 @@ func TestTelemetryHandler(t *testing.T) {
 			wantStatus: http.StatusOK,
 			check: func(t *testing.T, body map[string]any) {
 				assert.Equal(t, float64(1), body["sequence"])
-				assert.Equal(t, float64(satlyt.PresencePosition), body["presence"])
+				assert.Equal(t, float64(orbitron.PresencePosition), body["presence"])
 			},
 		},
 		{
@@ -115,7 +115,7 @@ func TestTelemetryHandler(t *testing.T) {
 			url:  "/telemetry",
 			setupMock: func(svc *mocks.Service) {
 				inf := tm
-				inf.Presence |= satlyt.PresenceInference
+				inf.Presence |= orbitron.PresenceInference
 				inf.InferenceClass = 2
 				inf.InferenceConf = 200
 				svc.On("Telemetry", mock.Anything, mock.AnythingOfType("time.Time")).
@@ -277,7 +277,7 @@ func TestZenithFrameHandler(t *testing.T) {
 		check      func(t *testing.T, body []byte)
 	}{
 		{
-			desc: "returns raw Satlyt Demo binary",
+			desc: "returns raw Orbitron binary",
 			setupMock: func(svc *mocks.Service) {
 				svc.On("TelemetryFrame", mock.Anything, mock.AnythingOfType("time.Time")).
 					Return(fakeFrame, nil)
@@ -303,7 +303,7 @@ func TestZenithFrameHandler(t *testing.T) {
 			svc, router := makeRouter()
 			tc.setupMock(svc)
 
-			req := httptest.NewRequest(http.MethodGet, "/frame/satlyt", nil)
+			req := httptest.NewRequest(http.MethodGet, "/frame/orbitron", nil)
 			rec := httptest.NewRecorder()
 			router.ServeHTTP(rec, req)
 

@@ -6,7 +6,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/absmach/satlyt-demo/pkg/link"
+	"github.com/absmach/orbitron/pkg/link"
 )
 
 func TestThrottle_RateLimited(t *testing.T) {

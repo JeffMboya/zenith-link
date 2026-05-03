@@ -27,9 +27,9 @@ package tmframe
 import (
 	"encoding/binary"
 
-	"github.com/absmach/satlyt-demo/pkg/ccsds/crc"
-	"github.com/absmach/satlyt-demo/pkg/ccsds/spacepacket"
-	"github.com/absmach/satlyt-demo/pkg/errors"
+	"github.com/absmach/orbitron/pkg/ccsds/crc"
+	"github.com/absmach/orbitron/pkg/ccsds/spacepacket"
+	"github.com/absmach/orbitron/pkg/errors"
 )
 
 const (

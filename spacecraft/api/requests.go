@@ -3,7 +3,7 @@ package api
 import (
 	"time"
 
-	"github.com/absmach/satlyt-demo/pkg/errors"
+	"github.com/absmach/orbitron/pkg/errors"
 )
 
 type telemetryReq struct {

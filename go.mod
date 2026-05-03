@@ -1,4 +1,4 @@
-module github.com/absmach/satlyt-demo
+module github.com/absmach/orbitron
 
 go 1.22
 

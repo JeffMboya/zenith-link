@@ -6,8 +6,8 @@ import (
 	"log/slog"
 	"time"
 
-	"github.com/absmach/satlyt-demo/groundstation"
-	"github.com/absmach/satlyt-demo/pkg/satlyt"
+	"github.com/absmach/orbitron/groundstation"
+	"github.com/absmach/orbitron/pkg/orbitron"
 )
 
 var _ groundstation.Service = (*loggingMiddleware)(nil)
@@ -21,7 +21,7 @@ func NewLogging(svc groundstation.Service, logger *slog.Logger) groundstation.Se
 	return &loggingMiddleware{logger: logger, svc: svc}
 }
 
-func (lm *loggingMiddleware) Receive(ctx context.Context, rawFrame []byte) (tm satlyt.Telemetry, err error) {
+func (lm *loggingMiddleware) Receive(ctx context.Context, rawFrame []byte) (tm orbitron.Telemetry, err error) {
 	defer func(begin time.Time) {
 		args := []any{
 			slog.String("duration", time.Since(begin).String()),
@@ -51,7 +51,7 @@ func (lm *loggingMiddleware) Latest(ctx context.Context) (st groundstation.Lates
 	return lm.svc.Latest(ctx)
 }
 
-func (lm *loggingMiddleware) Subscribe(ctx context.Context) (ch <-chan satlyt.Telemetry, err error) {
+func (lm *loggingMiddleware) Subscribe(ctx context.Context) (ch <-chan orbitron.Telemetry, err error) {
 	defer func(begin time.Time) {
 		args := []any{slog.String("duration", time.Since(begin).String())}
 		if err != nil {

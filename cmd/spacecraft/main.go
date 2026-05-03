@@ -1,4 +1,4 @@
-// Command spacecraft runs the Satlyt Demo spacecraft telemetry service.
+// Command spacecraft runs the Orbitron spacecraft telemetry service.
 //
 // Configuration is read from environment variables:
 //
@@ -6,7 +6,7 @@
 //	SPACECRAFT_SCID       10-bit Spacecraft ID in decimal (default: 90)
 //	SPACECRAFT_VCID       6-bit Virtual Channel ID (default: 0)
 //	SPACECRAFT_APID       11-bit Application Process ID (default: 256)
-//	SATLYT_HMAC_KEY       HMAC-SHA256 key (required)
+//	ORBITRON_HMAC_KEY       HMAC-SHA256 key (required)
 package main
 
 import (
@@ -20,10 +20,10 @@ import (
 
 	"math"
 
-	"github.com/absmach/satlyt-demo/pkg/orbital"
-	"github.com/absmach/satlyt-demo/spacecraft"
-	"github.com/absmach/satlyt-demo/spacecraft/api"
-	"github.com/absmach/satlyt-demo/spacecraft/middleware"
+	"github.com/absmach/orbitron/pkg/orbital"
+	"github.com/absmach/orbitron/spacecraft"
+	"github.com/absmach/orbitron/spacecraft/api"
+	"github.com/absmach/orbitron/spacecraft/middleware"
 	"github.com/caarlos0/env/v11"
 )
 
@@ -32,7 +32,7 @@ type config struct {
 	SCID    uint16 `env:"SPACECRAFT_SCID" envDefault:"90"`
 	VCID    uint8  `env:"SPACECRAFT_VCID" envDefault:"0"`
 	APID    uint16 `env:"SPACECRAFT_APID" envDefault:"256"`
-	HMACKey string `env:"SATLYT_HMAC_KEY,required"`
+	HMACKey string `env:"ORBITRON_HMAC_KEY,required"`
 }
 
 func adjustForEarlyContact(elem orbital.Elements, gsLat, gsLon, minElevDeg, targetLeadSec float64, logger *slog.Logger) orbital.Elements {

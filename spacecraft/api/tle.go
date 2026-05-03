@@ -10,7 +10,7 @@ import (
 	"sync"
 	"time"
 
-	"github.com/absmach/satlyt-demo/pkg/orbital"
+	"github.com/absmach/orbitron/pkg/orbital"
 )
 
 const celestrakBase = "https://celestrak.org/NORAD/elements/gp.php"

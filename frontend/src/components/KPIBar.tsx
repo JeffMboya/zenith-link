@@ -199,9 +199,9 @@ const ANOMALY_COLOR: Record<string, string> = {
 interface KPITile { label: string; value: string; color: string; nacks?: number }
 
 function kpis(m: LinkMetrics): KPITile[] {
-  const satlytMB = m.bytes_received_satlyt / 1e6
+  const orbitronMB = m.bytes_received_orbitron / 1e6
   const jsonMB = m.bytes_equivalent_json / 1e6
-  const savedMB = Math.max(0, jsonMB - satlytMB)
+  const savedMB = Math.max(0, jsonMB - orbitronMB)
   const eff = jsonMB > 0 ? ((savedMB / jsonMB) * 100).toFixed(1) : '0.0'
   const effNum = parseFloat(eff)
   return [
@@ -287,7 +287,7 @@ export function KPIBar({ metrics, satellite, connected, linkLost, tleSource, tle
         display: 'flex', flexDirection: 'column', minWidth: 180,
       }}>
         <span style={{ color: 'var(--cyan)', fontSize: 11, letterSpacing: 3, fontWeight: 700 }}>
-          SATLYT DEMO
+          ORBITRON
         </span>
         <span style={{ color: 'var(--text-dim)', fontSize: 9, letterSpacing: 2, marginTop: 2 }}>
           MISSION CONTROL

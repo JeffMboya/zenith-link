@@ -6,11 +6,11 @@ import (
 	"testing"
 	"time"
 
-	"github.com/absmach/satlyt-demo/pkg/ccsds/tcframe"
-	"github.com/absmach/satlyt-demo/pkg/errors"
-	"github.com/absmach/satlyt-demo/pkg/orbital"
-	"github.com/absmach/satlyt-demo/pkg/satlyt"
-	"github.com/absmach/satlyt-demo/spacecraft"
+	"github.com/absmach/orbitron/pkg/ccsds/tcframe"
+	"github.com/absmach/orbitron/pkg/errors"
+	"github.com/absmach/orbitron/pkg/orbital"
+	"github.com/absmach/orbitron/pkg/orbitron"
+	"github.com/absmach/orbitron/spacecraft"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -95,19 +95,19 @@ func TestTelemetry(t *testing.T) {
 	tests := []struct {
 		desc  string
 		t     time.Time
-		check func(t *testing.T, tm satlyt.Telemetry)
+		check func(t *testing.T, tm orbitron.Telemetry)
 	}{
 		{
 			desc: "telemetry has position presence bit",
 			t:    t0,
-			check: func(t *testing.T, tm satlyt.Telemetry) {
-				assert.NotZero(t, tm.Presence&satlyt.PresencePosition)
+			check: func(t *testing.T, tm orbitron.Telemetry) {
+				assert.NotZero(t, tm.Presence&orbitron.PresencePosition)
 			},
 		},
 		{
 			desc: "telemetry timestamp matches query time",
 			t:    t0,
-			check: func(t *testing.T, tm satlyt.Telemetry) {
+			check: func(t *testing.T, tm orbitron.Telemetry) {
 				assert.Equal(t, uint32(t0.Unix()), tm.Timestamp)
 			},
 		},
@@ -118,7 +118,7 @@ func TestTelemetry(t *testing.T) {
 		{
 			desc: "battery voltage in reasonable range",
 			t:    t0,
-			check: func(t *testing.T, tm satlyt.Telemetry) {
+			check: func(t *testing.T, tm orbitron.Telemetry) {
 				assert.GreaterOrEqual(t, tm.BatV, uint16(3000))
 				assert.LessOrEqual(t, tm.BatV, uint16(9000))
 			},
@@ -160,16 +160,16 @@ func TestTelemetryFrame(t *testing.T) {
 			desc: "frame is decodable with correct HMAC key",
 			t:    t0,
 			check: func(t *testing.T, b []byte) {
-				tm, err := satlyt.Decode(b, testKey)
+				tm, err := orbitron.Decode(b, testKey)
 				require.NoError(t, err)
-				assert.NotZero(t, tm.Presence&satlyt.PresencePosition)
+				assert.NotZero(t, tm.Presence&orbitron.PresencePosition)
 			},
 		},
 		{
 			desc: "frame fails decode with wrong HMAC key",
 			t:    t0,
 			check: func(t *testing.T, b []byte) {
-				_, err := satlyt.Decode(b, []byte("wrong"))
+				_, err := orbitron.Decode(b, []byte("wrong"))
 				assert.Error(t, err)
 			},
 		},
@@ -177,7 +177,7 @@ func TestTelemetryFrame(t *testing.T) {
 			desc: "frame has minimum required size",
 			t:    t0,
 			check: func(t *testing.T, b []byte) {
-				assert.GreaterOrEqual(t, len(b), satlyt.MinFrameSize)
+				assert.GreaterOrEqual(t, len(b), orbitron.MinFrameSize)
 			},
 		},
 	}
@@ -230,7 +230,7 @@ func TestExecuteCommand(t *testing.T) {
 
 				tm, err := svc.Telemetry(ctx, t0)
 				require.NoError(t, err)
-				assert.NotZero(t, tm.Presence&satlyt.PresenceInference)
+				assert.NotZero(t, tm.Presence&orbitron.PresenceInference)
 				assert.Less(t, tm.InferenceClass, uint8(7))
 				assert.Greater(t, tm.InferenceConf, uint8(0))
 			},
@@ -245,7 +245,7 @@ func TestExecuteCommand(t *testing.T) {
 
 				tm, err := svc.Telemetry(ctx, t0)
 				require.NoError(t, err)
-				assert.NotZero(t, tm.Presence&satlyt.PresenceInference)
+				assert.NotZero(t, tm.Presence&orbitron.PresenceInference)
 				assert.Equal(t, uint16(0), tm.Sequence)
 			},
 		},

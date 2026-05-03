@@ -1,7 +1,7 @@
-// Package groundstation implements the Satlyt Demo ground station service.
+// Package groundstation implements the Orbitron ground station service.
 //
 // The ground station service:
-//   - Receives raw Satlyt Demo v2 binary frames (over UDP or WebSocket)
+//   - Receives raw Orbitron v2 binary frames (over UDP or WebSocket)
 //   - Verifies HMAC-SHA256 and decodes the frame
 //   - Maintains the latest telemetry state for each spacecraft (by SCID)
 //   - Broadcasts decoded telemetry to connected WebSocket clients
@@ -13,20 +13,20 @@ import (
 	"sync"
 	"time"
 
-	"github.com/absmach/satlyt-demo/pkg/errors"
-	"github.com/absmach/satlyt-demo/pkg/satlyt"
+	"github.com/absmach/orbitron/pkg/errors"
+	"github.com/absmach/orbitron/pkg/orbitron"
 )
 
 type Service interface {
-	Receive(ctx context.Context, rawFrame []byte) (satlyt.Telemetry, error)
+	Receive(ctx context.Context, rawFrame []byte) (orbitron.Telemetry, error)
 
 	Latest(ctx context.Context) (LatestState, error)
 
-	Subscribe(ctx context.Context) (<-chan satlyt.Telemetry, error)
+	Subscribe(ctx context.Context) (<-chan orbitron.Telemetry, error)
 }
 
 type LatestState struct {
-	Telemetry   satlyt.Telemetry
+	Telemetry   orbitron.Telemetry
 	ReceivedAt  time.Time
 	FrameNumber uint64
 }
@@ -45,7 +45,7 @@ type service struct {
 	latest     *LatestState
 	frameCount uint64
 
-	subscribers []chan satlyt.Telemetry
+	subscribers []chan orbitron.Telemetry
 }
 
 func New(cfg Config) Service {
@@ -55,10 +55,10 @@ func New(cfg Config) Service {
 	return &service{cfg: cfg}
 }
 
-func (s *service) Receive(ctx context.Context, rawFrame []byte) (satlyt.Telemetry, error) {
-	tm, err := satlyt.Decode(rawFrame, s.cfg.HMACKey)
+func (s *service) Receive(ctx context.Context, rawFrame []byte) (orbitron.Telemetry, error) {
+	tm, err := orbitron.Decode(rawFrame, s.cfg.HMACKey)
 	if err != nil {
-		return satlyt.Telemetry{}, err
+		return orbitron.Telemetry{}, err
 	}
 
 	s.mu.Lock()
@@ -68,7 +68,7 @@ func (s *service) Receive(ctx context.Context, rawFrame []byte) (satlyt.Telemetr
 		ReceivedAt:  time.Now().UTC(),
 		FrameNumber: s.frameCount,
 	}
-	subs := make([]chan satlyt.Telemetry, len(s.subscribers))
+	subs := make([]chan orbitron.Telemetry, len(s.subscribers))
 	copy(subs, s.subscribers)
 	s.mu.Unlock()
 
@@ -92,18 +92,18 @@ func (s *service) Latest(_ context.Context) (LatestState, error) {
 	return *s.latest, nil
 }
 
-func (s *service) Subscribe(ctx context.Context) (<-chan satlyt.Telemetry, error) {
+func (s *service) Subscribe(ctx context.Context) (<-chan orbitron.Telemetry, error) {
 	s.mu.Lock()
 	if len(s.subscribers) >= s.cfg.MaxSubscribers {
 		s.mu.Unlock()
 		return nil, errors.Wrap(errors.ErrInvalidField,
 			errors.New("maximum subscriber limit reached"))
 	}
-	internal := make(chan satlyt.Telemetry, 16)
+	internal := make(chan orbitron.Telemetry, 16)
 	s.subscribers = append(s.subscribers, internal)
 	s.mu.Unlock()
 
-	public := make(chan satlyt.Telemetry, 16)
+	public := make(chan orbitron.Telemetry, 16)
 
 	go func() {
 		defer func() {

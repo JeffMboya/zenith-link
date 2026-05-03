@@ -4,8 +4,8 @@ import (
 	"testing"
 	"time"
 
-	"github.com/absmach/satlyt-demo/pkg/ccsds/spacepacket"
-	"github.com/absmach/satlyt-demo/pkg/errors"
+	"github.com/absmach/orbitron/pkg/ccsds/spacepacket"
+	"github.com/absmach/orbitron/pkg/errors"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )

@@ -1,4 +1,4 @@
-// Package zenith implements the Satlyt Demo binary telemetry protocol v2.
+// Package zenith implements the Orbitron binary telemetry protocol v2.
 //
 // Wire format:
 //
@@ -40,14 +40,14 @@
 //	Bit 10: TempC
 //	Bit 9:  RSSI
 //	Bit 8:  InferenceClass / InferenceConf (always together)
-package satlyt
+package orbitron
 
 import (
 	"crypto/hmac"
 	"crypto/sha256"
 	"encoding/binary"
 
-	"github.com/absmach/satlyt-demo/pkg/errors"
+	"github.com/absmach/orbitron/pkg/errors"
 )
 
 const (
@@ -176,7 +176,7 @@ func Decode(b []byte, hmacKey []byte) (Telemetry, error) {
 	}
 	if len(b) < MinFrameSize {
 		return Telemetry{}, errors.Wrap(errors.ErrFrameTooSmall,
-			errors.New("frame shorter than minimum Satlyt Demo size"))
+			errors.New("frame shorter than minimum Orbitron size"))
 	}
 
 	bodyEnd := len(b) - HMACSize
@@ -190,11 +190,11 @@ func Decode(b []byte, hmacKey []byte) (Telemetry, error) {
 	magic := binary.BigEndian.Uint16(b[0:])
 	if magic != Magic {
 		return Telemetry{}, errors.Wrap(errors.ErrBadMagic,
-			errors.New("Satlyt Demo magic mismatch"))
+			errors.New("Orbitron magic mismatch"))
 	}
 	if b[2] != Version {
 		return Telemetry{}, errors.Wrap(errors.ErrBadVersion,
-			errors.New("Satlyt Demo version mismatch"))
+			errors.New("Orbitron version mismatch"))
 	}
 
 	tm := Telemetry{
