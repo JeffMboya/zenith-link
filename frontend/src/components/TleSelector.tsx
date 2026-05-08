@@ -14,22 +14,16 @@ export function TleSelector({ source, group, count }: Props) {
     importGroup('stations', 0)
   }, [])
 
-  const label = loading
-    ? 'LOADING...'
-    : source === 'tle'
-      ? `TLE: ${group.toUpperCase()} (${count})`
-      : 'AWAITING TLE...'
-
-  const color = source === 'tle' ? 'var(--green)' : 'var(--text-dim)'
+  if (loading || source !== 'tle') return null
 
   return (
     <div style={{
       padding: '4px 10px',
       border: '1px solid var(--border)',
-      color, fontSize: 9, letterSpacing: 1,
+      color: 'var(--green)', fontSize: 9, letterSpacing: 1,
       borderRadius: 2,
     }}>
-      {label}
+      {`TLE: ${group.toUpperCase()} (${count})`}
     </div>
   )
 }

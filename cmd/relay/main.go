@@ -619,7 +619,7 @@ func relayWindowsHandler(elem orbital.Elements, defaultGSLat, defaultGSLon, minE
 		}
 		now := time.Now().UTC()
 		inContact, _ := orbital.IsInContact(elem, gsLat, gsLon, now, minElevDeg)
-		windows, err := orbital.ContactWindows(elem, gsLat, gsLon, now, now.Add(2*time.Hour), minElevDeg)
+		windows, err := orbital.ContactWindows(elem, gsLat, gsLon, now, now.Add(6*time.Hour), minElevDeg)
 		var wins []winRes
 		if err == nil {
 			for _, cw := range windows {
