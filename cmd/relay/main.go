@@ -67,6 +67,15 @@ type config struct {
 	GS3Addr         string  `env:"GS3_ADDR"           envDefault:""`
 	GS3Lat          float64 `env:"GS3_LAT"            envDefault:"-53.1638"`
 	GS3Lon          float64 `env:"GS3_LON"            envDefault:"-70.9171"`
+	GS4Addr         string  `env:"GS4_ADDR"           envDefault:""`
+	GS4Lat          float64 `env:"GS4_LAT"            envDefault:"64.8201"`
+	GS4Lon          float64 `env:"GS4_LON"            envDefault:"-147.7200"`
+	GS5Addr         string  `env:"GS5_ADDR"           envDefault:""`
+	GS5Lat          float64 `env:"GS5_LAT"            envDefault:"12.9716"`
+	GS5Lon          float64 `env:"GS5_LON"            envDefault:"77.5946"`
+	GS6Addr         string  `env:"GS6_ADDR"           envDefault:""`
+	GS6Lat          float64 `env:"GS6_LAT"            envDefault:"-31.9505"`
+	GS6Lon          float64 `env:"GS6_LON"            envDefault:"115.8605"`
 	MinElevDeg      float64 `env:"MIN_ELEV_DEG"       envDefault:"5.0"`
 	PollIntervalSec int     `env:"POLL_INTERVAL_SEC"  envDefault:"30"`
 	LossRate        float64 `env:"LINK_LOSS_RATE"     envDefault:"0"`
@@ -81,6 +90,15 @@ func (cfg config) gsTargets() []gsTarget {
 	}
 	if cfg.GS3Addr != "" {
 		gs = append(gs, gsTarget{Name: "Ground Station Punta Arenas", Addr: cfg.GS3Addr, Lat: cfg.GS3Lat, Lon: cfg.GS3Lon})
+	}
+	if cfg.GS4Addr != "" {
+		gs = append(gs, gsTarget{Name: "Ground Station Fairbanks", Addr: cfg.GS4Addr, Lat: cfg.GS4Lat, Lon: cfg.GS4Lon})
+	}
+	if cfg.GS5Addr != "" {
+		gs = append(gs, gsTarget{Name: "Ground Station Bangalore", Addr: cfg.GS5Addr, Lat: cfg.GS5Lat, Lon: cfg.GS5Lon})
+	}
+	if cfg.GS6Addr != "" {
+		gs = append(gs, gsTarget{Name: "Ground Station Perth", Addr: cfg.GS6Addr, Lat: cfg.GS6Lat, Lon: cfg.GS6Lon})
 	}
 	return gs
 }
