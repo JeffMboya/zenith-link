@@ -56,6 +56,9 @@ services:
       - groundstation
       - gs2
       - gs3
+      - gs4
+      - gs5
+      - gs6
       - spacecraft1
       - spacecraft2
       - relay-noaa20
@@ -110,6 +113,9 @@ services:
       - RELAY4_ADDR=http://relay-aqua:8082
       - RELAY5_ADDR=http://relay-terra:8082
       - RELAY6_ADDR=http://relay-noaa19:8082
+      - GS4_ADDR=http://gs4:8087
+      - GS5_ADDR=http://gs5:8088
+      - GS6_ADDR=http://gs6:8089
     depends_on:
       - spacecraft1
       - spacecraft2
@@ -148,6 +154,57 @@ services:
     depends_on:
       - spacecraft1
 
+  gs4:
+    <<: *common
+    build:
+      context: ..
+      dockerfile: docker/Dockerfile.groundstation
+    environment:
+      - ORBITRON_HMAC_KEY=${ORBITRON_HMAC_KEY:?ORBITRON_HMAC_KEY must be set in .env}
+      - GROUNDSTATION_ADDR=:8087
+      - GS_MAX_SUBSCRIBERS=64
+      - GS_LAT=64.8201
+      - GS_LON=-147.7200
+      - SC_ADDR=http://spacecraft1:8080
+      - SC_SCID=90
+      - SC_VCID=0
+    depends_on:
+      - spacecraft1
+
+  gs5:
+    <<: *common
+    build:
+      context: ..
+      dockerfile: docker/Dockerfile.groundstation
+    environment:
+      - ORBITRON_HMAC_KEY=${ORBITRON_HMAC_KEY:?ORBITRON_HMAC_KEY must be set in .env}
+      - GROUNDSTATION_ADDR=:8088
+      - GS_MAX_SUBSCRIBERS=64
+      - GS_LAT=12.9716
+      - GS_LON=77.5946
+      - SC_ADDR=http://spacecraft1:8080
+      - SC_SCID=90
+      - SC_VCID=0
+    depends_on:
+      - spacecraft1
+
+  gs6:
+    <<: *common
+    build:
+      context: ..
+      dockerfile: docker/Dockerfile.groundstation
+    environment:
+      - ORBITRON_HMAC_KEY=${ORBITRON_HMAC_KEY:?ORBITRON_HMAC_KEY must be set in .env}
+      - GROUNDSTATION_ADDR=:8089
+      - GS_MAX_SUBSCRIBERS=64
+      - GS_LAT=-31.9505
+      - GS_LON=115.8605
+      - SC_ADDR=http://spacecraft1:8080
+      - SC_SCID=90
+      - SC_VCID=0
+    depends_on:
+      - spacecraft1
+
   relay-noaa20:
     <<: *relay
     environment:
@@ -163,6 +220,15 @@ services:
       - GS3_ADDR=http://gs3:8086
       - GS3_LAT=-53.1638
       - GS3_LON=-70.9171
+      - GS4_ADDR=http://gs4:8087
+      - GS4_LAT=64.8201
+      - GS4_LON=-147.7200
+      - GS5_ADDR=http://gs5:8088
+      - GS5_LAT=12.9716
+      - GS5_LON=77.5946
+      - GS6_ADDR=http://gs6:8089
+      - GS6_LAT=-31.9505
+      - GS6_LON=115.8605
       - GS_LAT=-1.2864
       - GS_LON=36.8172
       - MIN_ELEV_DEG=5.0
@@ -186,6 +252,15 @@ services:
       - GS3_ADDR=http://gs3:8086
       - GS3_LAT=-53.1638
       - GS3_LON=-70.9171
+      - GS4_ADDR=http://gs4:8087
+      - GS4_LAT=64.8201
+      - GS4_LON=-147.7200
+      - GS5_ADDR=http://gs5:8088
+      - GS5_LAT=12.9716
+      - GS5_LON=77.5946
+      - GS6_ADDR=http://gs6:8089
+      - GS6_LAT=-31.9505
+      - GS6_LON=115.8605
       - GS_LAT=-1.2864
       - GS_LON=36.8172
       - MIN_ELEV_DEG=5.0
@@ -209,6 +284,15 @@ services:
       - GS3_ADDR=http://gs3:8086
       - GS3_LAT=-53.1638
       - GS3_LON=-70.9171
+      - GS4_ADDR=http://gs4:8087
+      - GS4_LAT=64.8201
+      - GS4_LON=-147.7200
+      - GS5_ADDR=http://gs5:8088
+      - GS5_LAT=12.9716
+      - GS5_LON=77.5946
+      - GS6_ADDR=http://gs6:8089
+      - GS6_LAT=-31.9505
+      - GS6_LON=115.8605
       - GS_LAT=-1.2864
       - GS_LON=36.8172
       - MIN_ELEV_DEG=5.0
@@ -232,6 +316,15 @@ services:
       - GS3_ADDR=http://gs3:8086
       - GS3_LAT=-53.1638
       - GS3_LON=-70.9171
+      - GS4_ADDR=http://gs4:8087
+      - GS4_LAT=64.8201
+      - GS4_LON=-147.7200
+      - GS5_ADDR=http://gs5:8088
+      - GS5_LAT=12.9716
+      - GS5_LON=77.5946
+      - GS6_ADDR=http://gs6:8089
+      - GS6_LAT=-31.9505
+      - GS6_LON=115.8605
       - GS_LAT=-1.2864
       - GS_LON=36.8172
       - MIN_ELEV_DEG=5.0
@@ -255,6 +348,15 @@ services:
       - GS3_ADDR=http://gs3:8086
       - GS3_LAT=-53.1638
       - GS3_LON=-70.9171
+      - GS4_ADDR=http://gs4:8087
+      - GS4_LAT=64.8201
+      - GS4_LON=-147.7200
+      - GS5_ADDR=http://gs5:8088
+      - GS5_LAT=12.9716
+      - GS5_LON=77.5946
+      - GS6_ADDR=http://gs6:8089
+      - GS6_LAT=-31.9505
+      - GS6_LON=115.8605
       - GS_LAT=-1.2864
       - GS_LON=36.8172
       - MIN_ELEV_DEG=5.0
@@ -278,6 +380,15 @@ services:
       - GS3_ADDR=http://gs3:8086
       - GS3_LAT=-53.1638
       - GS3_LON=-70.9171
+      - GS4_ADDR=http://gs4:8087
+      - GS4_LAT=64.8201
+      - GS4_LON=-147.7200
+      - GS5_ADDR=http://gs5:8088
+      - GS5_LAT=12.9716
+      - GS5_LON=77.5946
+      - GS6_ADDR=http://gs6:8089
+      - GS6_LAT=-31.9505
+      - GS6_LON=115.8605
       - GS_LAT=-1.2864
       - GS_LON=36.8172
       - MIN_ELEV_DEG=5.0
