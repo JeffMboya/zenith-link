@@ -39,6 +39,44 @@ services:
     depends_on:
       - spacecraft
 
+  gs2:
+    <<: *common
+    build:
+      context: ..
+      dockerfile: docker/Dockerfile.groundstation
+    ports:
+      - "8085:8085"
+    environment:
+      - ORBITRON_HMAC_KEY=${ORBITRON_HMAC_KEY}
+      - GROUNDSTATION_ADDR=:8085
+      - GS_MAX_SUBSCRIBERS=64
+      - GS_LAT=78.2232
+      - GS_LON=15.6267
+      - SC_ADDR=http://spacecraft:8080
+      - SC_SCID=90
+      - SC_VCID=0
+    depends_on:
+      - spacecraft
+
+  gs3:
+    <<: *common
+    build:
+      context: ..
+      dockerfile: docker/Dockerfile.groundstation
+    ports:
+      - "8086:8086"
+    environment:
+      - ORBITRON_HMAC_KEY=${ORBITRON_HMAC_KEY}
+      - GROUNDSTATION_ADDR=:8086
+      - GS_MAX_SUBSCRIBERS=64
+      - GS_LAT=-53.1638
+      - GS_LON=-70.9171
+      - SC_ADDR=http://spacecraft:8080
+      - SC_SCID=90
+      - SC_VCID=0
+    depends_on:
+      - spacecraft
+
   relay:
     restart: unless-stopped
     build:
@@ -50,14 +88,23 @@ services:
       - RELAY_ADDR=:8082
       - SC1_ADDR=http://spacecraft:8080
       - GS_ADDR=http://groundstation:8081
+      - GS2_ADDR=http://gs2:8085
+      - GS2_LAT=78.2232
+      - GS2_LON=15.6267
+      - GS3_ADDR=http://gs3:8086
+      - GS3_LAT=-53.1638
+      - GS3_LON=-70.9171
       - RELAY_SCID=91
       - GS_LAT=-1.2864
       - GS_LON=36.8172
       - MIN_ELEV_DEG=5.0
       - POLL_INTERVAL_SEC=30
+      - LINK_LOSS_RATE=${LINK_LOSS_RATE:-0.05}
     depends_on:
       - spacecraft
       - groundstation
+      - gs2
+      - gs3
 
   relay2:
     restart: unless-stopped
@@ -71,12 +118,21 @@ services:
       - SC1_ADDR=http://spacecraft:8080
       - RELAY1_ADDR=http://relay:8082
       - GS_ADDR=http://groundstation:8081
+      - GS2_ADDR=http://gs2:8085
+      - GS2_LAT=78.2232
+      - GS2_LON=15.6267
+      - GS3_ADDR=http://gs3:8086
+      - GS3_LAT=-53.1638
+      - GS3_LON=-70.9171
       - RELAY2_SCID=92
       - GS_LAT=-1.2864
       - GS_LON=36.8172
       - MIN_ELEV_DEG=5.0
       - POLL_INTERVAL_SEC=30
+      - LINK_LOSS_RATE=${LINK_LOSS_RATE:-0.05}
     depends_on:
       - spacecraft
       - groundstation
+      - gs2
+      - gs3
       - relay
