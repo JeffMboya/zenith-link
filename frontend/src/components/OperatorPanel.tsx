@@ -85,7 +85,7 @@ function Section({ label, count, open, onToggle }: { label: string; count: numbe
       onClick={onToggle}
       style={{
         display: 'flex', alignItems: 'center', gap: 8,
-        padding: '14px 14px 6px',
+        padding: '18px 14px 7px',
         cursor: onToggle ? 'pointer' : 'default',
         userSelect: 'none',
       }}
@@ -179,7 +179,7 @@ export function OperatorPanel({ primaryOnline, primarySatId, tleSource, tleGroup
   return (
     <div style={{
       position: 'fixed', top: 48, left: 0, bottom: 0, zIndex: 109,
-      width: open ? 290 : 32,
+      width: open ? 310 : 32,
       transition: 'width 0.2s ease',
       background: 'linear-gradient(180deg, #060f1e 0%, #040c18 100%)',
       borderRight: '1px solid #0e1a28',
@@ -246,7 +246,7 @@ export function OperatorPanel({ primaryOnline, primarySatId, tleSource, tleGroup
                       window.dispatchEvent(new CustomEvent('select-sat', { detail: p.id }))
                     }}
                     style={{
-                      padding: active ? '12px 14px 12px 12px' : '8px 14px 8px 14px',
+                      padding: active ? '16px 14px 16px 12px' : '12px 14px 12px 14px',
                       borderBottom: '1px solid #0a1520',
                       borderLeft: active ? `2px solid ${liveColor}` : '2px solid transparent',
                       background: active ? `color-mix(in srgb, ${liveColor} 5%, #060f1e)` : 'transparent',
@@ -257,7 +257,7 @@ export function OperatorPanel({ primaryOnline, primarySatId, tleSource, tleGroup
                     onMouseLeave={e => { if (!active) e.currentTarget.style.background = 'transparent' }}
                   >
                     {/* Name row */}
-                    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 5 }}>
+                    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 7 }}>
                       <div style={{ display: 'flex', alignItems: 'center', gap: 7 }}>
                         <div style={{
                           width: active ? 7 : 5, height: active ? 7 : 5,
@@ -281,7 +281,7 @@ export function OperatorPanel({ primaryOnline, primarySatId, tleSource, tleGroup
                     </div>
 
                     {/* Meta row — always visible */}
-                    <div style={{ color: '#4a6272', fontSize: 7, letterSpacing: 0.4, paddingLeft: 14, marginBottom: 5 }}>
+                    <div style={{ color: '#4a6272', fontSize: 7, letterSpacing: 0.4, paddingLeft: 14, marginBottom: 7 }}>
                       {p.meta}
                     </div>
 
@@ -313,7 +313,7 @@ export function OperatorPanel({ primaryOnline, primarySatId, tleSource, tleGroup
                       window.dispatchEvent(new CustomEvent('select-sat', { detail: node.id }))
                     }}
                     style={{
-                      padding: '7px 14px',
+                      padding: '11px 14px',
                       borderBottom: '1px solid #0a1520',
                       borderLeft: active ? `2px solid ${s.color}` : '2px solid transparent',
                       background: active ? `color-mix(in srgb, ${s.color} 4%, #060f1e)` : 'transparent',
@@ -353,7 +353,7 @@ export function OperatorPanel({ primaryOnline, primarySatId, tleSource, tleGroup
               />
 
               {gsOpen && groundStations.map(gs => (
-                <div key={gs.name} style={{ padding: '6px 14px 6px 16px', borderBottom: '1px solid #0a1520', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                <div key={gs.name} style={{ padding: '9px 14px 9px 16px', borderBottom: '1px solid #0a1520', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                   <div style={{ display: 'flex', alignItems: 'center', gap: 7 }}>
                     <div style={{ width: 4, height: 4, background: '#3d5568', borderRadius: 1, flexShrink: 0 }} />
                     <span style={{ color: '#5a7080', fontSize: 8, fontWeight: 500 }}>{gs.name}</span>
