@@ -56,7 +56,7 @@ type commandForwarder struct {
 
 func (cf *commandForwarder) forward(ctx context.Context, commandID uint8, payload []byte) (commandFwdRes, error) {
 	if cf.cfg.SpacecraftAddr == "" {
-		return commandFwdRes{}, fmt.Errorf("spacecraft address not configured")
+		return commandFwdRes{}, fmt.Errorf("satellite address not configured")
 	}
 
 	data := make([]byte, 1+len(payload))
@@ -87,18 +87,18 @@ func (cf *commandForwarder) forward(ctx context.Context, commandID uint8, payloa
 
 	resp, err := cf.client.Do(req)
 	if err != nil {
-		return commandFwdRes{}, fmt.Errorf("spacecraft unreachable: %w", err)
+		return commandFwdRes{}, fmt.Errorf("satellite unreachable: %w", err)
 	}
 	defer resp.Body.Close()
 
 	body, _ := io.ReadAll(io.LimitReader(resp.Body, 4096))
 	if resp.StatusCode != http.StatusOK {
-		return commandFwdRes{}, fmt.Errorf("spacecraft returned %d: %s", resp.StatusCode, body)
+		return commandFwdRes{}, fmt.Errorf("satellite returned %d: %s", resp.StatusCode, body)
 	}
 
 	var res commandFwdRes
 	if err := json.Unmarshal(body, &res); err != nil {
-		return commandFwdRes{}, fmt.Errorf("decode spacecraft response: %w", err)
+		return commandFwdRes{}, fmt.Errorf("decode satellite response: %w", err)
 	}
 	return res, nil
 }
@@ -133,7 +133,7 @@ func NewRouter(svc groundstation.Service, cfg RouterConfig) http.Handler {
 
 	r.Get("/capabilities", func(w http.ResponseWriter, _ *http.Request) {
 		writeJSON(w, http.StatusOK, map[string]any{
-			"node_id":          "GS-Nairobi",
+			"node_id":          "Ground Station Nairobi",
 			"role":             "groundstation",
 			"protocols":        []string{"orbitron-v2", "ccsds-tm"},
 			"lat":              cfg.GSLat,
@@ -150,13 +150,13 @@ func NewRouter(svc groundstation.Service, cfg RouterConfig) http.Handler {
 		}
 		var nodes []nodeEntry
 		if cfg.SpacecraftAddr != "" {
-			nodes = append(nodes, nodeEntry{"SC-1", cfg.SpacecraftAddr})
+			nodes = append(nodes, nodeEntry{"Satellite-1", cfg.SpacecraftAddr})
 		}
 		if cfg.Relay1Addr != "" {
-			nodes = append(nodes, nodeEntry{"SC-2-relay", cfg.Relay1Addr})
+			nodes = append(nodes, nodeEntry{"Satellite-2", cfg.Relay1Addr})
 		}
 		if cfg.Relay2Addr != "" {
-			nodes = append(nodes, nodeEntry{"SC-3-relay2", cfg.Relay2Addr})
+			nodes = append(nodes, nodeEntry{"Satellite-3", cfg.Relay2Addr})
 		}
 
 		results := make([]map[string]any, len(nodes))
@@ -189,7 +189,7 @@ func NewRouter(svc groundstation.Service, cfg RouterConfig) http.Handler {
 
 		writeJSON(w, http.StatusOK, map[string]any{
 			"groundstation": map[string]any{
-				"node_id":         "GS-Nairobi",
+				"node_id":         "Ground Station Nairobi",
 				"role":            "groundstation",
 				"protocols":       []string{"orbitron-v2", "ccsds-tm"},
 				"lat":             cfg.GSLat,
@@ -310,7 +310,7 @@ func receiveHandler(svc groundstation.Service) http.HandlerFunc {
 
 		if tm.Flags&orbitron.FlagPriority != 0 {
 			label := orbitron.InferenceClassName(tm.InferenceClass)
-			slog.Warn("[PRIORITY DOWNLINK] anomaly flagged by spacecraft",
+			slog.Warn("[PRIORITY DOWNLINK] anomaly flagged by satellite",
 				slog.String("class", label),
 				slog.Int("conf_pct", int(tm.InferenceConf)*100/255),
 				slog.Uint64("sequence", uint64(tm.Sequence)),
