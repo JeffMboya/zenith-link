@@ -114,7 +114,7 @@ export function OperatorPanel({ primaryOnline, primarySatId, tleSource, tleGroup
   const [tab,        setTab]        = useState<Tab>('FLEET')
   const [selectedId, setSelectedId] = useState(primarySatId)
   const [relaysOpen, setRelaysOpen] = useState(true)
-  const [gsOpen,     setGsOpen]     = useState(false)
+  const [gsOpen,     setGsOpen]     = useState(true)
   const [events,     setEvents]     = useState<AutonomousEvent[]>([])
 
   // Track globe selection
@@ -257,7 +257,7 @@ export function OperatorPanel({ primaryOnline, primarySatId, tleSource, tleGroup
                     onMouseLeave={e => { if (!active) e.currentTarget.style.background = 'transparent' }}
                   >
                     {/* Name row */}
-                    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: active ? 5 : 3 }}>
+                    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 5 }}>
                       <div style={{ display: 'flex', alignItems: 'center', gap: 7 }}>
                         <div style={{
                           width: active ? 7 : 5, height: active ? 7 : 5,
@@ -280,18 +280,16 @@ export function OperatorPanel({ primaryOnline, primarySatId, tleSource, tleGroup
                       </span>
                     </div>
 
-                    {/* Meta row */}
-                    <div style={{ color: active ? '#4a6272' : '#3a5060', fontSize: 7, letterSpacing: 0.4, paddingLeft: active ? 14 : 12 }}>
+                    {/* Meta row — always visible */}
+                    <div style={{ color: '#4a6272', fontSize: 7, letterSpacing: 0.4, paddingLeft: 14, marginBottom: 5 }}>
                       {p.meta}
                     </div>
 
-                    {/* Link bars — only for active item */}
-                    {active && (
-                      <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginTop: 6, paddingLeft: 14 }}>
-                        <LinkBars online={p.online} />
-                        <span style={{ color: '#304840', fontSize: 7, letterSpacing: 1.5 }}>LINK</span>
-                      </div>
-                    )}
+                    {/* Link bars — always visible */}
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 6, paddingLeft: 14 }}>
+                      <LinkBars online={p.online} />
+                      <span style={{ color: '#4a6272', fontSize: 7, letterSpacing: 1.5 }}>LINK</span>
+                    </div>
                   </div>
                 )
               })}
