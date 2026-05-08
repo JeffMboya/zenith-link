@@ -114,7 +114,7 @@ export default function App() {
         primarySatId={primarySatId}
       />
       <CommandPanel />
-      <OperatorPanel primaryOnline={connected} primarySatId={primarySatId} tleSource={constellation.source} />
+      <OperatorPanel primaryOnline={connected} primarySatId={primarySatId} tleSource={constellation.source} tleGroup={constellation.group} />
     </>
   )
 }

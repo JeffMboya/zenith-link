@@ -75,9 +75,10 @@ interface Props {
   primaryOnline: boolean
   primarySatId: string
   tleSource: 'sim' | 'tle'
+  tleGroup?: string
 }
 
-export function OperatorPanel({ primaryOnline, primarySatId, tleSource }: Props) {
+export function OperatorPanel({ primaryOnline, primarySatId, tleSource, tleGroup }: Props) {
   const [open, setOpen] = useState(true)
   const [tab, setTab] = useState<Tab>('FLEET')
   const [events, setEvents] = useState<AutonomousEvent[]>([])
@@ -218,7 +219,7 @@ export function OperatorPanel({ primaryOnline, primarySatId, tleSource }: Props)
                     {tleSource === 'tle' ? primarySatId : 'Satellite-1'}
                   </div>
                   <div style={{ color: 'var(--text-dim)', fontSize: 8, letterSpacing: 0.5, marginBottom: 4 }}>
-                    {tleSource === 'tle' ? '~500 km · 97.4° · PLANET LABS TLE' : '500 km · 97.4° · SUN-SYNC SIM'}
+                    {tleSource === 'tle' ? `LIVE TLE · ${(tleGroup ?? 'tle').toUpperCase()}` : '500 km · 97.4° · SUN-SYNC SIM'}
                   </div>
                   <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
                     <span style={{ color: primaryOnline ? 'var(--green)' : 'var(--red)', fontSize: 8, fontWeight: 700, letterSpacing: 1 }}>
@@ -275,7 +276,7 @@ export function OperatorPanel({ primaryOnline, primarySatId, tleSource }: Props)
                 <div style={{ color: 'var(--text-dim)', fontSize: 7, letterSpacing: 2, marginBottom: 4 }}>CONSTELLATION</div>
                 <div style={{ color: 'var(--text-mid)', fontSize: 8, lineHeight: 1.5 }}>
                   {tleSource === 'tle'
-                    ? `Live Planet Labs constellation. Primary: ${primarySatId}. Satellite-2 / Satellite-3 are ISL relay nodes.`
+                    ? `Live ${tleGroup ?? 'TLE'} constellation. Primary: ${primarySatId}. Satellite-2 / Satellite-3 are ISL relay nodes.`
                     : 'Satellite-1 simulated primary + Satellite-2 / Satellite-3 ISL relay nodes. Switch to live TLE data via the KPI bar.'
                   }
                 </div>
