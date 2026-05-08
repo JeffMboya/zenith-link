@@ -200,7 +200,9 @@ func main() {
 	}
 
 	elem, satName := fetchOwnElements(cfg, logger)
-	elem = adjustForEarlyContact(elem, cfg.GSLat, cfg.GSLon, cfg.MinElevDeg, 90, logger)
+	if cfg.NoradID == "" {
+		elem = adjustForEarlyContact(elem, cfg.GSLat, cfg.GSLon, cfg.MinElevDeg, 90, logger)
+	}
 
 	node := &relayNode{
 		store:    dtn.NewStore(),

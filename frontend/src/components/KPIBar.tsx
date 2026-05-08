@@ -110,11 +110,11 @@ function useISLNodes() {
     async function poll() {
       const [healthResults, windowResults] = await Promise.all([
         Promise.allSettled([
-          fetch('/relay/health').then(r => r.ok ? r.json() : Promise.reject()),
+          fetch('/relay1/health').then(r => r.ok ? r.json() : Promise.reject()),
           fetch('/relay2/health').then(r => r.ok ? r.json() : Promise.reject()),
         ]),
         Promise.allSettled([
-          fetch('/relay/windows').then(r => r.ok ? r.json() : Promise.reject()),
+          fetch('/relay1/windows').then(r => r.ok ? r.json() : Promise.reject()),
           fetch('/relay2/windows').then(r => r.ok ? r.json() : Promise.reject()),
         ]),
       ])

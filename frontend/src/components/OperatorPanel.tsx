@@ -214,31 +214,34 @@ export function OperatorPanel({ primaryOnline, primarySatId, tleSource, tleGroup
               <div style={{ padding: '6px 14px 4px', color: 'var(--text-dim)', fontSize: 7, letterSpacing: 2 }}>
                 PRIMARY SPACECRAFT
               </div>
-              <div
-                onClick={() => window.dispatchEvent(new CustomEvent('select-sat', { detail: primarySatId }))}
-                style={{
-                  padding: '8px 14px', borderBottom: '1px solid var(--bg-dark)',
-                  cursor: 'pointer', display: 'flex', alignItems: 'flex-start', gap: 10,
-                }}
-              >
-                <StatusDot online={primaryOnline} active={primaryOnline} />
-                <div style={{ flex: 1 }}>
-                  <div style={{ color: 'var(--cyan)', fontSize: 10, fontWeight: 700, letterSpacing: 1, marginBottom: 2 }}>
-                    {tleSource === 'tle' ? primarySatId : 'Satellite-1'}
-                  </div>
-                  <div style={{ color: 'var(--text-dim)', fontSize: 8, letterSpacing: 0.5, marginBottom: 4 }}>
-                    {tleSource === 'tle' ? `LIVE TLE · ${(tleGroup ?? 'tle').toUpperCase()}` : '500 km · 97.4° · SUN-SYNC SIM'}
-                  </div>
-                  <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                    <span style={{ color: primaryOnline ? 'var(--green)' : 'var(--red)', fontSize: 8, fontWeight: 700, letterSpacing: 1 }}>
-                      {primaryOnline ? '● LIVE' : '● OFFLINE'}
-                    </span>
-                    <span style={{ color: 'var(--text-dim)', fontSize: 8, letterSpacing: 1 }}>
-                      {tleSource === 'tle' ? 'ENRICHED TELEMETRY' : 'FULL TELEMETRY'}
-                    </span>
+              {[
+                { id: primarySatId,   label: tleSource === 'tle' ? primarySatId : 'Satellite-1',  sub: tleSource === 'tle' ? `LIVE TLE · ${(tleGroup ?? 'tle').toUpperCase()}` : '408 km · 51.6° · SIM', online: primaryOnline },
+                { id: 'CSS (TIANHE)', label: 'Tiangong (CSS)', sub: '380 km · 41.5° · LIVE TLE', online: primaryOnline },
+              ].map(p => (
+                <div
+                  key={p.id}
+                  onClick={() => window.dispatchEvent(new CustomEvent('select-sat', { detail: p.id }))}
+                  style={{ padding: '8px 14px', borderBottom: '1px solid var(--bg-dark)', cursor: 'pointer', display: 'flex', alignItems: 'flex-start', gap: 10 }}
+                >
+                  <StatusDot online={p.online} active={p.online} />
+                  <div style={{ flex: 1 }}>
+                    <div style={{ color: 'var(--cyan)', fontSize: 10, fontWeight: 700, letterSpacing: 1, marginBottom: 2 }}>
+                      {p.label}
+                    </div>
+                    <div style={{ color: 'var(--text-dim)', fontSize: 8, letterSpacing: 0.5, marginBottom: 4 }}>
+                      {p.sub}
+                    </div>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                      <span style={{ color: p.online ? 'var(--green)' : 'var(--red)', fontSize: 8, fontWeight: 700, letterSpacing: 1 }}>
+                        {p.online ? '● LIVE' : '● OFFLINE'}
+                      </span>
+                      <span style={{ color: 'var(--text-dim)', fontSize: 8, letterSpacing: 1 }}>
+                        SIMULATED TELEMETRY
+                      </span>
+                    </div>
                   </div>
                 </div>
-              </div>
+              ))}
 
               
               <div style={{ padding: '10px 14px 4px', color: 'var(--text-dim)', fontSize: 7, letterSpacing: 2 }}>
