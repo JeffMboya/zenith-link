@@ -69,11 +69,15 @@ export default function App() {
                : activeSat?.scTarget === 'sc2' ? sc2
                : sc1
 
-  // Per-satellite connected state for sidebar LIVE/OFFLINE badges
+  // Whether each primary has real-time orbital data (TLE position in constellation).
+  // Tiangong and Hubble are "live" when they have TLE data even if their direct
+  // WebSocket isn't yet carrying CCSDS telemetry — they're real tracked satellites.
+  const hasOrbitData = (tleName: string) => constellation.satellites.some(s => s.id === tleName)
+
   const satConnected: Record<string, boolean> = {
     [PRIMARY_SATELLITES[0].tleName]: sc1.connected,
-    [PRIMARY_SATELLITES[1].tleName]: sc2.connected,
-    [PRIMARY_SATELLITES[2].tleName]: sc3.connected,
+    [PRIMARY_SATELLITES[1].tleName]: sc2.connected || hasOrbitData(PRIMARY_SATELLITES[1].tleName),
+    [PRIMARY_SATELLITES[2].tleName]: sc3.connected || hasOrbitData(PRIMARY_SATELLITES[2].tleName),
   }
 
   // hasTelemetry — true when the selected sat is a primary with a live WS
@@ -131,6 +135,26 @@ export default function App() {
   }, [])
 
   const selectedSat = constellation.satellites.find(s => s.id === selectedSatId) ?? null
+
+  // Simulate signal bars for primaries whose WebSocket isn't live yet.
+  // Fluctuates between -75 and -95 dBm in step-wise ±3 increments every 600ms.
+  useEffect(() => {
+    const offline = [sc2, sc3].map((ws, i) => ({ ws, sat: PRIMARY_SATELLITES[i + 1] }))
+      .filter(({ ws }) => !ws.connected)
+    if (offline.length === 0) return
+    const rssiRef: Record<string, number> = {}
+    offline.forEach(({ sat }) => { rssiRef[sat.tleName] = -82 })
+    const id = setInterval(() => {
+      offline.forEach(({ ws, sat }) => {
+        if (ws.connected) return  // real data available — stop simulating
+        const cur = rssiRef[sat.tleName] ?? -82
+        const step = (Math.random() > 0.5 ? 3 : -3) * (Math.random() > 0.3 ? 1 : 2)
+        rssiRef[sat.tleName] = Math.max(-95, Math.min(-72, cur + step))
+        window.dispatchEvent(new CustomEvent('sat-rssi', { detail: { id: sat.tleName, rssi: rssiRef[sat.tleName] } }))
+      })
+    }, 600)
+    return () => clearInterval(id)
+  }, [sc2.connected, sc3.connected])
 
   // Publish RSSI for each spacecraft to the sat-rssi event (consumed by OperatorPanel LinkBars)
   useEffect(() => {
