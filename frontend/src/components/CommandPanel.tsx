@@ -1,5 +1,6 @@
 import { useState, useRef, useEffect, useCallback, useMemo } from 'react'
 import { PRIMARY_SATELLITES } from '../data/primarySatellites'
+import { useCommandEngineContext } from '../hooks/useCommandEngine'
 
 interface LogEntry { ts: number; text: string; type: 'sent' | 'ack' | 'error' }
 
@@ -77,6 +78,7 @@ type Mode = 'command' | 'satellite'
 interface Props { selectedSatId: string }
 
 export function CommandPanel({ selectedSatId }: Props) {
+  const engine = useCommandEngineContext()
   const [query,         setQuery]         = useState('')
   const [selected,      setSelected]      = useState(0)
   const [log,           setLog]           = useState<LogEntry[]>([])
@@ -145,10 +147,13 @@ export function CommandPanel({ selectedSatId }: Props) {
     setConfirming(null); setConfirmInput('')
     setQuery(''); inputRef.current?.blur()
     setRecentIds(prev => [cmd.id, ...prev.filter(id => id !== cmd.id)].slice(0, 5))
-    setLog(l => [...l, { ts: Date.now(), text: `TX  ${cmd.category}: ${cmd.label}`, type: 'sent' }])
+    setLog(l => [...l, { ts: Date.now(), text: `TX  ${cmd.category}: ${cmd.label} · ${selectedSatId.split(' ')[0]}`, type: 'sent' }])
+
+    // Fire behavioral simulation (client-side, non-blocking)
+    engine.execute(cmd.id, selectedSatId)
+
     try {
       const payloadB64 = cmd.payloadBytes?.length ? btoa(String.fromCharCode(...cmd.payloadBytes)) : undefined
-      // Resolve backend target from selectedSatId
       const sat = PRIMARY_SATELLITES.find(s => s.tleName === selectedSatId)
       const target = sat?.scTarget ?? 'sc1'
       const res = await fetch(`/command?target=${target}`, {
@@ -293,7 +298,15 @@ export function CommandPanel({ selectedSatId }: Props) {
                   color: '#e0eef8', fontSize: 13,
                 }}
               />
-              {sending && <span style={{ color: '#d08030', fontSize: 9, letterSpacing: 1, flexShrink: 0 }}>TRANSMITTING...</span>}
+              {sending && (
+                <span style={{ color: 'var(--amber)', fontSize: 9, letterSpacing: 1, flexShrink: 0, display: 'flex', alignItems: 'center', gap: 4 }}>
+                  <span style={{ animation: 'spin 1.2s linear infinite', display: 'inline-block' }}>⟳</span>
+                  EXECUTING
+                  <div style={{ width: 60, height: 3, background: 'var(--bg-dark)', borderRadius: 0, overflow: 'hidden' }}>
+                    <div style={{ height: '100%', background: 'var(--amber)', animation: 'execProgress 1.5s ease-in-out infinite' }} />
+                  </div>
+                </span>
+              )}
               {!sending && log.length > 0 && (
                 <span style={{ color: log[log.length-1].type === 'ack' ? '#40d080' : '#e05050', fontSize: 9, letterSpacing: 0.5, flexShrink: 0 }}>
                   {log[log.length-1].type === 'ack' ? '✓ ACK' : '✗ ERR'}

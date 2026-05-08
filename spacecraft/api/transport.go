@@ -75,6 +75,8 @@ func NewRouter(svc spacecraft.Service) http.Handler {
 		})
 	})
 
+	r.Get("/query-health-ai", queryHealthAIHandler(svc))
+
 	r.Get("/metrics", func(w http.ResponseWriter, _ *http.Request) {
 		w.Header().Set("Content-Type", "text/plain; version=0.0.4")
 		fmt.Fprintf(w, "# HELP orbitron_frames_served_total Orbitron frames encoded and served to downstream nodes\n")

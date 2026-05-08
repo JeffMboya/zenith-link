@@ -11,6 +11,7 @@ import { OperatorPanel } from './components/OperatorPanel'
 import { MissionFooter } from './components/MissionFooter'
 import { ContactTimeline } from './components/ContactTimeline'
 import { useContactWindows } from './hooks/useContactWindows'
+import { useCommandEngine, CommandEngineContext } from './hooks/useCommandEngine'
 import { PRIMARY_SATELLITES, primarySatByName } from './data/primarySatellites'
 import { GROUND_STATIONS } from './data/groundStations'
 
@@ -52,6 +53,7 @@ export default function App() {
 
   const orbitalPos       = useOrbitalPosition()
   const contactWindows   = useContactWindows()
+  const commandEngine    = useCommandEngine()
   const constellation = useConstellation()
   const relay1Health = useRelayHealth('/relay1/health')
   // relay2Health reserved for ISL beam coloring
@@ -150,6 +152,7 @@ export default function App() {
   const primarySatId = PRIMARY_SATELLITES[0].tleName
 
   return (
+    <CommandEngineContext.Provider value={commandEngine}>
     <>
       <Globe3D
         data={active.latest}
@@ -194,5 +197,6 @@ export default function App() {
         missionStartMs={missionStartRef.current}
       />
     </>
+    </CommandEngineContext.Provider>
   )
 }

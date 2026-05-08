@@ -4,6 +4,11 @@ import cesium from 'vite-plugin-cesium'
 
 export default defineConfig({
   plugins: [react(), cesium()],
+  test: {
+    environment: 'jsdom',
+    globals: true,
+    setupFiles: ['./src/test/setup.ts'],
+  },
   server: {
     port: 5173,
     proxy: {
@@ -43,6 +48,13 @@ export default defineConfig({
         target: 'http://localhost:8083',
         rewrite: (path: string) => path.replace(/^\/relay2/, ''),
       },
+      '/relay3': { target: 'http://localhost:8089', rewrite: (p: string) => p.replace(/^\/relay3/, '') },
+      '/relay4': { target: 'http://localhost:8090', rewrite: (p: string) => p.replace(/^\/relay4/, '') },
+      '/relay5': { target: 'http://localhost:8091', rewrite: (p: string) => p.replace(/^\/relay5/, '') },
+      '/relay6': { target: 'http://localhost:8092', rewrite: (p: string) => p.replace(/^\/relay6/, '') },
+      '/spacecraft2/ws': { target: 'ws://localhost:8081', ws: true },
+      '/spacecraft3/ws': { target: 'ws://localhost:8081', ws: true },
+      '/query-health-ai': 'http://localhost:8080',
     },
   },
 })
