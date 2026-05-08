@@ -90,13 +90,13 @@ function Section({ label, count, open, onToggle }: { label: string; count: numbe
         userSelect: 'none',
       }}
     >
-      <span style={{ color: '#90b4cc', fontSize: 9, fontWeight: 700, letterSpacing: 2.5, whiteSpace: 'nowrap' }}>
+      <span style={{ color: '#90b4cc', fontSize: 10, fontWeight: 700, letterSpacing: 2.5, whiteSpace: 'nowrap' }}>
         {label.toUpperCase()}
       </span>
       <div style={{ flex: 1, height: 1, background: '#0e1a24' }} />
-      <span style={{ color: '#8ab0c8', fontSize: 9, letterSpacing: 1 }}>{count}</span>
+      <span style={{ color: '#8ab0c8', fontSize: 10, letterSpacing: 1 }}>{count}</span>
       {onToggle && (
-        <span style={{ color: '#8ab0c8', fontSize: 11, lineHeight: 1 }}>{open ? '▾' : '▸'}</span>
+        <span style={{ color: '#8ab0c8', fontSize: 12, lineHeight: 1 }}>{open ? '▾' : '▸'}</span>
       )}
     </div>
   )
@@ -198,7 +198,7 @@ export function OperatorPanel({ primaryOnline, primarySatId, tleSource, tleGroup
         <div style={{ display: 'flex', flexDirection: 'column', gap: 3, flexShrink: 0 }}>
           {[0,1,2].map(i => <div key={i} style={{ width: 13, height: 1.5, background: '#8ab0c8', borderRadius: 1 }} />)}
         </div>
-        {open && <span style={{ color: '#8ab0c8', fontSize: 10, letterSpacing: 3 }}>OPERATOR</span>}
+        {open && <span style={{ color: '#8ab0c8', fontSize: 11, letterSpacing: 3 }}>OPERATOR</span>}
       </button>
 
       {/* Tabs */}
@@ -210,14 +210,14 @@ export function OperatorPanel({ primaryOnline, primarySatId, tleSource, tleGroup
               background: 'none', border: 'none', cursor: 'pointer',
               borderBottom: tab === t ? '1px solid #4a7090' : '1px solid transparent',
               color: tab === t ? '#90b4cc' : '#8ab0c8',
-              fontSize: 10, letterSpacing: 2, fontFamily: 'inherit', fontWeight: 600,
+              fontSize: 11, letterSpacing: 2, fontFamily: 'inherit', fontWeight: 600,
             }}>
               {t}
               {t === 'EVENTS' && nonNominalCount > 0 && (
                 <span style={{
                   position: 'absolute', top: 5, right: 8,
                   background: '#b03030', color: '#fff',
-                  fontSize: 8, fontWeight: 700, padding: '1px 4px', borderRadius: 3,
+                  fontSize: 9, fontWeight: 700, padding: '1px 4px', borderRadius: 3,
                 }}>
                   {nonNominalCount > 9 ? '9+' : nonNominalCount}
                 </span>
@@ -267,7 +267,7 @@ export function OperatorPanel({ primaryOnline, primarySatId, tleSource, tleGroup
                         }} />
                         <span style={{
                           color: active ? '#e0eef8' : isPrimary ? '#a0b4c4' : '#8aacbc',
-                          fontSize: active ? 14 : 12,
+                          fontSize: active ? 15 : 13,
                           fontWeight: active ? 700 : 500,
                           letterSpacing: active ? 0.4 : 0.2,
                           transition: 'all 0.15s',
@@ -275,20 +275,20 @@ export function OperatorPanel({ primaryOnline, primarySatId, tleSource, tleGroup
                           {p.name}
                         </span>
                       </div>
-                      <span style={{ color: liveColor, fontSize: 9, fontWeight: 700, letterSpacing: 1.5 }}>
+                      <span style={{ color: liveColor, fontSize: 10, fontWeight: 700, letterSpacing: 1.5 }}>
                         {p.online ? 'LIVE' : 'OFFLINE'}
                       </span>
                     </div>
 
                     {/* Meta row — always visible */}
-                    <div style={{ color: '#8ab0c0', fontSize: 9, letterSpacing: 0.4, paddingLeft: 14, marginBottom: 7 }}>
+                    <div style={{ color: '#8ab0c0', fontSize: 10, letterSpacing: 0.4, paddingLeft: 14, marginBottom: 7 }}>
                       {p.meta}
                     </div>
 
                     {/* Link bars — always visible */}
                     <div style={{ display: 'flex', alignItems: 'center', gap: 6, paddingLeft: 14 }}>
                       <LinkBars online={p.online} />
-                      <span style={{ color: '#8ab0c0', fontSize: 9, letterSpacing: 1.5 }}>LINK</span>
+                      <span style={{ color: '#8ab0c0', fontSize: 10, letterSpacing: 1.5 }}>LINK</span>
                     </div>
                   </div>
                 )
@@ -325,17 +325,17 @@ export function OperatorPanel({ primaryOnline, primarySatId, tleSource, tleGroup
                     <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
                       <div style={{ display: 'flex', alignItems: 'center', gap: 7 }}>
                         <div style={{ width: 5, height: 5, borderRadius: '50%', background: s.color, flexShrink: 0 }} />
-                        <span style={{ color: active ? '#a0b0c0' : '#8ab0c8', fontSize: 11, fontWeight: 500, letterSpacing: 0.3 }}>
+                        <span style={{ color: active ? '#a0b0c0' : '#8ab0c8', fontSize: 12, fontWeight: 500, letterSpacing: 0.3 }}>
                           {node.name}
                         </span>
                       </div>
                       <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
                         {s.sub && (
-                          <span style={{ color: '#8ab0c8', fontSize: 9, fontVariantNumeric: 'tabular-nums' }}>
+                          <span style={{ color: '#8ab0c8', fontSize: 10, fontVariantNumeric: 'tabular-nums' }}>
                             {s.sub}
                           </span>
                         )}
-                        <span style={{ color: s.color, fontSize: 9, fontWeight: 700, letterSpacing: 1 }}>
+                        <span style={{ color: s.color, fontSize: 10, fontWeight: 700, letterSpacing: 1 }}>
                           {s.label}
                         </span>
                       </div>
@@ -356,9 +356,9 @@ export function OperatorPanel({ primaryOnline, primarySatId, tleSource, tleGroup
                 <div key={gs.name} style={{ padding: '9px 14px 9px 16px', borderBottom: '1px solid #0a1520', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                   <div style={{ display: 'flex', alignItems: 'center', gap: 7 }}>
                     <div style={{ width: 4, height: 4, background: '#8ab0c8', borderRadius: 1, flexShrink: 0 }} />
-                    <span style={{ color: '#90b4cc', fontSize: 10, fontWeight: 500 }}>{gs.name}</span>
+                    <span style={{ color: '#90b4cc', fontSize: 11, fontWeight: 500 }}>{gs.name}</span>
                   </div>
-                  <span style={{ color: '#8ab0c0', fontSize: 9, fontVariantNumeric: 'tabular-nums', letterSpacing: 0.3 }}>
+                  <span style={{ color: '#8ab0c0', fontSize: 10, fontVariantNumeric: 'tabular-nums', letterSpacing: 0.3 }}>
                     {gs.coords}
                   </span>
                 </div>
@@ -372,7 +372,7 @@ export function OperatorPanel({ primaryOnline, primarySatId, tleSource, tleGroup
             <>
               <Section label="Autonomous Events" count={events.length} />
               {events.length === 0 ? (
-                <div style={{ padding: '28px 14px', color: '#8ab0c8', fontSize: 11, textAlign: 'center' }}>
+                <div style={{ padding: '28px 14px', color: '#8ab0c8', fontSize: 12, textAlign: 'center' }}>
                   No events recorded
                 </div>
               ) : events.map((ev, i) => {
@@ -388,10 +388,10 @@ export function OperatorPanel({ primaryOnline, primarySatId, tleSource, tleGroup
                     opacity: Math.max(0.35, 1 - i * 0.045),
                   }}>
                     <div style={{ display: 'flex', gap: 8, alignItems: 'center', marginBottom: 3 }}>
-                      <span style={{ color: '#8ab0c8', fontSize: 9, fontVariantNumeric: 'tabular-nums', flexShrink: 0 }}>{ts}</span>
-                      <span style={{ color, fontSize: 10, fontWeight: 700, letterSpacing: 0.8 }}>{ev.class}</span>
+                      <span style={{ color: '#8ab0c8', fontSize: 10, fontVariantNumeric: 'tabular-nums', flexShrink: 0 }}>{ts}</span>
+                      <span style={{ color, fontSize: 11, fontWeight: 700, letterSpacing: 0.8 }}>{ev.class}</span>
                     </div>
-                    <div style={{ color: '#8ab0c0', fontSize: 10, lineHeight: 1.5 }}>{ev.action}</div>
+                    <div style={{ color: '#8ab0c0', fontSize: 11, lineHeight: 1.5 }}>{ev.action}</div>
                   </div>
                 )
               })}
