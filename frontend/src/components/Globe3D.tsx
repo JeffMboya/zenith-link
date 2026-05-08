@@ -265,8 +265,9 @@ export function Globe3D({ data, orbitalPos, constellation, selectedSatId, onSele
 
       
       {(() => {
-        const sc2 = constellation.find(s => s.id === 'Satellite-2')
-        const sc3 = constellation.find(s => s.id === 'Satellite-3')
+        const relayIds = new Set(['NOAA-20', 'Sentinel-2A', 'Landsat-9', 'Aqua', 'Terra', 'NOAA-19'])
+        const sc2 = constellation.find(s => relayIds.has(s.id))
+        const sc3 = constellation.find(s => relayIds.has(s.id) && s !== sc2)
         return (
           <>
             {sc2 && (

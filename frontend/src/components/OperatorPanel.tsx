@@ -83,8 +83,12 @@ export function OperatorPanel({ primaryOnline, primarySatId, tleSource, tleGroup
   const [tab, setTab] = useState<Tab>('FLEET')
   const [events, setEvents] = useState<AutonomousEvent[]>([])
 
-  const relay1 = useRelayStatus('/relay/health', '/relay/windows')
+  const relay1 = useRelayStatus('/relay1/health', '/relay1/windows')
   const relay2 = useRelayStatus('/relay2/health', '/relay2/windows')
+  const relay3 = useRelayStatus('/relay3/health', '/relay3/windows')
+  const relay4 = useRelayStatus('/relay4/health', '/relay4/windows')
+  const relay5 = useRelayStatus('/relay5/health', '/relay5/windows')
+  const relay6 = useRelayStatus('/relay6/health', '/relay6/windows')
 
   
   useEffect(() => {
@@ -120,6 +124,10 @@ export function OperatorPanel({ primaryOnline, primarySatId, tleSource, tleGroup
 
   const r1 = relayDetail(relay1)
   const r2 = relayDetail(relay2)
+  const r3 = relayDetail(relay3)
+  const r4 = relayDetail(relay4)
+  const r5 = relayDetail(relay5)
+  const r6 = relayDetail(relay6)
 
   const TABS: Tab[] = ['FLEET', 'EVENTS']
 
@@ -237,8 +245,12 @@ export function OperatorPanel({ primaryOnline, primarySatId, tleSource, tleGroup
                 ISL RELAY NODES
               </div>
               {([
-                { id: 'Satellite-2', name: 'Satellite-2', orbit: '700 km · 98° · SUN-SYNC', status: r1, relay: relay1 },
-                { id: 'Satellite-3', name: 'Satellite-3', orbit: '550 km · 53°', status: r2, relay: relay2 },
+                { id: 'NOAA-20',     name: 'NOAA-20',     orbit: '824 km · 98.7° · SUN-SYNC', status: r1, relay: relay1 },
+                { id: 'Sentinel-2A', name: 'Sentinel-2A', orbit: '786 km · 98.6° · SUN-SYNC', status: r2, relay: relay2 },
+                { id: 'Landsat-9',   name: 'Landsat-9',   orbit: '705 km · 98.2° · SUN-SYNC', status: r3, relay: relay3 },
+                { id: 'Aqua',        name: 'Aqua',        orbit: '705 km · 98.2° · SUN-SYNC', status: r4, relay: relay4 },
+                { id: 'Terra',       name: 'Terra',       orbit: '705 km · 98.2° · SUN-SYNC', status: r5, relay: relay5 },
+                { id: 'NOAA-19',     name: 'NOAA-19',     orbit: '870 km · 99.1° · SUN-SYNC', status: r6, relay: relay6 },
               ]).map(node => (
                 <div
                   key={node.id}
@@ -276,8 +288,8 @@ export function OperatorPanel({ primaryOnline, primarySatId, tleSource, tleGroup
                 <div style={{ color: 'var(--text-dim)', fontSize: 7, letterSpacing: 2, marginBottom: 4 }}>CONSTELLATION</div>
                 <div style={{ color: 'var(--text-mid)', fontSize: 8, lineHeight: 1.5 }}>
                   {tleSource === 'tle'
-                    ? `Live ${tleGroup ?? 'TLE'} constellation. Primary: ${primarySatId}. Satellite-2 / Satellite-3 are ISL relay nodes.`
-                    : 'Satellite-1 simulated primary + Satellite-2 / Satellite-3 ISL relay nodes. Switch to live TLE data via the KPI bar.'
+                    ? `Live ${tleGroup ?? 'TLE'} constellation. Primary: ${primarySatId} + Tiangong. Shared ISL mesh: NOAA-20, Sentinel-2A, Landsat-9, Aqua, Terra, NOAA-19.`
+                    : 'Satellite-1 + Tiangong simulated primaries. Shared ISL mesh: 6 relay satellites forwarding to 3 ground stations.'
                   }
                 </div>
               </div>

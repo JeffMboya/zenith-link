@@ -39,7 +39,7 @@ export default function App() {
   const { latest, connected, linkLost } = useWebSocket()
   const orbitalPos = useOrbitalPosition()
   const constellation = useConstellation()
-  const relay1Health = useRelayHealth('/relay/health')
+  const relay1Health = useRelayHealth('/relay1/health')
   const relay2Health = useRelayHealth('/relay2/health')
 
   const [selectedSatId, setSelectedSatId] = useState('Satellite-1')
@@ -54,7 +54,8 @@ export default function App() {
 
   useEffect(() => {
     if (constellation.source === 'tle' && !primarySet.current) {
-      const first = constellation.satellites.find(s => s.id !== 'Satellite-2' && s.id !== 'Satellite-3')
+      const relayIds = new Set(['NOAA-20', 'Sentinel-2A', 'Landsat-9', 'Aqua', 'Terra', 'NOAA-19'])
+      const first = constellation.satellites.find(s => !relayIds.has(s.id))
       if (first) {
         primarySet.current = true
         setPrimarySatId(first.id)
