@@ -46,7 +46,7 @@ export default function App() {
 
   
   useEffect(() => {
-    fetch('/tle/import?group=planet&limit=100', { method: 'POST' }).catch(() => {})
+    fetch('/tle/import?group=stations', { method: 'POST' }).catch(() => {})
   }, [])
 
   
