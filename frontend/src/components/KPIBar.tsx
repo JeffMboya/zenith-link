@@ -100,8 +100,8 @@ function fmtAOS(sec: number): string {
 
 function useISLNodes() {
   const [nodes, setNodes] = useState<[ISLNode, ISLNode]>([
-    { label: 'Relay-1', color: 'var(--text-dim)', detail: '...', aosSec: null, inContact: false },
-    { label: 'Relay-2', color: 'var(--text-dim)', detail: '...', aosSec: null, inContact: false },
+    { label: 'Satellite-2', color: 'var(--text-dim)', detail: '...', aosSec: null, inContact: false },
+    { label: 'Satellite-3', color: 'var(--text-dim)', detail: '...', aosSec: null, inContact: false },
   ])
 
   useEffect(() => {
@@ -120,7 +120,7 @@ function useISLNodes() {
       ])
 
       setNodes(healthResults.map((res, i) => {
-        const label = i === 0 ? 'Relay-1' : 'Relay-2'
+        const label = i === 0 ? 'Satellite-2' : 'Satellite-3'
 
         
         let aosSec: number | null = null

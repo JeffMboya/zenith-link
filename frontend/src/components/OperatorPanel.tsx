@@ -236,8 +236,8 @@ export function OperatorPanel({ primaryOnline, primarySatId, tleSource }: Props)
                 ISL RELAY NODES
               </div>
               {([
-                { id: 'Satellite-2', name: 'Satellite-2 / Relay-1', orbit: '700 km · 98° · SUN-SYNC', status: r1, relay: relay1 },
-                { id: 'Satellite-3', name: 'Satellite-3 / Relay-2', orbit: '550 km · 53°', status: r2, relay: relay2 },
+                { id: 'Satellite-2', name: 'Satellite-2', orbit: '700 km · 98° · SUN-SYNC', status: r1, relay: relay1 },
+                { id: 'Satellite-3', name: 'Satellite-3', orbit: '550 km · 53°', status: r2, relay: relay2 },
               ]).map(node => (
                 <div
                   key={node.id}
