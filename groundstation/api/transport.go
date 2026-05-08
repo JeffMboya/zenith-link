@@ -48,6 +48,16 @@ type RouterConfig struct {
 	Relay4Addr string
 	Relay5Addr string
 	Relay6Addr string
+
+	GS4Addr string
+	GS4Lat  float64
+	GS4Lon  float64
+	GS5Addr string
+	GS5Lat  float64
+	GS5Lon  float64
+	GS6Addr string
+	GS6Lat  float64
+	GS6Lon  float64
 }
 
 type commandForwarder struct {
@@ -162,6 +172,15 @@ func NewRouter(svc groundstation.Service, cfg RouterConfig) http.Handler {
 		for i, addr := range []string{cfg.Relay1Addr, cfg.Relay2Addr, cfg.Relay3Addr, cfg.Relay4Addr, cfg.Relay5Addr, cfg.Relay6Addr} {
 			if addr != "" {
 				nodes = append(nodes, nodeEntry{fmt.Sprintf("Relay-%d", i+1), addr})
+			}
+		}
+		for _, gs := range []struct{ name, addr string }{
+			{"Ground Station Fairbanks", cfg.GS4Addr},
+			{"Ground Station Bangalore", cfg.GS5Addr},
+			{"Ground Station Perth", cfg.GS6Addr},
+		} {
+			if gs.addr != "" {
+				nodes = append(nodes, nodeEntry{gs.name, gs.addr})
 			}
 		}
 

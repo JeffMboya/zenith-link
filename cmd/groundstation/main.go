@@ -52,6 +52,15 @@ type config struct {
 	Relay4Addr     string  `env:"RELAY4_ADDR"   envDefault:"http://relay-aqua:8082"`
 	Relay5Addr     string  `env:"RELAY5_ADDR"   envDefault:"http://relay-terra:8082"`
 	Relay6Addr     string  `env:"RELAY6_ADDR"   envDefault:"http://relay-noaa19:8082"`
+	GS4Addr        string  `env:"GS4_ADDR"      envDefault:""`
+	GS4Lat         float64 `env:"GS4_LAT"       envDefault:"64.8201"`
+	GS4Lon         float64 `env:"GS4_LON"       envDefault:"-147.7200"`
+	GS5Addr        string  `env:"GS5_ADDR"      envDefault:""`
+	GS5Lat         float64 `env:"GS5_LAT"       envDefault:"12.9716"`
+	GS5Lon         float64 `env:"GS5_LON"       envDefault:"77.5946"`
+	GS6Addr        string  `env:"GS6_ADDR"      envDefault:""`
+	GS6Lat         float64 `env:"GS6_LAT"       envDefault:"-31.9505"`
+	GS6Lon         float64 `env:"GS6_LON"       envDefault:"115.8605"`
 }
 
 func main() {
@@ -85,6 +94,15 @@ func main() {
 		Relay4Addr:      cfg.Relay4Addr,
 		Relay5Addr:      cfg.Relay5Addr,
 		Relay6Addr:      cfg.Relay6Addr,
+		GS4Addr:         cfg.GS4Addr,
+		GS4Lat:          cfg.GS4Lat,
+		GS4Lon:          cfg.GS4Lon,
+		GS5Addr:         cfg.GS5Addr,
+		GS5Lat:          cfg.GS5Lat,
+		GS5Lon:          cfg.GS5Lon,
+		GS6Addr:         cfg.GS6Addr,
+		GS6Lat:          cfg.GS6Lat,
+		GS6Lon:          cfg.GS6Lon,
 	}
 
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
