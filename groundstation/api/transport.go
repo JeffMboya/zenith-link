@@ -14,6 +14,7 @@ import (
 	"net/http/httputil"
 	"net/url"
 	"os"
+	"sync"
 	"sync/atomic"
 	"time"
 
@@ -108,15 +109,108 @@ func NewRouter(svc groundstation.Service, cfg RouterConfig) http.Handler {
 		client: &http.Client{Timeout: 10 * time.Second},
 	}
 
+	var framesReceived atomic.Int64
+	var wsConns atomic.Int64
+
+	topoClient := &http.Client{Timeout: 3 * time.Second}
+
 	r := chi.NewRouter()
 	r.Use(middleware.RequestID)
 	r.Use(middleware.Recoverer)
 
 	r.Get("/health", healthHandler)
 	r.Get("/latest", latestHandler(svc))
-	r.Post("/receive", receiveHandler(svc))
-	r.Get("/ws", wsHandler(svc))
+	r.Post("/receive", func(w http.ResponseWriter, req *http.Request) {
+		framesReceived.Add(1)
+		receiveHandler(svc)(w, req)
+	})
+	r.Get("/ws", func(w http.ResponseWriter, req *http.Request) {
+		wsConns.Add(1)
+		defer wsConns.Add(-1)
+		wsHandler(svc)(w, req)
+	})
 	r.Post("/command", commandHandler(fwd))
+
+	r.Get("/capabilities", func(w http.ResponseWriter, _ *http.Request) {
+		writeJSON(w, http.StatusOK, map[string]any{
+			"node_id":          "GS-Nairobi",
+			"role":             "groundstation",
+			"protocols":        []string{"orbitron-v2", "ccsds-tm"},
+			"lat":              cfg.GSLat,
+			"lon":              cfg.GSLon,
+			"frames_received":  framesReceived.Load(),
+			"ws_connections":   wsConns.Load(),
+		})
+	})
+
+	r.Get("/topology", func(w http.ResponseWriter, req *http.Request) {
+		type nodeEntry struct {
+			name string
+			addr string
+		}
+		var nodes []nodeEntry
+		if cfg.SpacecraftAddr != "" {
+			nodes = append(nodes, nodeEntry{"SC-1", cfg.SpacecraftAddr})
+		}
+		if cfg.Relay1Addr != "" {
+			nodes = append(nodes, nodeEntry{"SC-2-relay", cfg.Relay1Addr})
+		}
+		if cfg.Relay2Addr != "" {
+			nodes = append(nodes, nodeEntry{"SC-3-relay2", cfg.Relay2Addr})
+		}
+
+		results := make([]map[string]any, len(nodes))
+		var wg sync.WaitGroup
+		for i, n := range nodes {
+			wg.Add(1)
+			go func(i int, n nodeEntry) {
+				defer wg.Done()
+				results[i] = map[string]any{"name": n.name}
+				capReq, err := http.NewRequestWithContext(req.Context(), http.MethodGet, n.addr+"/capabilities", nil)
+				if err != nil {
+					results[i]["error"] = err.Error()
+					return
+				}
+				resp, err := topoClient.Do(capReq)
+				if err != nil {
+					results[i]["error"] = err.Error()
+					return
+				}
+				defer resp.Body.Close()
+				var cap any
+				if err := json.NewDecoder(io.LimitReader(resp.Body, 4096)).Decode(&cap); err != nil {
+					results[i]["error"] = err.Error()
+					return
+				}
+				results[i]["capabilities"] = cap
+			}(i, n)
+		}
+		wg.Wait()
+
+		writeJSON(w, http.StatusOK, map[string]any{
+			"groundstation": map[string]any{
+				"node_id":         "GS-Nairobi",
+				"role":            "groundstation",
+				"protocols":       []string{"orbitron-v2", "ccsds-tm"},
+				"lat":             cfg.GSLat,
+				"lon":             cfg.GSLon,
+				"frames_received": framesReceived.Load(),
+				"ws_connections":  wsConns.Load(),
+			},
+			"nodes": results,
+			"ts":    time.Now().UTC(),
+		})
+	})
+
+	r.Get("/metrics", func(w http.ResponseWriter, _ *http.Request) {
+		w.Header().Set("Content-Type", "text/plain; version=0.0.4")
+		fmt.Fprintf(w, "# HELP orbitron_frames_received_total Total Orbitron frames received via POST /receive\n")
+		fmt.Fprintf(w, "# TYPE orbitron_frames_received_total counter\n")
+		fmt.Fprintf(w, "orbitron_frames_received_total %d\n", framesReceived.Load())
+		fmt.Fprintf(w, "# HELP orbitron_ws_connections Current number of active WebSocket subscribers\n")
+		fmt.Fprintf(w, "# TYPE orbitron_ws_connections gauge\n")
+		fmt.Fprintf(w, "orbitron_ws_connections %d\n", wsConns.Load())
+	})
 
 	if cfg.StaticDir != "" {
 

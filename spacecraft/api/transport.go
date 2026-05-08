@@ -7,6 +7,7 @@ import (
 	"io"
 	"net/http"
 	"strconv"
+	"sync/atomic"
 	"time"
 
 	"github.com/absmach/orbitron/pkg/ccsds/tmframe"
@@ -17,6 +18,8 @@ import (
 )
 
 func NewRouter(svc spacecraft.Service) http.Handler {
+	var framesServed atomic.Int64
+
 	r := chi.NewRouter()
 	r.Use(middleware.RequestID)
 	r.Use(middleware.Recoverer)
@@ -25,7 +28,10 @@ func NewRouter(svc spacecraft.Service) http.Handler {
 	r.Get("/telemetry", telemetryHandler(svc))
 	r.Get("/state", stateHandler(svc))
 	r.Get("/frame", tmFrameHandler(svc))
-	r.Get("/frame/orbitron", orbitronFrameHandler(svc))
+	r.Get("/frame/orbitron", func(w http.ResponseWriter, req *http.Request) {
+		framesServed.Add(1)
+		orbitronFrameHandler(svc)(w, req)
+	})
 	r.Post("/command", commandHandler(svc))
 	r.Get("/windows", windowsHandler(svc))
 	r.Get("/track", trackHandler(svc))
@@ -36,6 +42,37 @@ func NewRouter(svc spacecraft.Service) http.Handler {
 	r.Get("/events", eventsHandler(svc))
 	r.Get("/payload", payloadHandler(svc))
 	r.Get("/inference/state", inferenceStateHandler(svc))
+
+	r.Get("/capabilities", func(w http.ResponseWriter, _ *http.Request) {
+		writeJSON(w, http.StatusOK, map[string]any{
+			"node_id":  "SC-1",
+			"role":     "spacecraft",
+			"protocols": []string{"orbitron-v2", "ccsds-tm", "ccsds-sp", "ccsds-tc"},
+			"features": []string{
+				"telemetry_generation",
+				"onboard_inference",
+				"command_uplink",
+				"eclipse_detection",
+				"autonomous_mode",
+				"payload_deploy",
+				"link_budget_compute",
+				"space_weather_monitoring",
+			},
+			"inference_classes": []string{
+				"NOMINAL", "POWER_ANOMALY", "THERMAL_EVENT",
+				"ATTITUDE_INSTABILITY", "RF_DEGRADATION",
+				"ECLIPSE_ENTRY", "ECLIPSE_COMPUTE", "UNKNOWN",
+			},
+			"bandwidth_bps": 20480,
+		})
+	})
+
+	r.Get("/metrics", func(w http.ResponseWriter, _ *http.Request) {
+		w.Header().Set("Content-Type", "text/plain; version=0.0.4")
+		fmt.Fprintf(w, "# HELP orbitron_frames_served_total Orbitron frames encoded and served to downstream nodes\n")
+		fmt.Fprintf(w, "# TYPE orbitron_frames_served_total counter\n")
+		fmt.Fprintf(w, "orbitron_frames_served_total %d\n", framesServed.Load())
+	})
 
 	return r
 }
