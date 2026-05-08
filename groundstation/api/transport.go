@@ -31,21 +31,23 @@ var upgrader = websocket.Upgrader{
 }
 
 type RouterConfig struct {
-	SpacecraftAddr string
+	SpacecraftAddr  string
+	Spacecraft2Addr string
 
 	SCID uint16
-
 	VCID uint8
 
 	GSLat float64
-
 	GSLon float64
 
 	StaticDir string
 
 	Relay1Addr string
-
 	Relay2Addr string
+	Relay3Addr string
+	Relay4Addr string
+	Relay5Addr string
+	Relay6Addr string
 }
 
 type commandForwarder struct {
@@ -149,14 +151,18 @@ func NewRouter(svc groundstation.Service, cfg RouterConfig) http.Handler {
 			addr string
 		}
 		var nodes []nodeEntry
-		if cfg.SpacecraftAddr != "" {
-			nodes = append(nodes, nodeEntry{"Satellite-1", cfg.SpacecraftAddr})
+		for _, sc := range []struct{ name, addr string }{
+			{"Spacecraft-1", cfg.SpacecraftAddr},
+			{"Spacecraft-2", cfg.Spacecraft2Addr},
+		} {
+			if sc.addr != "" {
+				nodes = append(nodes, nodeEntry{sc.name, sc.addr})
+			}
 		}
-		if cfg.Relay1Addr != "" {
-			nodes = append(nodes, nodeEntry{"Satellite-2", cfg.Relay1Addr})
-		}
-		if cfg.Relay2Addr != "" {
-			nodes = append(nodes, nodeEntry{"Satellite-3", cfg.Relay2Addr})
+		for i, addr := range []string{cfg.Relay1Addr, cfg.Relay2Addr, cfg.Relay3Addr, cfg.Relay4Addr, cfg.Relay5Addr, cfg.Relay6Addr} {
+			if addr != "" {
+				nodes = append(nodes, nodeEntry{fmt.Sprintf("Relay-%d", i+1), addr})
+			}
 		}
 
 		results := make([]map[string]any, len(nodes))
@@ -222,14 +228,18 @@ func NewRouter(svc groundstation.Service, cfg RouterConfig) http.Handler {
 			}
 		}
 
-		if cfg.Relay1Addr != "" {
-			r1Proxy := mustReverseProxyStrip(cfg.Relay1Addr, "/relay")
-			r.Handle("/relay/*", r1Proxy)
+		if cfg.Spacecraft2Addr != "" {
+			sc2Proxy := mustReverseProxyStrip(cfg.Spacecraft2Addr, "/spacecraft2")
+			r.Handle("/spacecraft2/*", sc2Proxy)
 		}
 
-		if cfg.Relay2Addr != "" {
-			r2Proxy := mustReverseProxyStrip(cfg.Relay2Addr, "/relay2")
-			r.Handle("/relay2/*", r2Proxy)
+		for i, addr := range []string{cfg.Relay1Addr, cfg.Relay2Addr, cfg.Relay3Addr, cfg.Relay4Addr, cfg.Relay5Addr, cfg.Relay6Addr} {
+			if addr == "" {
+				continue
+			}
+			prefix := fmt.Sprintf("/relay%d", i+1)
+			proxy := mustReverseProxyStrip(addr, prefix)
+			r.Handle(prefix+"/*", proxy)
 		}
 
 		fs := http.FileServer(http.Dir(cfg.StaticDir))
