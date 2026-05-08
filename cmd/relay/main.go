@@ -40,6 +40,7 @@ import (
 	"net/http"
 	"os"
 	"os/signal"
+	"strconv"
 	"sync/atomic"
 	"syscall"
 	"time"
@@ -597,14 +598,25 @@ func relayTelemetryHandler(node *relayNode) http.HandlerFunc {
 	}
 }
 
-func relayWindowsHandler(elem orbital.Elements, gsLat, gsLon, minElevDeg float64) http.HandlerFunc {
+func relayWindowsHandler(elem orbital.Elements, defaultGSLat, defaultGSLon, minElevDeg float64) http.HandlerFunc {
 	type winRes struct {
 		AOS         time.Time `json:"aos"`
 		LOS         time.Time `json:"los"`
 		DurationSec float64   `json:"duration_sec"`
 		MaxElevDeg  float64   `json:"max_elevation_deg"`
 	}
-	return func(w http.ResponseWriter, _ *http.Request) {
+	return func(w http.ResponseWriter, r *http.Request) {
+		gsLat, gsLon := defaultGSLat, defaultGSLon
+		if s := r.URL.Query().Get("gs_lat"); s != "" {
+			if v, err := strconv.ParseFloat(s, 64); err == nil {
+				gsLat = v
+			}
+		}
+		if s := r.URL.Query().Get("gs_lon"); s != "" {
+			if v, err := strconv.ParseFloat(s, 64); err == nil {
+				gsLon = v
+			}
+		}
 		now := time.Now().UTC()
 		inContact, _ := orbital.IsInContact(elem, gsLat, gsLon, now, minElevDeg)
 		windows, err := orbital.ContactWindows(elem, gsLat, gsLon, now, now.Add(2*time.Hour), minElevDeg)
