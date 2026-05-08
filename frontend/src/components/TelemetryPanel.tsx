@@ -2,7 +2,7 @@ import { useState, useEffect } from 'react'
 import type { SatelliteState, DeployedPayload } from '../types'
 import type { ConstellationSat } from '../hooks/useConstellation'
 import { ArcGauge } from './ArcGauge'
-import { SAT_META } from '../data/constellation'
+import { primarySatByName } from '../data/primarySatellites'
 
 function usePayload() {
   const [payload, setPayload] = useState<DeployedPayload | null>(null)
@@ -67,7 +67,7 @@ function Section({ title, accent = 'var(--cyan-dim)', children }: {
 export function TelemetryPanel({ state, selectedSatId, selectedSat, hasTelemetry, tleSource, primarySatId }: Props) {
   const [open, setOpen] = useState(true)
   const payload = usePayload()
-  const meta = SAT_META[selectedSatId]
+  const meta = primarySatByName(selectedSatId)
   const planeColor = 'var(--cyan)'
 
   const battColor = state && state.battery_voltage > 7.8
@@ -112,7 +112,7 @@ export function TelemetryPanel({ state, selectedSatId, selectedSat, hasTelemetry
             </div>
             {meta && (
               <div style={{ color: 'var(--text-dim)', fontSize: 8, marginTop: 2 }}>
-                {meta.description}
+                LEO · {meta.altKm} km · {meta.incDeg}° · TLE
               </div>
             )}
           </div>
@@ -207,10 +207,9 @@ export function TelemetryPanel({ state, selectedSatId, selectedSat, hasTelemetry
                   </Section>
                   {meta && (
                     <Section title="ORBIT" accent={planeColor}>
-                      <Row label="INCLINATION" value={meta.inclinationDeg.toFixed(1)} unit="°" />
-                      <Row label="RAAN"        value={meta.raanDeg.toFixed(1)}        unit="°" />
-                      <Row label="ALTITUDE"    value={meta.altitudeKm.toFixed(0)}     unit="km" />
-                      <Row label="PERIOD"      value={meta.periodMin.toFixed(1)}      unit="min" color={planeColor} />
+                      <Row label="INCLINATION" value={meta.incDeg.toFixed(1)}   unit="°" />
+                      <Row label="ALTITUDE"    value={meta.altKm.toFixed(0)}    unit="km" />
+                      <Row label="NORAD ID"    value={String(meta.noradId)}     unit="" color={planeColor} />
                     </Section>
                   )}
                   <div style={{

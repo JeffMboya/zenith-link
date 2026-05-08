@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef } from 'react'
-import { useWebSocket } from './hooks/useWebSocket'
+import { useSatWebSocket } from './hooks/useSatWebSocket'
 import { useOrbitalPosition } from './hooks/useOrbitalPosition'
 import { useConstellation } from './hooks/useConstellation'
 import { Globe3D } from './components/Globe3D'
@@ -8,8 +8,14 @@ import { KPIBar } from './components/KPIBar'
 import { TelemetryPanel } from './components/TelemetryPanel'
 import { CommandPanel } from './components/CommandPanel'
 import { OperatorPanel } from './components/OperatorPanel'
+import { MissionFooter } from './components/MissionFooter'
+import { PRIMARY_SATELLITES, primarySatByName } from './data/primarySatellites'
+import { GROUND_STATIONS } from './data/groundStations'
 
 const RELAY_POLL_MS = 5_000
+
+// Ordered list of primary satellite IDs for keyboard cycling (J/K, 1/2/3)
+const PRIMARY_IDS = PRIMARY_SATELLITES.map(s => s.tleName)
 
 function useRelayHealth(path: string): RelayHealth | null {
   const [health, setHealth] = useState<RelayHealth | null>(null)
@@ -36,38 +42,82 @@ function useRelayHealth(path: string): RelayHealth | null {
 }
 
 export default function App() {
-  const { latest, connected, linkLost } = useWebSocket()
-  const orbitalPos = useOrbitalPosition()
+  // Three independent WebSocket connections — one per primary spacecraft.
+  // satTarget filters by sat_id field once groundstation sends it.
+  const sc1 = useSatWebSocket('/ws',              'sc1')
+  const sc2 = useSatWebSocket('/spacecraft2/ws',  'sc2')
+  const sc3 = useSatWebSocket('/spacecraft3/ws',  'sc3')
+
+  const orbitalPos  = useOrbitalPosition()
   const constellation = useConstellation()
   const relay1Health = useRelayHealth('/relay1/health')
-  const relay2Health = useRelayHealth('/relay2/health')
+  // relay2Health reserved for ISL beam coloring
+  useRelayHealth('/relay2/health')
 
-  const [selectedSatId, setSelectedSatId] = useState('Satellite-1')
+  // Selected satellite ID (TLE display name, e.g. "ISS (ZARYA)")
+  const [selectedSatId, setSelectedSatId] = useState(PRIMARY_SATELLITES[0].tleName)
 
-  
+  // Resolve which WebSocket state is active based on selection
+  const activeSat = primarySatByName(selectedSatId)
+  const active = activeSat?.scTarget === 'sc3' ? sc3
+               : activeSat?.scTarget === 'sc2' ? sc2
+               : sc1
 
-  
-  
-  
-  const [primarySatId, setPrimarySatId] = useState<string>('Satellite-1')
-  const primarySet = useRef(false)
+  // Per-satellite connected state for sidebar LIVE/OFFLINE badges
+  const satConnected: Record<string, boolean> = {
+    [PRIMARY_SATELLITES[0].tleName]: sc1.connected,
+    [PRIMARY_SATELLITES[1].tleName]: sc2.connected,
+    [PRIMARY_SATELLITES[2].tleName]: sc3.connected,
+  }
 
+  // hasTelemetry — true when the selected sat is a primary with a live WS
+  const hasTelemetry = !!primarySatByName(selectedSatId)
+
+  // Mission start time for MET (Mission Elapsed Time)
+  const missionStartRef = useRef(Date.now())
+
+  // Keyboard navigation: J/K cycle primaries, 1/2/3 direct select
   useEffect(() => {
-    if (constellation.source === 'tle' && !primarySet.current) {
-      const relayIds = new Set(['NOAA-20', 'Sentinel-2A', 'Landsat-9', 'Aqua', 'Terra', 'NOAA-19'])
-      const first = constellation.satellites.find(s => !relayIds.has(s.id))
-      if (first) {
-        primarySet.current = true
-        setPrimarySatId(first.id)
-        setSelectedSatId(first.id)
+    const handler = (e: KeyboardEvent) => {
+      // Don't fire when palette input or any other input is focused
+      const tag = (document.activeElement as HTMLElement)?.tagName
+      if (tag === 'INPUT' || tag === 'TEXTAREA') return
+
+      if (e.key === 'j' || e.key === 'J') {
+        e.preventDefault()
+        setSelectedSatId(id => {
+          const idx = PRIMARY_IDS.indexOf(id)
+          const next = PRIMARY_IDS[(idx + 1) % PRIMARY_IDS.length]
+          window.dispatchEvent(new CustomEvent('select-sat', { detail: next }))
+          return next
+        })
+      } else if (e.key === 'k' || e.key === 'K') {
+        e.preventDefault()
+        setSelectedSatId(id => {
+          const idx = PRIMARY_IDS.indexOf(id)
+          const prev = PRIMARY_IDS[(idx - 1 + PRIMARY_IDS.length) % PRIMARY_IDS.length]
+          window.dispatchEvent(new CustomEvent('select-sat', { detail: prev }))
+          return prev
+        })
+      } else if (e.key === '1') {
+        const id = PRIMARY_IDS[0]
+        setSelectedSatId(id)
+        window.dispatchEvent(new CustomEvent('select-sat', { detail: id }))
+      } else if (e.key === '2') {
+        const id = PRIMARY_IDS[1]
+        setSelectedSatId(id)
+        window.dispatchEvent(new CustomEvent('select-sat', { detail: id }))
+      } else if (e.key === '3') {
+        const id = PRIMARY_IDS[2]
+        setSelectedSatId(id)
+        window.dispatchEvent(new CustomEvent('select-sat', { detail: id }))
       }
     }
-    if (constellation.source === 'sim') {
-      primarySet.current = false
-      setPrimarySatId('Satellite-1')
-    }
-  }, [constellation.source, constellation.satellites])
+    window.addEventListener('keydown', handler)
+    return () => window.removeEventListener('keydown', handler)
+  }, [])
 
+  // Listen for globe/sidebar select-sat events
   useEffect(() => {
     const handler = (e: Event) => setSelectedSatId((e as CustomEvent<string>).detail)
     window.addEventListener('select-sat', handler)
@@ -76,43 +126,69 @@ export default function App() {
 
   const selectedSat = constellation.satellites.find(s => s.id === selectedSatId) ?? null
 
-  
-  
-  
-  const hasTelemetry = selectedSatId === primarySatId
+  // Publish RSSI for each spacecraft to the sat-rssi event (consumed by OperatorPanel LinkBars)
+  useEffect(() => {
+    if (sc1.latest?.satellite?.rssi !== undefined) {
+      window.dispatchEvent(new CustomEvent('sat-rssi', { detail: { id: PRIMARY_SATELLITES[0].tleName, rssi: sc1.latest.satellite.rssi } }))
+    }
+  }, [sc1.latest?.satellite?.rssi])
+  useEffect(() => {
+    if (sc2.latest?.satellite?.rssi !== undefined) {
+      window.dispatchEvent(new CustomEvent('sat-rssi', { detail: { id: PRIMARY_SATELLITES[1].tleName, rssi: sc2.latest.satellite.rssi } }))
+    }
+  }, [sc2.latest?.satellite?.rssi])
+  useEffect(() => {
+    if (sc3.latest?.satellite?.rssi !== undefined) {
+      window.dispatchEvent(new CustomEvent('sat-rssi', { detail: { id: PRIMARY_SATELLITES[2].tleName, rssi: sc3.latest.satellite.rssi } }))
+    }
+  }, [sc3.latest?.satellite?.rssi])
+
+  // primarySatId (kept for Globe3D backwards compat) = first primary's TLE name
+  const primarySatId = PRIMARY_SATELLITES[0].tleName
 
   return (
     <>
       <Globe3D
-        data={latest}
+        data={active.latest}
         orbitalPos={orbitalPos}
         constellation={constellation.satellites}
+        groundStations={GROUND_STATIONS}
         selectedSatId={selectedSatId}
         onSelectSat={setSelectedSatId}
         relay1Health={relay1Health}
-        relay2Health={relay2Health}
         tleSource={constellation.source}
         primarySatId={primarySatId}
+        primarySatIds={PRIMARY_IDS}
       />
       <KPIBar
-        metrics={latest?.metrics ?? null}
-        satellite={latest?.satellite ?? null}
-        connected={connected}
-        linkLost={linkLost}
+        metrics={active.latest?.metrics ?? null}
+        satellite={active.latest?.satellite ?? null}
+        connected={active.connected}
+        linkLost={active.linkLost}
         tleSource={constellation.source}
         tleGroup={constellation.group}
         tleCount={constellation.satellites.length}
       />
       <TelemetryPanel
-        state={latest?.satellite ?? null}
+        state={active.latest?.satellite ?? null}
         selectedSatId={selectedSatId}
         selectedSat={selectedSat}
         hasTelemetry={hasTelemetry}
         tleSource={constellation.source}
         primarySatId={primarySatId}
       />
-      <CommandPanel />
-      <OperatorPanel primaryOnline={connected} primarySatId={primarySatId} tleSource={constellation.source} tleGroup={constellation.group} />
+      <CommandPanel selectedSatId={selectedSatId} />
+      <OperatorPanel
+        satConnected={satConnected}
+        primarySatIds={PRIMARY_IDS}
+        tleSource={constellation.source}
+        tleGroup={constellation.group}
+      />
+      <MissionFooter
+        connected={active.connected}
+        selectedSatId={selectedSatId}
+        missionStartMs={missionStartRef.current}
+      />
     </>
   )
 }

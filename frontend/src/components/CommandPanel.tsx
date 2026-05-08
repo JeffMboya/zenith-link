@@ -1,4 +1,5 @@
 import { useState, useRef, useEffect, useCallback, useMemo } from 'react'
+import { PRIMARY_SATELLITES } from '../data/primarySatellites'
 
 interface LogEntry { ts: number; text: string; type: 'sent' | 'ack' | 'error' }
 
@@ -29,8 +30,9 @@ const COMMANDS: Command[] = [
 ]
 
 const NODES: SatItem[] = [
-  { id: 'ISS (ZARYA)',  label: 'ISS (ZARYA)',   description: 'Primary · LEO 408 km · 51.6°',        kind: 'satellite'      },
+  { id: 'ISS (ZARYA)',  label: 'ISS',           description: 'Primary · LEO 408 km · 51.6°',        kind: 'satellite'      },
   { id: 'CSS (TIANHE)', label: 'Tiangong',      description: 'Primary · LEO 380 km · 41.5°',        kind: 'satellite'      },
+  { id: 'HST',          label: 'Hubble',        description: 'Primary · LEO 540 km · 28.5°',        kind: 'satellite'      },
   { id: 'NOAA-20',      label: 'NOAA-20',       description: 'ISL Relay · 824 km · 98.7° sun-sync', kind: 'satellite'      },
   { id: 'Sentinel-2A',  label: 'Sentinel-2A',   description: 'ISL Relay · 786 km · 98.6° sun-sync', kind: 'satellite'      },
   { id: 'Landsat-9',    label: 'Landsat-9',     description: 'ISL Relay · 705 km · 98.2° sun-sync', kind: 'satellite'      },
@@ -72,7 +74,9 @@ function fuzzyScore(haystack: string, needle: string): number {
 
 type Mode = 'command' | 'satellite'
 
-export function CommandPanel() {
+interface Props { selectedSatId: string }
+
+export function CommandPanel({ selectedSatId }: Props) {
   const [query,         setQuery]         = useState('')
   const [selected,      setSelected]      = useState(0)
   const [log,           setLog]           = useState<LogEntry[]>([])
@@ -144,7 +148,10 @@ export function CommandPanel() {
     setLog(l => [...l, { ts: Date.now(), text: `TX  ${cmd.category}: ${cmd.label}`, type: 'sent' }])
     try {
       const payloadB64 = cmd.payloadBytes?.length ? btoa(String.fromCharCode(...cmd.payloadBytes)) : undefined
-      const res = await fetch('/command', {
+      // Resolve backend target from selectedSatId
+      const sat = PRIMARY_SATELLITES.find(s => s.tleName === selectedSatId)
+      const target = sat?.scTarget ?? 'sc1'
+      const res = await fetch(`/command?target=${target}`, {
         method: 'POST', headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ command_id: cmd.commandId, ...(payloadB64 ? { payload_b64: payloadB64 } : {}) }),
       })
@@ -262,7 +269,7 @@ export function CommandPanel() {
               padding: '0 16px',
               height: 42,
               background: showResults ? '#07111f' : 'rgba(7,17,31,0.85)',
-              border: `1px solid ${showResults ? '#1e3040' : '#0e1a28'}`,
+              border: `1px solid ${showResults ? 'var(--border)' : 'var(--border)'}`,
               borderRadius: showResults ? '8px 8px 0 0' : 8,
               backdropFilter: 'blur(12px)',
               boxShadow: showResults
@@ -280,7 +287,7 @@ export function CommandPanel() {
                 onKeyDown={handleKey}
                 onFocus={() => setFocused(true)}
                 onBlur={() => setTimeout(() => setFocused(false), 150)}
-                placeholder={focused ? '' : 'Uplink command · ⌃K to focus'}
+                placeholder={focused ? 'Type /list to see all commands' : 'Uplink command · ⌃K to focus'}
                 style={{
                   flex: 1, background: 'transparent', border: 'none', outline: 'none',
                   color: '#e0eef8', fontSize: 13,
@@ -303,7 +310,7 @@ export function CommandPanel() {
             {showResults && (
               <div style={{
                 background: '#07111f',
-                border: '1px solid #1e3040',
+                border: '1px solid var(--border)',
                 borderTop: 'none',
                 borderRadius: '0 0 8px 8px',
                 boxShadow: '0 16px 48px rgba(0,0,0,0.7)',
@@ -373,8 +380,8 @@ export function CommandPanel() {
                 <div style={{ borderTop: '1px solid #0e1a28', padding: '6px 16px', display: 'flex', gap: 0, background: '#050e1c' }}>
                   {[['↑↓','navigate'],['↵','select'],['>','commands'],['@','satellites'],['#','ground stations'],['/list','show all']].map(([k,l]) => (
                     <span key={k} style={{ display: 'flex', alignItems: 'center', gap: 4, marginRight: 12 }}>
-                      <span style={{ color: '#8ab0c8', fontSize: 8, fontFamily: 'monospace', border: '1px solid #1e3040', padding: '1px 4px', borderRadius: 3 }}>{k}</span>
-                      <span style={{ color: '#3a5568', fontSize: 8 }}>{l}</span>
+                      <span style={{ color: '#8ab0c8', fontSize: 10, fontFamily: 'monospace', border: '1px solid var(--border)', padding: '1px 4px', borderRadius: 3 }}>{k}</span>
+                      <span style={{ color: '#5878a0', fontSize: 10 }}>{l}</span>
                     </span>
                   ))}
                 </div>
@@ -390,6 +397,29 @@ export function CommandPanel() {
           onClick={() => { setQuery(''); setConfirming(null); inputRef.current?.blur() }}
           style={{ position: 'fixed', inset: 0, zIndex: 299, background: 'rgba(2,7,16,0.3)' }}
         />
+      )}
+
+      {/* Persistent mini-log — always visible below input bar, last 3 entries */}
+      {!confirming && log.length > 0 && (
+        <div style={{
+          marginTop: 3,
+          background: 'rgba(5,14,28,0.92)',
+          border: '1px solid var(--border)',
+          borderRadius: 6,
+          padding: '5px 12px',
+          backdropFilter: 'blur(8px)',
+        }}>
+          {log.slice(-3).map((e, i) => (
+            <div key={i} style={{ display: 'flex', gap: 8, fontSize: 9, lineHeight: 1.7, fontFamily: 'monospace' }}>
+              <span style={{ color: 'var(--text-dim)', flexShrink: 0 }}>
+                {new Date(e.ts).toLocaleTimeString('en-US', { hour12: false, hour: '2-digit', minute: '2-digit', second: '2-digit' })}
+              </span>
+              <span style={{ color: e.type === 'sent' ? 'var(--cyan)' : e.type === 'ack' ? 'var(--green)' : 'var(--red)', flex: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                {e.text}
+              </span>
+            </div>
+          ))}
+        </div>
       )}
     </>
   )

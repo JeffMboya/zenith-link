@@ -47,6 +47,31 @@
         outline: 1px solid var(--cyan);
         outline-offset: 2px;
       }
+
+      /* 1Hz alive dot blink — step-start for crisp on/off, no fade */
+      @keyframes liveDotBlink {
+        0%, 49%  { opacity: 1; }
+        50%, 100% { opacity: 0.15; }
+      }
+
+      /* Shimmer for skeleton loading states */
+      @keyframes shimmer {
+        0%   { opacity: 0.3; }
+        50%  { opacity: 0.6; }
+        100% { opacity: 0.3; }
+      }
+
+      /* Command executing progress bar */
+      @keyframes execProgress {
+        from { width: 0%; }
+        to   { width: 100%; }
+      }
+
+      /* Spin for executing state indicator */
+      @keyframes spin {
+        from { transform: rotate(0deg); }
+        to   { transform: rotate(360deg); }
+      }
     </style>
   </head>
   <body>

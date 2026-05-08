@@ -1,23 +1,23 @@
 import { useState, useEffect } from 'react'
+import { Satellite, Radio, MapPin } from 'lucide-react'
 import type { AutonomousEvent } from '../types'
+import { PRIMARY_SATELLITES } from '../data/primarySatellites'
+import { GROUND_STATIONS } from '../data/groundStations'
 
 type Tab = 'FLEET' | 'EVENTS'
 
 const CLASS_COLOR: Record<string, string> = {
-  NOMINAL: '#40d080',
-  ECLIPSE_ENTRY: '#50b8d0',
-  ECLIPSE_COMPUTE: '#9060d0',
-  POWER_ANOMALY: '#e05050',
-  THERMAL_EVENT: '#d08030',
+  NOMINAL:              '#40d080',
+  ECLIPSE_ENTRY:        '#50b8d0',
+  ECLIPSE_COMPUTE:      '#9060d0',
+  POWER_ANOMALY:        '#e05050',
+  THERMAL_EVENT:        '#d08030',
   ATTITUDE_INSTABILITY: '#d08030',
-  RF_DEGRADATION: '#d08030',
+  RF_DEGRADATION:       '#d08030',
 }
 
 interface RelayStatus {
-  online: boolean
-  bufferHasData: boolean
-  inContact: boolean
-  aosSec: number | null
+  online: boolean; bufferHasData: boolean; inContact: boolean; aosSec: number | null
 }
 
 function useRelayStatus(path: string, windowsPath: string): RelayStatus {
@@ -45,9 +45,7 @@ function useRelayStatus(path: string, windowsPath: string): RelayStatus {
 }
 
 function fmtAOS(sec: number): string {
-  const h = Math.floor(sec / 3600)
-  const m = Math.floor((sec % 3600) / 60)
-  const s = sec % 60
+  const h = Math.floor(sec / 3600), m = Math.floor((sec % 3600) / 60), s = sec % 60
   if (h > 0) return `${h}h ${m}m`
   if (m > 0) return `${m}m ${String(s).padStart(2, '0')}s`
   return `${s}s`
@@ -60,9 +58,32 @@ function relayState(r: RelayStatus): { color: string; label: string; sub: string
   return                      { color: '#8ab0c8', label: 'IDLE',       sub: r.aosSec != null ? fmtAOS(r.aosSec) : null }
 }
 
-// 5-bar link quality indicator
-function LinkBars({ online }: { online: boolean }) {
-  const lit = online ? 5 : 0
+// Signal bars driven by RSSI value (-120 to -60 dBm → 0 to 5 bars)
+function rssiToBars(rssi: number | undefined): number {
+  if (rssi === undefined || rssi === 0) return 0
+  // Typical satellite RSSI range: -95 (very weak) to -75 (strong)
+  const clamped = Math.max(-100, Math.min(-60, rssi))
+  const normalized = (clamped + 100) / 40  // 0.0 to 1.0
+  return Math.max(1, Math.round(normalized * 5))
+}
+
+// Per-satellite RSSI — subscribed via custom event from CommandEngine / WS state
+function useSatRSSI(satId: string): number | undefined {
+  const [rssi, setRSSI] = useState<number | undefined>(undefined)
+  useEffect(() => {
+    const h = (e: Event) => {
+      const { id, rssi: v } = (e as CustomEvent<{ id: string; rssi: number }>).detail
+      if (id === satId) setRSSI(v)
+    }
+    window.addEventListener('sat-rssi', h)
+    return () => window.removeEventListener('sat-rssi', h)
+  }, [satId])
+  return rssi
+}
+
+function LinkBars({ satId, online }: { satId: string; online: boolean }) {
+  const rssi = useSatRSSI(satId)
+  const lit = online ? rssiToBars(rssi) : 0
   return (
     <div style={{ display: 'flex', gap: 2, alignItems: 'flex-end', height: 9 }}>
       {[1,2,3,4,5].map(i => (
@@ -71,18 +92,25 @@ function LinkBars({ online }: { online: boolean }) {
           height: 2 + i * 1.4,
           background: i <= lit ? '#40d080' : '#0e1a24',
           borderRadius: 1,
-          transition: 'background 0.3s',
+          transition: 'background 0.4s',
         }} />
       ))}
     </div>
   )
 }
 
-// Section header: LABEL ──────── N  (with optional collapse toggle)
-function Section({ label, count, open, onToggle }: { label: string; count: number; open?: boolean; onToggle?: () => void }) {
+function Section({
+  label, count, open, onToggle, icon,
+}: {
+  label: string; count: number; open?: boolean; onToggle?: () => void; icon?: React.ReactNode
+}) {
   return (
     <div
       onClick={onToggle}
+      role={onToggle ? 'button' : undefined}
+      tabIndex={onToggle ? 0 : undefined}
+      onKeyDown={e => onToggle && e.key === 'Enter' && onToggle()}
+      aria-expanded={open}
       style={{
         display: 'flex', alignItems: 'center', gap: 8,
         padding: '18px 14px 7px',
@@ -90,6 +118,7 @@ function Section({ label, count, open, onToggle }: { label: string; count: numbe
         userSelect: 'none',
       }}
     >
+      {icon && <span style={{ color: '#90b4cc', display: 'flex', alignItems: 'center' }}>{icon}</span>}
       <span style={{ color: '#90b4cc', fontSize: 10, fontWeight: 700, letterSpacing: 2.5, whiteSpace: 'nowrap' }}>
         {label.toUpperCase()}
       </span>
@@ -103,25 +132,36 @@ function Section({ label, count, open, onToggle }: { label: string; count: numbe
 }
 
 interface Props {
-  primaryOnline: boolean
-  primarySatId: string
-  tleSource: 'sim' | 'tle'
-  tleGroup?: string
+  satConnected:  Record<string, boolean>
+  primarySatIds: string[]
+  tleSource:     'sim' | 'tle'
+  tleGroup?:     string
 }
 
-export function OperatorPanel({ primaryOnline, primarySatId, tleSource, tleGroup }: Props) {
+interface SatEvent extends AutonomousEvent {
+  satId?: string
+}
+
+// tleSource/tleGroup reserved for future use
+export function OperatorPanel({ satConnected, primarySatIds }: Props) {
   const [open,       setOpen]       = useState(true)
   const [tab,        setTab]        = useState<Tab>('FLEET')
-  const [selectedId, setSelectedId] = useState(primarySatId)
+  const [selectedId, setSelectedId] = useState(primarySatIds[0])
   const [relaysOpen, setRelaysOpen] = useState(true)
   const [gsOpen,     setGsOpen]     = useState(true)
-  const [events,     setEvents]     = useState<AutonomousEvent[]>([])
+  const [events,     setEvents]     = useState<SatEvent[]>([])
 
-  // Track globe selection
   useEffect(() => {
     const h = (e: Event) => setSelectedId((e as CustomEvent<string>).detail)
     window.addEventListener('select-sat', h)
     return () => window.removeEventListener('select-sat', h)
+  }, [])
+
+  // Listen for tab switch requests from MissionFooter alert badges
+  useEffect(() => {
+    const h = (e: Event) => setTab((e as CustomEvent<Tab>).detail)
+    window.addEventListener('switch-tab', h)
+    return () => window.removeEventListener('switch-tab', h)
   }, [])
 
   const relay1 = useRelayStatus('/relay1/health', '/relay1/windows')
@@ -136,30 +176,34 @@ export function OperatorPanel({ primaryOnline, primarySatId, tleSource, tleGroup
     async function poll() {
       try {
         const r = await fetch('/events')
-        if (r.ok) { const d = await r.json(); if (Array.isArray(d)) setEvents(d.slice(0, 20)) }
+        if (r.ok) {
+          const d = await r.json()
+          if (Array.isArray(d)) {
+            const mapped: SatEvent[] = d.slice(0, 20).map((ev: SatEvent) => ({
+              ...ev,
+              // Default satId to first primary if not present (legacy events)
+              satId: ev.satId ?? primarySatIds[0],
+            }))
+            setEvents(mapped)
+          }
+        }
       } catch { /* silent */ }
       t = setTimeout(poll, 3000)
     }
     poll()
     return () => clearTimeout(t)
-  }, [])
+  }, [primarySatIds])
 
-  const nonNominalCount = events.filter(e => e.class !== 'NOMINAL').length
+  const anomalousEvents = events.filter(e => e.class !== 'NOMINAL')
+  const nonNominalCount = anomalousEvents.length
 
-  const primaries = [
-    {
-      id: primarySatId,
-      name: tleSource === 'tle' ? primarySatId : 'Satellite-1',
-      meta: tleSource === 'tle' ? `LEO · 408 km · 51.6° · ${(tleGroup ?? 'TLE').toUpperCase()}` : 'LEO · 408 km · 51.6° · SIM',
-      online: primaryOnline,
-    },
-    {
-      id: 'CSS (TIANHE)',
-      name: 'Tiangong',
-      meta: 'LEO · 380 km · 41.5° · TLE',
-      online: primaryOnline,
-    },
-  ]
+  // Publish alert counts to MissionFooter
+  useEffect(() => {
+    const error   = events.filter(e => e.class === 'POWER_ANOMALY' || e.class === 'ATTITUDE_INSTABILITY').length
+    const warning = events.filter(e => e.class === 'THERMAL_EVENT' || e.class === 'RF_DEGRADATION').length
+    const info    = events.filter(e => e.class === 'ECLIPSE_ENTRY' || e.class === 'ECLIPSE_COMPUTE').length
+    window.dispatchEvent(new CustomEvent('alert-counts', { detail: { error, warning, info } }))
+  }, [events])
 
   const relays = [
     { id: 'NOAA-20',     name: 'NOAA-20',     status: relay1 },
@@ -170,39 +214,65 @@ export function OperatorPanel({ primaryOnline, primarySatId, tleSource, tleGroup
     { id: 'NOAA-19',     name: 'NOAA-19',     status: relay6 },
   ]
 
-  const groundStations = [
-    { name: 'Nairobi',      coords: '1.3°S  36.8°E'   },
-    { name: 'Svalbard',     coords: '78.2°N  15.6°E'  },
-    { name: 'Punta Arenas', coords: '53.2°S  70.9°W'  },
-    { name: 'Fairbanks',    coords: '64.8°N  147.7°W' },
-    { name: 'Bangalore',    coords: '13.0°N  77.6°E'  },
-    { name: 'Perth',        coords: '32.0°S  115.9°E' },
-  ]
+  // Collapsed sidebar icon color based on section health
+  const primaryHealth = primarySatIds.some(id => !satConnected[id]) ? '#e05050'
+    : primarySatIds.some(id => satConnected[id] === false) ? '#d08030' : '#90b4cc'
+  const relayHealth = relays.some(r => !r.status.online) ? '#d08030' : '#90b4cc'
 
   return (
-    <div style={{
-      position: 'fixed', top: 48, left: 0, bottom: 0, zIndex: 109,
-      width: open ? 310 : 32,
-      transition: 'width 0.2s ease',
-      background: 'linear-gradient(180deg, #060f1e 0%, #040c18 100%)',
-      borderRight: '1px solid #0e1a28',
-      boxShadow: open ? '4px 0 24px rgba(0,0,0,0.4)' : 'none',
-      overflow: 'hidden',
-      display: 'flex', flexDirection: 'column',
-    }}>
-
-      {/* Toggle */}
-      <button onClick={() => setOpen(o => !o)} title={open ? 'Collapse' : 'Expand'} style={{
-        height: 40, flexShrink: 0, background: 'none', border: 'none',
-        borderBottom: '1px solid #0e1a28', cursor: 'pointer',
-        display: 'flex', alignItems: 'center', gap: 8,
-        padding: open ? '0 14px' : '0', justifyContent: open ? 'flex-start' : 'center', width: '100%',
-      }}>
+    <div
+      role="navigation"
+      aria-label="Operator fleet panel"
+      style={{
+        position: 'fixed', top: 48, left: 0, bottom: 56, zIndex: 109,
+        width: open ? 310 : 32,
+        transition: 'width 0.2s ease',
+        background: 'linear-gradient(180deg, #060f1e 0%, #040c18 100%)',
+        borderRight: '1px solid #0e1a28',
+        boxShadow: open ? '4px 0 24px rgba(0,0,0,0.4)' : 'none',
+        overflow: 'hidden',
+        display: 'flex', flexDirection: 'column',
+      }}
+    >
+      {/* Toggle button */}
+      <button
+        onClick={() => setOpen(o => !o)}
+        title={open ? 'Collapse sidebar' : 'Expand sidebar'}
+        aria-expanded={open}
+        aria-label={open ? 'Collapse fleet panel' : 'Expand fleet panel'}
+        style={{
+          height: 40, flexShrink: 0, background: 'none', border: 'none',
+          borderBottom: '1px solid #0e1a28', cursor: 'pointer',
+          display: 'flex', alignItems: 'center', gap: 8,
+          padding: open ? '0 14px' : '0',
+          justifyContent: open ? 'flex-start' : 'center',
+          width: '100%',
+        }}
+      >
         <div style={{ display: 'flex', flexDirection: 'column', gap: 3, flexShrink: 0 }}>
           {[0,1,2].map(i => <div key={i} style={{ width: 13, height: 1.5, background: '#8ab0c8', borderRadius: 1 }} />)}
         </div>
         {open && <span style={{ color: '#8ab0c8', fontSize: 11, letterSpacing: 3 }}>OPERATOR</span>}
       </button>
+
+      {/* Collapsed icon strip */}
+      {!open && (
+        <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', paddingTop: 12, gap: 20 }}>
+          <div title="Primary Spacecraft" style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 3 }}>
+            <Satellite size={14} color={primaryHealth} strokeWidth={1.5} aria-label="Primary Spacecraft" />
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
+              {primarySatIds.map(id => (
+                <div key={id} style={{
+                  width: 5, height: 5, borderRadius: '50%',
+                  background: satConnected[id] ? '#40d080' : '#e05050',
+                }} />
+              ))}
+            </div>
+          </div>
+          <span title="ISL Relay Mesh"><Radio size={14} color={relayHealth} strokeWidth={1.5} aria-label="ISL Relay Mesh" /></span>
+          <span title="Ground Stations"><MapPin size={14} color="#90b4cc" strokeWidth={1.5} aria-label="Ground Stations" /></span>
+        </div>
+      )}
 
       {/* Tabs */}
       {open && (
@@ -213,12 +283,13 @@ export function OperatorPanel({ primaryOnline, primarySatId, tleSource, tleGroup
               <button
                 key={t}
                 onClick={() => setTab(t)}
+                role="tab"
+                aria-selected={active}
                 style={{
                   flex: 1, padding: '6px 0', position: 'relative',
                   background: active ? '#0e1e30' : 'transparent',
                   border: active ? '1px solid #1e3a50' : '1px solid #0e1a28',
-                  borderRadius: 5,
-                  cursor: 'pointer',
+                  borderRadius: 5, cursor: 'pointer',
                   color: active ? '#c0d8ec' : '#6a8898',
                   fontSize: 10, letterSpacing: 2, fontFamily: 'inherit',
                   fontWeight: active ? 700 : 500,
@@ -231,8 +302,7 @@ export function OperatorPanel({ primaryOnline, primarySatId, tleSource, tleGroup
                   <span style={{
                     background: '#c03030', color: '#fff',
                     fontSize: 9, fontWeight: 700,
-                    padding: '1px 5px', borderRadius: 10,
-                    lineHeight: 1.4,
+                    padding: '1px 5px', borderRadius: 10, lineHeight: 1.4,
                   }}>
                     {nonNominalCount > 9 ? '9+' : nonNominalCount}
                   </span>
@@ -244,82 +314,89 @@ export function OperatorPanel({ primaryOnline, primarySatId, tleSource, tleGroup
       )}
 
       {open && (
-        <div style={{ flex: 1, overflowY: 'auto' }}>
+        <div style={{ flex: 1, overflowY: 'auto' }} role="tabpanel">
           {tab === 'FLEET' && (
             <>
-              {/* ── Primary Spacecraft ── */}
-              <Section label="Primary Spacecraft" count={primaries.length} />
+              <Section
+                label="Primary Spacecraft"
+                count={primarySatIds.length}
+                icon={<Satellite size={12} strokeWidth={1.5} />}
+              />
 
-              {primaries.map(p => {
-                const active = p.id === selectedId
-                const liveColor = p.online ? '#40d080' : '#e05050'
-                const isPrimary = p.id === primarySatId
+              {PRIMARY_SATELLITES.map(sat => {
+                const active  = sat.tleName === selectedId
+                const online  = !!satConnected[sat.tleName]
+                const liveColor = online ? '#40d080' : '#e05050'
                 return (
                   <div
-                    key={p.id}
+                    key={sat.tleName}
                     onClick={() => {
-                      setSelectedId(p.id)
-                      window.dispatchEvent(new CustomEvent('select-sat', { detail: p.id }))
+                      setSelectedId(sat.tleName)
+                      window.dispatchEvent(new CustomEvent('select-sat', { detail: sat.tleName }))
+                    }}
+                    role="button"
+                    tabIndex={0}
+                    aria-label={`Select ${sat.displayName}, ${online ? 'live' : 'offline'}`}
+                    onKeyDown={e => {
+                      if (e.key === 'Enter' || e.key === ' ') {
+                        setSelectedId(sat.tleName)
+                        window.dispatchEvent(new CustomEvent('select-sat', { detail: sat.tleName }))
+                      }
                     }}
                     style={{
                       padding: active ? '16px 14px 16px 12px' : '12px 14px 12px 14px',
                       borderBottom: '1px solid #0a1520',
                       borderLeft: active ? `2px solid ${liveColor}` : '2px solid transparent',
                       background: active ? `color-mix(in srgb, ${liveColor} 5%, #060f1e)` : 'transparent',
-                      cursor: 'pointer',
-                      transition: 'all 0.15s',
+                      cursor: 'pointer', transition: 'all 0.15s',
                     }}
                     onMouseEnter={e => { if (!active) e.currentTarget.style.background = '#0a1828' }}
                     onMouseLeave={e => { if (!active) e.currentTarget.style.background = 'transparent' }}
                   >
-                    {/* Name row */}
                     <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 7 }}>
                       <div style={{ display: 'flex', alignItems: 'center', gap: 7 }}>
                         <div style={{
                           width: active ? 7 : 5, height: active ? 7 : 5,
                           borderRadius: '50%', background: liveColor, flexShrink: 0,
                           boxShadow: active ? `0 0 6px ${liveColor}` : 'none',
+                          animation: online && active ? 'liveDotBlink 1s step-start infinite' : 'none',
                           transition: 'all 0.15s',
                         }} />
                         <span style={{
-                          color: active ? '#e0eef8' : isPrimary ? '#a0b4c4' : '#8aacbc',
+                          color: active ? '#e0eef8' : '#a0b4c4',
                           fontSize: active ? 15 : 13,
                           fontWeight: active ? 700 : 500,
                           letterSpacing: active ? 0.4 : 0.2,
                           transition: 'all 0.15s',
                         }}>
-                          {p.name}
+                          {sat.displayName}
                         </span>
                       </div>
                       <span style={{ color: liveColor, fontSize: 10, fontWeight: 700, letterSpacing: 1.5 }}>
-                        {p.online ? 'LIVE' : 'OFFLINE'}
+                        {online ? 'LIVE' : 'OFFLINE'}
                       </span>
                     </div>
-
-                    {/* Meta row — always visible */}
                     <div style={{ color: '#8ab0c0', fontSize: 10, letterSpacing: 0.4, paddingLeft: 14, marginBottom: 7 }}>
-                      {p.meta}
+                      LEO · {sat.altKm} km · {sat.incDeg}° · TLE
                     </div>
-
-                    {/* Link bars — always visible */}
                     <div style={{ display: 'flex', alignItems: 'center', gap: 6, paddingLeft: 14 }}>
-                      <LinkBars online={p.online} />
+                      <LinkBars satId={sat.tleName} online={online} />
                       <span style={{ color: '#8ab0c0', fontSize: 10, letterSpacing: 1.5 }}>LINK</span>
                     </div>
                   </div>
                 )
               })}
 
-              {/* ── ISL Relay Mesh ── */}
               <Section
                 label="ISL Relay Mesh"
                 count={relays.length}
                 open={relaysOpen}
                 onToggle={() => setRelaysOpen(o => !o)}
+                icon={<Radio size={12} strokeWidth={1.5} />}
               />
 
               {relaysOpen && relays.map(node => {
-                const s = relayState(node.status)
+                const s      = relayState(node.status)
                 const active = node.id === selectedId
                 return (
                   <div
@@ -327,6 +404,15 @@ export function OperatorPanel({ primaryOnline, primarySatId, tleSource, tleGroup
                     onClick={() => {
                       setSelectedId(node.id)
                       window.dispatchEvent(new CustomEvent('select-sat', { detail: node.id }))
+                    }}
+                    role="button"
+                    tabIndex={0}
+                    aria-label={`Select relay ${node.name}, ${s.label}`}
+                    onKeyDown={e => {
+                      if (e.key === 'Enter' || e.key === ' ') {
+                        setSelectedId(node.id)
+                        window.dispatchEvent(new CustomEvent('select-sat', { detail: node.id }))
+                      }
                     }}
                     style={{
                       padding: '11px 14px',
@@ -346,36 +432,34 @@ export function OperatorPanel({ primaryOnline, primarySatId, tleSource, tleGroup
                         </span>
                       </div>
                       <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-                        {s.sub && (
-                          <span style={{ color: '#8ab0c8', fontSize: 10, fontVariantNumeric: 'tabular-nums' }}>
-                            {s.sub}
-                          </span>
-                        )}
-                        <span style={{ color: s.color, fontSize: 10, fontWeight: 700, letterSpacing: 1 }}>
-                          {s.label}
-                        </span>
+                        {s.sub && <span style={{ color: '#8ab0c8', fontSize: 10, fontVariantNumeric: 'tabular-nums' }}>{s.sub}</span>}
+                        <span style={{ color: s.color, fontSize: 10, fontWeight: 700, letterSpacing: 1 }}>{s.label}</span>
                       </div>
                     </div>
                   </div>
                 )
               })}
 
-              {/* ── Ground Stations ── */}
               <Section
                 label="Ground Stations"
-                count={groundStations.length}
+                count={GROUND_STATIONS.length}
                 open={gsOpen}
                 onToggle={() => setGsOpen(o => !o)}
+                icon={<MapPin size={12} strokeWidth={1.5} />}
               />
 
-              {gsOpen && groundStations.map(gs => (
-                <div key={gs.name} style={{ padding: '9px 14px 9px 16px', borderBottom: '1px solid #0a1520', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+              {gsOpen && GROUND_STATIONS.map(gs => (
+                <div
+                  key={gs.name}
+                  style={{ padding: '9px 14px 9px 16px', borderBottom: '1px solid #0a1520', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}
+                >
                   <div style={{ display: 'flex', alignItems: 'center', gap: 7 }}>
-                    <div style={{ width: 4, height: 4, background: '#8ab0c8', borderRadius: 1, flexShrink: 0 }} />
+                    <div style={{ width: 4, height: 4, background: gs.color, borderRadius: 1, flexShrink: 0 }} />
                     <span style={{ color: '#90b4cc', fontSize: 11, fontWeight: 500 }}>{gs.name}</span>
                   </div>
                   <span style={{ color: '#8ab0c0', fontSize: 10, fontVariantNumeric: 'tabular-nums', letterSpacing: 0.3 }}>
-                    {gs.coords}
+                    {gs.lat > 0 ? `${gs.lat.toFixed(1)}°N` : `${Math.abs(gs.lat).toFixed(1)}°S`}{' '}
+                    {gs.lon > 0 ? `${gs.lon.toFixed(1)}°E` : `${Math.abs(gs.lon).toFixed(1)}°W`}
                   </span>
                 </div>
               ))}
@@ -392,9 +476,12 @@ export function OperatorPanel({ primaryOnline, primarySatId, tleSource, tleGroup
                   No events recorded
                 </div>
               ) : events.map((ev, i) => {
-                const color = CLASS_COLOR[ev.class] ?? '#8ab0c8'
+                const color      = CLASS_COLOR[ev.class] ?? '#8ab0c8'
                 const isAnomalous = ev.class !== 'NOMINAL'
-                const ts = new Date(ev.at).toISOString().slice(11, 19) + 'Z'
+                const ts         = new Date(ev.at).toISOString().slice(11, 19) + 'Z'
+                const satDisplay = ev.satId
+                  ? PRIMARY_SATELLITES.find(s => s.tleName === ev.satId)?.displayName ?? ev.satId.split(' ')[0]
+                  : null
                 return (
                   <div key={i} style={{
                     padding: '8px 14px',
@@ -406,6 +493,11 @@ export function OperatorPanel({ primaryOnline, primarySatId, tleSource, tleGroup
                     <div style={{ display: 'flex', gap: 8, alignItems: 'center', marginBottom: 3 }}>
                       <span style={{ color: '#8ab0c8', fontSize: 10, fontVariantNumeric: 'tabular-nums', flexShrink: 0 }}>{ts}</span>
                       <span style={{ color, fontSize: 11, fontWeight: 700, letterSpacing: 0.8 }}>{ev.class}</span>
+                      {satDisplay && (
+                        <span style={{ color: 'var(--cyan)', fontSize: 9, letterSpacing: 1, border: '1px solid var(--cyan)', padding: '0 4px', borderRadius: 2 }}>
+                          {satDisplay}
+                        </span>
+                      )}
                     </div>
                     <div style={{ color: '#8ab0c0', fontSize: 11, lineHeight: 1.5 }}>{ev.action}</div>
                   </div>

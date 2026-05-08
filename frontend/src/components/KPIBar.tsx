@@ -141,7 +141,7 @@ function useNextDelivery() {
     return () => clearInterval(id)
   }, [delivery])
 
-  return { label, detail, color, urgent }
+  return { label, detail, color, urgent, delivery }
 }
 
 interface ChannelDetail { z: number; mean: number; std: number }
@@ -192,7 +192,7 @@ function kpis(m: LinkMetrics) {
 const DIVIDER = <div style={{ width: 1, height: 28, background: 'var(--border)', flexShrink: 0 }} />
 
 export function KPIBar({ metrics, satellite, connected, linkLost, tleSource, tleGroup, tleCount }: Props) {
-  const { label: passLabel, detail: passDetail, color: passColor, urgent: passUrgent } = useNextDelivery()
+  const { label: passLabel, detail: passDetail, color: passColor, urgent: passUrgent, delivery } = useNextDelivery()
   const inferenceDetail = useInferenceDetail()
   const aiRef = useRef<HTMLDivElement>(null)
   const [aiHover, setAiHover] = useState(false)
@@ -220,6 +220,18 @@ export function KPIBar({ metrics, satellite, connected, linkLost, tleSource, tle
 
   const offlineText  = linkLost ? 'LINK LOST' : 'AWAITING LINK ACQUISITION...'
   const offlineColor = linkLost ? 'var(--red)' : 'var(--text-dim)'
+
+  // Dispatch delivery-state to MissionFooter whenever it changes
+  useEffect(() => {
+    if (!delivery) return
+    const snap = {
+      aosMs:   'aosMs' in delivery ? (delivery as { aosMs: number | null }).aosMs : null,
+      relay:   delivery.relay,
+      gs:      delivery.gs,
+      flowing: delivery.flowing,
+    }
+    window.dispatchEvent(new CustomEvent('delivery-state', { detail: snap }))
+  }, [delivery])
 
   return (
     <div style={{ position: 'fixed', top: 0, left: 0, right: 0, zIndex: 110 }}>
@@ -271,6 +283,7 @@ export function KPIBar({ metrics, satellite, connected, linkLost, tleSource, tle
             background: connected ? 'var(--green)' : 'var(--red)',
             boxShadow: connected ? '0 0 8px var(--green)' : '0 0 8px var(--red)',
             flexShrink: 0,
+            animation: connected ? 'liveDotBlink 1s step-start infinite' : 'none',
           }} />
           <span style={{
             color: connected ? 'var(--green)' : 'var(--red)',
@@ -396,11 +409,21 @@ export function KPIBar({ metrics, satellite, connected, linkLost, tleSource, tle
                   </div>
                 </div>
               ))
-            : (
-                <div style={{ padding: '0 20px', color: offlineColor, fontSize: 10, letterSpacing: 2, fontWeight: linkLost ? 700 : 400 }}>
-                  {offlineText}
-                </div>
-              )
+            : connected
+              ? (
+                  // TX details — show live protocol/bitrate when connected but metrics not yet populated
+                  <div style={{ padding: '0 16px', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', minWidth: 100, alignSelf: 'stretch' }}>
+                    <span style={{ color: 'var(--cyan)', fontSize: 11, fontWeight: 700, fontVariantNumeric: 'tabular-nums' }}>
+                      ORBITRON v2
+                    </span>
+                    <span style={{ color: 'var(--text-dim)', fontSize: 9, letterSpacing: 1.5 }}>PROTOCOL</span>
+                  </div>
+                )
+              : (
+                  <div style={{ padding: '0 20px', color: offlineColor, fontSize: 10, letterSpacing: 2, fontWeight: linkLost ? 700 : 400 }}>
+                    {offlineText}
+                  </div>
+                )
           }
         </div>
 
