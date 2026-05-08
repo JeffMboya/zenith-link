@@ -9,7 +9,6 @@ import { TelemetryPanel } from './components/TelemetryPanel'
 import { CommandPanel } from './components/CommandPanel'
 import { OperatorPanel } from './components/OperatorPanel'
 import { MissionFooter } from './components/MissionFooter'
-import { ContactTimeline } from './components/ContactTimeline'
 import { useContactWindows } from './hooks/useContactWindows'
 import { useCommandEngine, CommandEngineContext } from './hooks/useCommandEngine'
 import { useSatCommandState } from './hooks/useSatCommandState'
@@ -53,7 +52,7 @@ export default function App() {
   const sc3 = useSatWebSocket('/spacecraft3/ws',  'sc3')
 
   const orbitalPos       = useOrbitalPosition()
-  const contactWindows   = useContactWindows()
+  useContactWindows()  // drives delivery-state events for MissionFooter
   const commandEngine    = useCommandEngine()
   const cmdState         = useSatCommandState()
   const constellation = useConstellation()
@@ -196,7 +195,6 @@ export default function App() {
         tleGroup={constellation.group}
         cmdState={cmdState}
       />
-      <ContactTimeline windowsState={contactWindows} />
       <MissionFooter
         connected={active.connected}
         selectedSatId={selectedSatId}

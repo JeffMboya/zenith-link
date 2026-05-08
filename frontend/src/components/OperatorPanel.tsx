@@ -225,8 +225,8 @@ export function OperatorPanel({ satConnected, primarySatIds, cmdState }: Props) 
       role="navigation"
       aria-label="Operator fleet panel"
       style={{
-        position: 'fixed', top: 48, left: 0, bottom: 56, zIndex: 109,
-        width: open ? 310 : 32,
+        position: 'fixed', top: 48, left: 0, bottom: 28, zIndex: 109,
+        width: open ? 310 : 52,
         transition: 'width 0.2s ease',
         background: 'linear-gradient(180deg, #060f1e 0%, #040c18 100%)',
         borderRight: '1px solid #0e1a28',
@@ -245,7 +245,7 @@ export function OperatorPanel({ satConnected, primarySatIds, cmdState }: Props) 
           height: 40, flexShrink: 0, background: 'none', border: 'none',
           borderBottom: '1px solid #0e1a28', cursor: 'pointer',
           display: 'flex', alignItems: 'center', gap: 8,
-          padding: open ? '0 14px' : '0',
+          padding: open ? '0 14px' : '0 0',
           justifyContent: open ? 'flex-start' : 'center',
           width: '100%',
         }}
@@ -258,10 +258,10 @@ export function OperatorPanel({ satConnected, primarySatIds, cmdState }: Props) 
 
       {/* Collapsed icon strip */}
       {!open && (
-        <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', paddingTop: 12, gap: 20 }}>
-          <div title="Primary Spacecraft" style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 3 }}>
-            <Satellite size={14} color={primaryHealth} strokeWidth={1.5} aria-label="Primary Spacecraft" />
-            <div style={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
+        <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', paddingTop: 14, gap: 22 }}>
+          <div title="Primary Spacecraft" style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 5 }}>
+            <Satellite size={18} color={primaryHealth} strokeWidth={1.5} aria-label="Primary Spacecraft" />
+            <div style={{ display: 'flex', flexDirection: 'row', gap: 3 }}>
               {primarySatIds.map(id => (
                 <div key={id} style={{
                   width: 5, height: 5, borderRadius: '50%',
@@ -270,8 +270,8 @@ export function OperatorPanel({ satConnected, primarySatIds, cmdState }: Props) 
               ))}
             </div>
           </div>
-          <span title="ISL Relay Mesh"><Radio size={14} color={relayHealth} strokeWidth={1.5} aria-label="ISL Relay Mesh" /></span>
-          <span title="Ground Stations"><MapPin size={14} color="#90b4cc" strokeWidth={1.5} aria-label="Ground Stations" /></span>
+          <span title="ISL Relay Mesh"><Radio size={18} color={relayHealth} strokeWidth={1.5} aria-label="ISL Relay Mesh" /></span>
+          <span title="Ground Stations"><MapPin size={18} color="#90b4cc" strokeWidth={1.5} aria-label="Ground Stations" /></span>
         </div>
       )}
 

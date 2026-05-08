@@ -116,13 +116,14 @@ export function MissionFooter({ connected, selectedSatId, missionStartMs }: Prop
         borderTop: '1px solid var(--border)',
         display: 'flex',
         alignItems: 'center',
+        justifyContent: 'center',
         padding: '0 14px',
         gap: 0,
         backdropFilter: 'blur(8px)',
       }}
     >
-      {/* ── LEFT: Time Standards ── */}
-      <div style={{ display: 'flex', alignItems: 'center', gap: 0, flexShrink: 0 }}>
+      {/* ── Time Standards ── */}
+      <div style={{ display: 'flex', alignItems: 'center', gap: 0 }}>
         {/* UTC */}
         <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', padding: '0 10px' }}>
           <span
@@ -182,8 +183,8 @@ export function MissionFooter({ connected, selectedSatId, missionStartMs }: Prop
 
       {DIVIDER}
 
-      {/* ── CENTER: Network Health ── */}
-      <div style={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 0 }}>
+      {/* ── AOS Countdown ── */}
+      <div style={{ display: 'flex', alignItems: 'center', gap: 0 }}>
         {/* AOS countdown */}
         <div
           style={{
@@ -208,8 +209,8 @@ export function MissionFooter({ connected, selectedSatId, missionStartMs }: Prop
 
       {DIVIDER}
 
-      {/* ── RIGHT: System Context ── */}
-      <div style={{ display: 'flex', alignItems: 'center', gap: 0, flexShrink: 0 }}>
+      {/* ── System Context ── */}
+      <div style={{ display: 'flex', alignItems: 'center', gap: 0 }}>
         {/* Target */}
         <div style={{ padding: '0 10px', display: 'flex', flexDirection: 'column', alignItems: 'flex-start' }}>
           <span style={{ color: 'var(--text-dim)', fontSize: 7, letterSpacing: 2 }}>TARGET</span>
