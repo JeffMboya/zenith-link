@@ -265,8 +265,8 @@ export function Globe3D({ data, orbitalPos, constellation, selectedSatId, onSele
 
       
       {(() => {
-        const sc2 = constellation.find(s => s.id === 'SC-2')
-        const sc3 = constellation.find(s => s.id === 'SC-3')
+        const sc2 = constellation.find(s => s.id === 'Satellite-2')
+        const sc3 = constellation.find(s => s.id === 'Satellite-3')
         return (
           <>
             {sc2 && (

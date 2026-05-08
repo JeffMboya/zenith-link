@@ -42,7 +42,7 @@ export default function App() {
   const relay1Health = useRelayHealth('/relay/health')
   const relay2Health = useRelayHealth('/relay2/health')
 
-  const [selectedSatId, setSelectedSatId] = useState('AT-1')
+  const [selectedSatId, setSelectedSatId] = useState('Satellite-1')
 
   
   useEffect(() => {
@@ -52,12 +52,12 @@ export default function App() {
   
   
   
-  const [primarySatId, setPrimarySatId] = useState<string>('AT-1')
+  const [primarySatId, setPrimarySatId] = useState<string>('Satellite-1')
   const primarySet = useRef(false)
 
   useEffect(() => {
     if (constellation.source === 'tle' && !primarySet.current) {
-      const first = constellation.satellites.find(s => s.id !== 'SC-2' && s.id !== 'SC-3')
+      const first = constellation.satellites.find(s => s.id !== 'Satellite-2' && s.id !== 'Satellite-3')
       if (first) {
         primarySet.current = true
         setPrimarySatId(first.id)
@@ -66,7 +66,7 @@ export default function App() {
     }
     if (constellation.source === 'sim') {
       primarySet.current = false
-      setPrimarySatId('AT-1')
+      setPrimarySatId('Satellite-1')
     }
   }, [constellation.source, constellation.satellites])
 

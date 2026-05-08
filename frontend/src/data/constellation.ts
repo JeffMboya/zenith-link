@@ -16,7 +16,7 @@ function periodMin(smaM: number): number {
 }
 
 export const CONSTELLATION: SatMeta[] = [
-  { id: 'AT-1', inclinationDeg: 51.6, raanDeg: 0, smaM: 6_788_000, altitudeKm: 410, periodMin: periodMin(6_788_000), description: 'Primary — full CCSDS telemetry' },
+  { id: 'Satellite-1', inclinationDeg: 51.6, raanDeg: 0, smaM: 6_788_000, altitudeKm: 410, periodMin: periodMin(6_788_000), description: 'Primary — full CCSDS telemetry' },
 ]
 
 export const SAT_META = Object.fromEntries(CONSTELLATION.map(s => [s.id, s]))

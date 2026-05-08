@@ -215,7 +215,7 @@ export function OperatorPanel({ primaryOnline, primarySatId, tleSource }: Props)
                 <StatusDot online={primaryOnline} active={primaryOnline} />
                 <div style={{ flex: 1 }}>
                   <div style={{ color: 'var(--cyan)', fontSize: 10, fontWeight: 700, letterSpacing: 1, marginBottom: 2 }}>
-                    {tleSource === 'tle' ? primarySatId : 'AT-1 (SC-1)'}
+                    {tleSource === 'tle' ? primarySatId : 'Satellite-1'}
                   </div>
                   <div style={{ color: 'var(--text-dim)', fontSize: 8, letterSpacing: 0.5, marginBottom: 4 }}>
                     {tleSource === 'tle' ? '~500 km · 97.4° · PLANET LABS TLE' : '500 km · 97.4° · SUN-SYNC SIM'}
@@ -236,8 +236,8 @@ export function OperatorPanel({ primaryOnline, primarySatId, tleSource }: Props)
                 ISL RELAY NODES
               </div>
               {([
-                { id: 'SC-2', name: 'SC-2 / RELAY-1', orbit: '700 km · 98° · SUN-SYNC', status: r1, relay: relay1 },
-                { id: 'SC-3', name: 'SC-3 / RELAY-2', orbit: '550 km · 53°', status: r2, relay: relay2 },
+                { id: 'Satellite-2', name: 'Satellite-2 / Relay-1', orbit: '700 km · 98° · SUN-SYNC', status: r1, relay: relay1 },
+                { id: 'Satellite-3', name: 'Satellite-3 / Relay-2', orbit: '550 km · 53°', status: r2, relay: relay2 },
               ]).map(node => (
                 <div
                   key={node.id}
@@ -275,8 +275,8 @@ export function OperatorPanel({ primaryOnline, primarySatId, tleSource }: Props)
                 <div style={{ color: 'var(--text-dim)', fontSize: 7, letterSpacing: 2, marginBottom: 4 }}>CONSTELLATION</div>
                 <div style={{ color: 'var(--text-mid)', fontSize: 8, lineHeight: 1.5 }}>
                   {tleSource === 'tle'
-                    ? `Live Planet Labs constellation. Primary: ${primarySatId}. SC-2 / SC-3 are ISL relay nodes.`
-                    : 'AT-1 simulated primary + SC-2 / SC-3 ISL relay nodes. Switch to live TLE data via the KPI bar.'
+                    ? `Live Planet Labs constellation. Primary: ${primarySatId}. Satellite-2 / Satellite-3 are ISL relay nodes.`
+                    : 'Satellite-1 simulated primary + Satellite-2 / Satellite-3 ISL relay nodes. Switch to live TLE data via the KPI bar.'
                   }
                 </div>
               </div>
