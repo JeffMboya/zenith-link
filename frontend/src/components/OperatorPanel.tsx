@@ -56,43 +56,34 @@ function fmtAOS(sec: number): string {
   return `${s}s`
 }
 
-function SectionHeader({ label, count, accent }: { label: string; count: number; accent: string }) {
+// Status derives a dot colour and a short label — the only coloured elements per row.
+function statusInfo(r: RelayStatus): { color: string; label: string; sub: string | null } {
+  if (!r.online)    return { color: '#e05050', label: 'OFFLINE',    sub: null }
+  if (r.inContact)  return { color: '#40d080', label: 'IN CONTACT', sub: null }
+  if (r.bufferHasData) return {
+    color: '#50b8d0',
+    label: 'BUFFERED',
+    sub: r.aosSec !== null ? `AOS ${fmtAOS(r.aosSec)}` : null,
+  }
+  return {
+    color: '#9090a0',
+    label: 'IDLE',
+    sub: r.aosSec !== null ? `AOS ${fmtAOS(r.aosSec)}` : null,
+  }
+}
+
+// Thin section divider — structure only, no colour accent.
+function Divider({ label, count }: { label: string; count: number }) {
   return (
     <div style={{
       display: 'flex', alignItems: 'center', gap: 8,
-      padding: '10px 14px 6px',
-      borderTop: '1px solid var(--border)',
-      marginTop: 4,
+      padding: '14px 14px 5px',
     }}>
-      <div style={{ width: 2, height: 14, background: accent, borderRadius: 1, flexShrink: 0 }} />
-      <span style={{ color: accent, fontSize: 8, fontWeight: 700, letterSpacing: 2, flex: 1 }}>{label}</span>
-      <span style={{
-        background: `color-mix(in srgb, ${accent} 15%, transparent)`,
-        color: accent, fontSize: 7, fontWeight: 700,
-        padding: '1px 5px', borderRadius: 8, letterSpacing: 1,
-      }}>{count}</span>
+      <span style={{ color: '#3a4a5c', fontSize: 7, fontWeight: 700, letterSpacing: 2, flex: 1, textTransform: 'uppercase' }}>
+        {label}
+      </span>
+      <span style={{ color: '#2a3a4c', fontSize: 7, letterSpacing: 1 }}>{count}</span>
     </div>
-  )
-}
-
-function StatusBadge({ online, inContact, bufferHasData, aosSec }: RelayStatus) {
-  let label: string
-  let color: string
-  if (!online) { label = 'OFFLINE'; color = 'var(--red)' }
-  else if (inContact) { label = 'IN CONTACT'; color = 'var(--green)' }
-  else if (bufferHasData) {
-    label = aosSec !== null ? `BUFFERED · ${fmtAOS(aosSec)}` : 'BUFFERED'
-    color = 'var(--cyan)'
-  } else {
-    label = aosSec !== null ? `IDLE · ${fmtAOS(aosSec)}` : 'IDLE'
-    color = 'var(--amber)'
-  }
-  return (
-    <span style={{
-      color, fontSize: 7, fontWeight: 700, letterSpacing: 1,
-      background: `color-mix(in srgb, ${color} 12%, transparent)`,
-      padding: '2px 6px', borderRadius: 3, whiteSpace: 'nowrap', flexShrink: 0,
-    }}>{label}</span>
   )
 }
 
@@ -137,86 +128,81 @@ export function OperatorPanel({ primaryOnline, primarySatId, tleSource, tleGroup
   const primaries = [
     {
       id: primarySatId,
-      label: tleSource === 'tle' ? primarySatId : 'Satellite-1',
-      orbit: tleSource === 'tle' ? `408 km · 51.6° · ${(tleGroup ?? 'TLE').toUpperCase()}` : '408 km · 51.6° · SIM',
+      name: tleSource === 'tle' ? primarySatId : 'Satellite-1',
+      meta: tleSource === 'tle' ? `408 km · 51.6° · ${(tleGroup ?? 'TLE').toUpperCase()}` : '408 km · 51.6° · SIM',
       online: primaryOnline,
     },
     {
       id: 'CSS (TIANHE)',
-      label: 'Tiangong',
-      orbit: '380 km · 41.5° · LIVE TLE',
+      name: 'Tiangong',
+      meta: '380 km · 41.5° · TLE',
       online: primaryOnline,
     },
   ]
 
   const relays = [
-    { id: 'NOAA-20',     name: 'NOAA-20',     orbit: '824 km · 98.7°', status: relay1 },
-    { id: 'Sentinel-2A', name: 'Sentinel-2A', orbit: '786 km · 98.6°', status: relay2 },
-    { id: 'Landsat-9',   name: 'Landsat-9',   orbit: '705 km · 98.2°', status: relay3 },
-    { id: 'Aqua',        name: 'Aqua',        orbit: '705 km · 98.2°', status: relay4 },
-    { id: 'Terra',       name: 'Terra',       orbit: '705 km · 98.2°', status: relay5 },
-    { id: 'NOAA-19',     name: 'NOAA-19',     orbit: '870 km · 99.1°', status: relay6 },
+    { id: 'NOAA-20',     name: 'NOAA-20',     meta: '824 km · 98.7°', status: relay1 },
+    { id: 'Sentinel-2A', name: 'Sentinel-2A', meta: '786 km · 98.6°', status: relay2 },
+    { id: 'Landsat-9',   name: 'Landsat-9',   meta: '705 km · 98.2°', status: relay3 },
+    { id: 'Aqua',        name: 'Aqua',        meta: '705 km · 98.2°', status: relay4 },
+    { id: 'Terra',       name: 'Terra',       meta: '705 km · 98.2°', status: relay5 },
+    { id: 'NOAA-19',     name: 'NOAA-19',     meta: '870 km · 99.1°', status: relay6 },
+  ]
+
+  const groundStations = [
+    { name: 'Nairobi',       coords: '1.3°S  36.8°E' },
+    { name: 'Svalbard',      coords: '78.2°N  15.6°E' },
+    { name: 'Punta Arenas',  coords: '53.2°S  70.9°W' },
   ]
 
   return (
     <div style={{
       position: 'fixed', top: 48, left: 0, bottom: 0, zIndex: 109,
-      width: open ? 300 : 32,
+      width: open ? 290 : 32,
       transition: 'width 0.2s ease',
-      background: 'rgba(4,13,28,0.97)',
-      borderRight: '1px solid var(--border)',
-      backdropFilter: 'blur(10px)',
+      background: '#050e1c',
+      borderRight: '1px solid #111e2e',
       overflow: 'hidden',
       display: 'flex', flexDirection: 'column',
     }}>
 
-      {/* Collapse toggle */}
+      {/* Toggle */}
       <button
         onClick={() => setOpen(o => !o)}
-        title={open ? 'Collapse panel' : 'Expand panel'}
+        title={open ? 'Collapse' : 'Expand'}
         style={{
           height: 40, flexShrink: 0,
-          background: 'none', border: 'none', borderBottom: '1px solid var(--border)',
+          background: 'none', border: 'none', borderBottom: '1px solid #111e2e',
           cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 8,
-          padding: open ? '0 12px' : '0',
-          justifyContent: open ? 'flex-start' : 'center',
-          width: '100%',
+          padding: open ? '0 14px' : '0',
+          justifyContent: open ? 'flex-start' : 'center', width: '100%',
         }}
       >
-        <div style={{ display: 'flex', flexDirection: 'column', gap: 2.5, flexShrink: 0 }}>
-          {[0, 1, 2].map(i => (
-            <div key={i} style={{ width: 14, height: 1.5, background: open ? 'var(--cyan)' : 'var(--text-dim)', borderRadius: 1 }} />
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 3, flexShrink: 0 }}>
+          {[0,1,2].map(i => (
+            <div key={i} style={{ width: 13, height: 1.5, background: '#2a3a50', borderRadius: 1 }} />
           ))}
         </div>
-        {open && (
-          <span style={{ color: 'var(--text-dim)', fontSize: 9, letterSpacing: 3, whiteSpace: 'nowrap' }}>
-            OPERATOR
-          </span>
-        )}
+        {open && <span style={{ color: '#2a3a50', fontSize: 8, letterSpacing: 3 }}>OPERATOR</span>}
       </button>
 
       {/* Tabs */}
       {open && (
-        <div style={{ display: 'flex', borderBottom: '1px solid var(--border)', flexShrink: 0 }}>
+        <div style={{ display: 'flex', borderBottom: '1px solid #111e2e', flexShrink: 0 }}>
           {TABS.map(t => (
-            <button
-              key={t}
-              onClick={() => setTab(t)}
-              style={{
-                flex: 1, padding: '7px 0', position: 'relative',
-                background: 'none', border: 'none', cursor: 'pointer',
-                borderBottom: tab === t ? '2px solid var(--cyan)' : '2px solid transparent',
-                color: tab === t ? 'var(--cyan)' : 'var(--text-dim)',
-                fontSize: 8, letterSpacing: 2, fontFamily: 'inherit', fontWeight: tab === t ? 700 : 400,
-              }}
-            >
+            <button key={t} onClick={() => setTab(t)} style={{
+              flex: 1, padding: '8px 0', position: 'relative',
+              background: 'none', border: 'none', cursor: 'pointer',
+              borderBottom: tab === t ? '1px solid #4a7090' : '1px solid transparent',
+              color: tab === t ? '#8ab0c8' : '#2e4050',
+              fontSize: 8, letterSpacing: 2, fontFamily: 'inherit', fontWeight: 600,
+            }}>
               {t}
               {t === 'EVENTS' && nonNominalCount > 0 && (
                 <span style={{
-                  position: 'absolute', top: 4, right: 4,
-                  width: 14, height: 14, borderRadius: '50%',
-                  background: 'var(--red)', color: '#fff',
-                  fontSize: 7, display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: 700,
+                  position: 'absolute', top: 4, right: 8,
+                  background: '#c03030', color: '#fff',
+                  fontSize: 7, fontWeight: 700, padding: '1px 4px', borderRadius: 3,
                 }}>
                   {nonNominalCount > 9 ? '9+' : nonNominalCount}
                 </span>
@@ -231,136 +217,114 @@ export function OperatorPanel({ primaryOnline, primarySatId, tleSource, tleGroup
 
           {tab === 'FLEET' && (
             <>
-              {/* Primary spacecraft */}
-              <SectionHeader label="PRIMARY SPACECRAFT" count={primaries.length} accent="var(--cyan)" />
-              {primaries.map(p => (
-                <div
-                  key={p.id}
-                  onClick={() => window.dispatchEvent(new CustomEvent('select-sat', { detail: p.id }))}
-                  style={{
-                    padding: '10px 14px',
-                    borderBottom: '1px solid var(--bg-dark)',
-                    borderLeft: '2px solid transparent',
-                    cursor: 'pointer',
-                    transition: 'background 0.1s',
-                  }}
-                  onMouseEnter={e => (e.currentTarget.style.background = 'rgba(0,224,240,0.04)')}
-                  onMouseLeave={e => (e.currentTarget.style.background = 'transparent')}
-                >
-                  <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 4 }}>
-                    <div style={{ display: 'flex', alignItems: 'center', gap: 7 }}>
-                      <div style={{
-                        width: 7, height: 7, borderRadius: '50%', flexShrink: 0,
-                        background: p.online ? 'var(--green)' : 'var(--red)',
-                        boxShadow: p.online ? '0 0 5px var(--green)' : 'none',
-                      }} />
-                      <span style={{ color: 'var(--cyan)', fontSize: 11, fontWeight: 700, letterSpacing: 0.5 }}>
-                        {p.label}
+              {/* Primaries */}
+              <Divider label="Primary Spacecraft" count={primaries.length} />
+              {primaries.map(p => {
+                const col = p.online ? '#40d080' : '#e05050'
+                return (
+                  <div
+                    key={p.id}
+                    onClick={() => window.dispatchEvent(new CustomEvent('select-sat', { detail: p.id }))}
+                    style={{ padding: '9px 14px', borderBottom: '1px solid #0a1520', cursor: 'pointer' }}
+                    onMouseEnter={e => (e.currentTarget.style.background = '#0a1828')}
+                    onMouseLeave={e => (e.currentTarget.style.background = 'transparent')}
+                  >
+                    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                        <div style={{ width: 6, height: 6, borderRadius: '50%', background: col, flexShrink: 0 }} />
+                        <span style={{ color: '#c8d8e8', fontSize: 11, fontWeight: 600, letterSpacing: 0.3 }}>
+                          {p.name}
+                        </span>
+                      </div>
+                      <span style={{ color: col, fontSize: 7, fontWeight: 700, letterSpacing: 1.5 }}>
+                        {p.online ? 'LIVE' : 'OFFLINE'}
                       </span>
                     </div>
-                    <span style={{
-                      color: p.online ? 'var(--green)' : 'var(--red)',
-                      fontSize: 7, fontWeight: 700, letterSpacing: 1,
-                      background: p.online ? 'rgba(0,232,120,0.12)' : 'rgba(240,80,80,0.12)',
-                      padding: '2px 6px', borderRadius: 3,
-                    }}>
-                      {p.online ? 'LIVE' : 'OFFLINE'}
-                    </span>
-                  </div>
-                  <div style={{ color: 'var(--text-dim)', fontSize: 8, letterSpacing: 0.5, paddingLeft: 14 }}>
-                    {p.orbit}
-                  </div>
-                </div>
-              ))}
-
-              {/* ISL relay mesh */}
-              <SectionHeader label="ISL RELAY MESH" count={relays.length} accent="var(--teal)" />
-              {relays.map(node => (
-                <div
-                  key={node.id}
-                  onClick={() => window.dispatchEvent(new CustomEvent('select-sat', { detail: node.id }))}
-                  style={{
-                    padding: '8px 14px',
-                    borderBottom: '1px solid var(--bg-dark)',
-                    cursor: 'pointer',
-                  }}
-                  onMouseEnter={e => (e.currentTarget.style.background = 'rgba(0,180,160,0.04)')}
-                  onMouseLeave={e => (e.currentTarget.style.background = 'transparent')}
-                >
-                  <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 3 }}>
-                    <div style={{ display: 'flex', alignItems: 'center', gap: 7 }}>
-                      <div style={{
-                        width: 6, height: 6, borderRadius: '50%', flexShrink: 0,
-                        background: !node.status.online ? 'var(--red)' : node.status.inContact ? 'var(--green)' : 'var(--cyan)',
-                        boxShadow: node.status.online ? `0 0 4px ${node.status.inContact ? 'var(--green)' : 'var(--cyan)'}` : 'none',
-                      }} />
-                      <span style={{ color: 'var(--teal)', fontSize: 10, fontWeight: 700, letterSpacing: 0.5 }}>
-                        {node.name}
-                      </span>
+                    <div style={{ color: '#2e4050', fontSize: 7, letterSpacing: 0.5, marginTop: 3, paddingLeft: 14 }}>
+                      {p.meta}
                     </div>
-                    <StatusBadge {...node.status} />
                   </div>
-                  <div style={{ color: 'var(--text-dim)', fontSize: 7, letterSpacing: 0.5, paddingLeft: 13 }}>
-                    {node.orbit} · SUN-SYNC
-                  </div>
-                </div>
-              ))}
+                )
+              })}
 
-              {/* Ground stations summary */}
-              <SectionHeader label="GROUND STATIONS" count={3} accent="var(--amber)" />
-              {[
-                { name: 'Nairobi', coords: '1.3°S · 36.8°E' },
-                { name: 'Svalbard', coords: '78.2°N · 15.6°E' },
-                { name: 'Punta Arenas', coords: '53.2°S · 70.9°W' },
-              ].map(gs => (
-                <div key={gs.name} style={{ padding: '7px 14px', borderBottom: '1px solid var(--bg-dark)', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-                  <div style={{ display: 'flex', alignItems: 'center', gap: 7 }}>
-                    <div style={{ width: 5, height: 5, borderRadius: 1, background: 'var(--amber)', flexShrink: 0 }} />
-                    <span style={{ color: 'var(--text-body)', fontSize: 9, fontWeight: 600, letterSpacing: 0.5 }}>{gs.name}</span>
+              {/* Relays */}
+              <Divider label="ISL Relay Mesh" count={relays.length} />
+              {relays.map(node => {
+                const s = statusInfo(node.status)
+                return (
+                  <div
+                    key={node.id}
+                    onClick={() => window.dispatchEvent(new CustomEvent('select-sat', { detail: node.id }))}
+                    style={{ padding: '7px 14px', borderBottom: '1px solid #0a1520', cursor: 'pointer' }}
+                    onMouseEnter={e => (e.currentTarget.style.background = '#0a1828')}
+                    onMouseLeave={e => (e.currentTarget.style.background = 'transparent')}
+                  >
+                    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                        <div style={{ width: 5, height: 5, borderRadius: '50%', background: s.color, flexShrink: 0 }} />
+                        <span style={{ color: '#8a9aaa', fontSize: 10, fontWeight: 600, letterSpacing: 0.3 }}>
+                          {node.name}
+                        </span>
+                      </div>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                        {s.sub && (
+                          <span style={{ color: '#2e4050', fontSize: 7, letterSpacing: 0.5 }}>{s.sub}</span>
+                        )}
+                        <span style={{ color: s.color, fontSize: 7, fontWeight: 700, letterSpacing: 1 }}>
+                          {s.label}
+                        </span>
+                      </div>
+                    </div>
+                    <div style={{ color: '#1e2e3e', fontSize: 7, marginTop: 2, paddingLeft: 13 }}>
+                      {node.meta} · SUN-SYNC
+                    </div>
                   </div>
-                  <span style={{ color: 'var(--text-dim)', fontSize: 7, letterSpacing: 0.5 }}>{gs.coords}</span>
+                )
+              })}
+
+              {/* Ground Stations */}
+              <Divider label="Ground Stations" count={groundStations.length} />
+              {groundStations.map(gs => (
+                <div key={gs.name} style={{ padding: '6px 14px', borderBottom: '1px solid #0a1520', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                    <div style={{ width: 4, height: 4, background: '#2e4050', borderRadius: 1, flexShrink: 0 }} />
+                    <span style={{ color: '#607080', fontSize: 9, fontWeight: 600, letterSpacing: 0.3 }}>{gs.name}</span>
+                  </div>
+                  <span style={{ color: '#1e2e3e', fontSize: 7, letterSpacing: 0.5, fontVariantNumeric: 'tabular-nums' }}>{gs.coords}</span>
                 </div>
               ))}
             </>
           )}
 
           {tab === 'EVENTS' && (
-            <div>
-              <div style={{ padding: '10px 14px 6px', borderTop: '1px solid var(--border)', marginTop: 4, display: 'flex', alignItems: 'center', gap: 8 }}>
-                <div style={{ width: 2, height: 14, background: 'var(--purple)', borderRadius: 1 }} />
-                <span style={{ color: 'var(--purple)', fontSize: 8, fontWeight: 700, letterSpacing: 2, flex: 1 }}>AUTONOMOUS EVENTS</span>
-                <span style={{ color: 'var(--text-dim)', fontSize: 7, letterSpacing: 1 }}>LAST {events.length}</span>
-              </div>
+            <>
+              <Divider label="Autonomous Events" count={events.length} />
               {events.length === 0 ? (
-                <div style={{ padding: '20px 14px', color: 'var(--text-dim)', fontSize: 9, textAlign: 'center' }}>
-                  NO EVENTS YET
+                <div style={{ padding: '24px 14px', color: '#1e2e3e', fontSize: 9, textAlign: 'center' }}>
+                  No events yet
                 </div>
               ) : (
                 events.map((ev, i) => {
-                  const color = CLASS_COLOR[ev.class] ?? 'var(--text-dim)'
+                  const color = CLASS_COLOR[ev.class] ?? '#607080'
                   const isAnomalous = ev.class !== 'NOMINAL'
                   const ts = new Date(ev.at).toISOString().slice(11, 19) + 'Z'
                   return (
-                    <div
-                      key={i}
-                      style={{
-                        padding: '6px 14px',
-                        borderBottom: '1px solid var(--bg-dark)',
-                        borderLeft: isAnomalous ? `2px solid ${color}` : '2px solid transparent',
-                        background: isAnomalous && i === 0 ? `color-mix(in srgb, ${color} 6%, transparent)` : 'transparent',
-                        opacity: 1 - i * 0.04,
-                      }}
-                    >
-                      <div style={{ display: 'flex', gap: 6, alignItems: 'baseline', marginBottom: 2 }}>
-                        <span style={{ color: 'var(--text-dim)', fontSize: 7, fontVariantNumeric: 'tabular-nums', flexShrink: 0 }}>{ts}</span>
-                        <span style={{ color, fontSize: 8, fontWeight: 700, letterSpacing: 1 }}>{ev.class}</span>
+                    <div key={i} style={{
+                      padding: '7px 14px',
+                      borderBottom: '1px solid #0a1520',
+                      borderLeft: isAnomalous ? `2px solid ${color}` : '2px solid transparent',
+                      opacity: Math.max(0.4, 1 - i * 0.045),
+                    }}>
+                      <div style={{ display: 'flex', gap: 8, alignItems: 'baseline', marginBottom: 2 }}>
+                        <span style={{ color: '#1e2e3e', fontSize: 7, fontVariantNumeric: 'tabular-nums', flexShrink: 0 }}>{ts}</span>
+                        <span style={{ color, fontSize: 8, fontWeight: 700, letterSpacing: 0.8 }}>{ev.class}</span>
                       </div>
-                      <div style={{ color: 'var(--text-mid)', fontSize: 8, lineHeight: 1.4 }}>{ev.action}</div>
+                      <div style={{ color: '#3a5060', fontSize: 8, lineHeight: 1.4 }}>{ev.action}</div>
                     </div>
                   )
                 })
               )}
-            </div>
+            </>
           )}
         </div>
       )}
