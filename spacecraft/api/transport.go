@@ -45,7 +45,7 @@ func NewRouter(svc spacecraft.Service) http.Handler {
 
 	r.Get("/capabilities", func(w http.ResponseWriter, _ *http.Request) {
 		writeJSON(w, http.StatusOK, map[string]any{
-			"node_id":  "SC-1",
+			"node_id":  "Satellite-1",
 			"role":     "spacecraft",
 			"protocols": []string{"orbitron-v2", "ccsds-tm", "ccsds-sp", "ccsds-tc"},
 			"features": []string{

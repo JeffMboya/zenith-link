@@ -23,7 +23,7 @@ var (
 	constellationEpoch = time.Now().UTC()
 
 	constellation16 = []constellationSat{
-		{"AT-1", 6_878_000, 0.0001, 97.4 * deg, 0 * deg, 0 * deg},
+		{"Satellite-1", 6_878_000, 0.0001, 97.4 * deg, 0 * deg, 0 * deg},
 	}
 )
 
@@ -44,13 +44,13 @@ type constellationRes struct {
 }
 
 var islRelays = []constellationSat{
-	{"SC-2", 7_078_000, 0.0001, 98.0 * deg, 90 * deg, 60 * deg},
-	{"SC-3", 6_928_000, 0.0001, 53.0 * deg, 180 * deg, 45 * deg},
+	{"Satellite-2", 7_078_000, 0.0001, 98.0 * deg, 90 * deg, 60 * deg},
+	{"Satellite-3", 6_928_000, 0.0001, 53.0 * deg, 180 * deg, 45 * deg},
 }
 
 var satPlane = map[string]string{
-	"AT-1": "A",
-	"SC-2": "ISL", "SC-3": "ISL",
+	"Satellite-1": "A",
+	"Satellite-2": "ISL", "Satellite-3": "ISL",
 }
 
 func planeID(id string) string {
