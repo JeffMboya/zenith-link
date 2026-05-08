@@ -1,20 +1,20 @@
-// Command relay2 runs the Orbitron second ISL relay node (SC-3).
+// Command relay2 runs the Orbitron second ISL relay node (Satellite-3).
 //
-// SC-3 sits in a medium-inclination orbit at 550 km, offset 180° in RAAN from
-// SC-1, filling the coverage gap between SC-1 (ISS-like, 400 km, 51.6°) and
-// Relay-1 (SC-2, sun-sync polar, 700 km, 98°). Together the three nodes form
+// Satellite-3 sits in a medium-inclination orbit at 550 km, offset 180° in RAAN from
+// Satellite-1, filling the coverage gap between Satellite-1 (ISS-like, 400 km, 51.6°) and
+// Relay-1 (Satellite-2, sun-sync polar, 700 km, 98°). Together the three nodes form
 // a peer-to-peer ISL mesh — direct analog to Satlyt's IAC Paper 1 and NASA
 // ACO Topic 3 "Autonomous Edge Computing for Small Spacecraft Networks."
 //
-// SC-3 prefers to fetch buffered frames from Relay-1 (SC-2) rather than
-// polling SC-1 directly, reducing link load and demonstrating peer routing.
-// It falls back to SC-1 if Relay-1 has no buffered data.
+// Satellite-3 prefers to fetch buffered frames from Relay-1 (Satellite-2) rather than
+// polling Satellite-1 directly, reducing link load and demonstrating peer routing.
+// It falls back to Satellite-1 if Relay-1 has no buffered data.
 //
 // Configuration is read from environment variables:
 //
 //	RELAY2_ADDR       HTTP listen address (default: :8083)
 //	SC1_ADDR          Primary spacecraft base URL (required)
-//	RELAY1_ADDR       Relay-1 (SC-2) base URL for peer health check (required)
+//	RELAY1_ADDR       Relay-1 (Satellite-2) base URL for peer health check (required)
 //	GS_ADDR           Nairobi ground station base URL (required)
 //	GS_LAT            Nairobi latitude  [degrees] (default: -1.2864)
 //	GS_LON            Nairobi longitude [degrees] (default: 36.8172)
@@ -26,7 +26,7 @@
 //	GS3_LON           Punta Arenas longitude [degrees] (default: -70.9171)
 //	RELAY2_SCID       This relay's CCSDS Spacecraft ID (default: 92)
 //	MIN_ELEV_DEG      Minimum elevation for contact [degrees] (default: 5.0)
-//	POLL_INTERVAL_SEC SC-1 poll interval in seconds (default: 30)
+//	POLL_INTERVAL_SEC Satellite-1 poll interval in seconds (default: 30)
 //	LINK_LOSS_RATE    Frame drop probability [0.0–1.0] to simulate BER (default: 0)
 package main
 
@@ -233,7 +233,7 @@ func main() {
 		switch req.Link {
 		case "sc1":
 			node.partitionSC1.Store(req.Active)
-			logger.Info("relay-2: SC-1 link partition updated", slog.Bool("active", req.Active))
+			logger.Info("relay-2: Satellite-1 link partition updated", slog.Bool("active", req.Active))
 		case "relay1":
 			node.partitionRelay1.Store(req.Active)
 			logger.Info("relay-2: Relay-1 link partition updated", slog.Bool("active", req.Active))
@@ -252,7 +252,7 @@ func main() {
 	mux.HandleFunc("/capabilities", func(w http.ResponseWriter, _ *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
 		_ = json.NewEncoder(w).Encode(map[string]any{
-			"node_id":       "SC-3-relay2",
+			"node_id":       "Satellite-3",
 			"role":          "relay",
 			"scid":          cfg.RelaySCID,
 			"protocols":     []string{"orbitron-v2", "dtn", "ccsds-tm", "ccsds-sp"},
@@ -309,7 +309,7 @@ func main() {
 		fmt.Fprintf(w, "# HELP orbitron_link_loss_rate Configured packet loss probability for this link\n")
 		fmt.Fprintf(w, "# TYPE orbitron_link_loss_rate gauge\n")
 		fmt.Fprintf(w, "orbitron_link_loss_rate{scid=%q} %g\n", scid, cfg.LossRate)
-		fmt.Fprintf(w, "# HELP orbitron_partition_sc1 1 if the SC-1 uplink is currently partitioned\n")
+		fmt.Fprintf(w, "# HELP orbitron_partition_sc1 1 if the Satellite-1 uplink is currently partitioned\n")
 		fmt.Fprintf(w, "# TYPE orbitron_partition_sc1 gauge\n")
 		fmt.Fprintf(w, "orbitron_partition_sc1{scid=%q} %g\n", scid, partSC1)
 		fmt.Fprintf(w, "# HELP orbitron_partition_relay1 1 if the Relay-1 peer link is currently partitioned\n")
@@ -329,7 +329,7 @@ func main() {
 	}
 
 	go func() {
-		logger.Info("relay-2 (SC-3) starting",
+		logger.Info("relay-2 (Satellite-3) starting",
 			slog.String("addr", cfg.Addr),
 			slog.Uint64("scid", uint64(cfg.RelaySCID)),
 			slog.String("orbit", "550km/53deg/RAAN=180deg"),
@@ -369,13 +369,13 @@ func fetchBest(ctx context.Context, client *http.Client, cfg config, node *relay
 	node.pollTotal.Add(1)
 
 	if !node.partitionRelay1.Load() && relay1HasData(ctx, client, cfg.Relay1Addr) {
-		if fetchFrom(ctx, client, cfg.Relay1Addr+"/frame/orbitron", "SC-2-relay", cfg.LossRate, node, buf, logger) {
+		if fetchFrom(ctx, client, cfg.Relay1Addr+"/frame/orbitron", "Satellite-2", cfg.LossRate, node, buf, logger) {
 			return
 		}
 	}
 
 	if !node.partitionSC1.Load() {
-		fetchFrom(ctx, client, cfg.SC1Addr+"/frame/orbitron", "SC-1", cfg.LossRate, node, buf, logger)
+		fetchFrom(ctx, client, cfg.SC1Addr+"/frame/orbitron", "Satellite-1", cfg.LossRate, node, buf, logger)
 	}
 }
 
@@ -464,7 +464,7 @@ func forwardLoop(ctx context.Context, client *http.Client, cfg config, elem orbi
 			if time.Since(lastForwarded) < 5*time.Second {
 				continue
 			}
-			if err := forwardFrame(ctx, client, gs.Addr, "SC-3-relay2", frame); err != nil {
+			if err := forwardFrame(ctx, client, gs.Addr, "Satellite-3", frame); err != nil {
 				logger.Warn("relay-2: forward failed",
 					slog.String("gs", gs.Name),
 					slog.Any("error", err),
@@ -508,7 +508,7 @@ func relay2TelemetryHandler(elem orbital.Elements, scid uint16) http.HandlerFunc
 		w.Header().Set("Content-Type", "application/json")
 		_ = json.NewEncoder(w).Encode(map[string]any{
 			"scid":          scid,
-			"name":          "SC-3 (Relay-2)",
+			"name":          "Satellite-3",
 			"orbit":         "550km/53deg/RAAN=180deg",
 			"bat_mv":        batV,
 			"solar_mv":      solarV,
