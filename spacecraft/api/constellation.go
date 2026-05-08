@@ -1,11 +1,14 @@
 package api
 
 import (
+	"log/slog"
 	"math"
 	"net/http"
+	"sync"
 	"time"
 
 	"github.com/absmach/orbitron/pkg/orbital"
+	"github.com/absmach/orbitron/pkg/tle"
 )
 
 const deg = math.Pi / 180
@@ -43,14 +46,77 @@ type constellationRes struct {
 	Group      string                `json:"group"`
 }
 
-var islRelays = []constellationSat{
-	{"Satellite-2", 7_078_000, 0.0001, 98.0 * deg, 90 * deg, 60 * deg},
-	{"Satellite-3", 6_928_000, 0.0001, 53.0 * deg, 180 * deg, 45 * deg},
+// relayNoradIDs maps each ISL relay satellite's common name to its NORAD catalog number.
+var relayNoradIDs = []struct{ name, norad string }{
+	{"NOAA-20", "43013"},
+	{"Sentinel-2A", "40697"},
+	{"Landsat-9", "49260"},
+	{"Aqua", "27424"},
+	{"Terra", "25994"},
+	{"NOAA-19", "33591"},
+}
+
+type islRelayEntry struct {
+	name string
+	elem orbital.Elements
+}
+
+var islRelayCache struct {
+	sync.RWMutex
+	entries []islRelayEntry
+}
+
+func init() {
+	go refreshISLRelays()
+}
+
+func refreshISLRelays() {
+	for {
+		var entries []islRelayEntry
+		for _, r := range relayNoradIDs {
+			elem, name, err := tle.FetchByNoradID(r.norad)
+			if err != nil {
+				slog.Warn("constellation: ISL relay TLE fetch failed", slog.String("name", r.name), slog.Any("error", err))
+				continue
+			}
+			entries = append(entries, islRelayEntry{name: name, elem: elem})
+		}
+		if len(entries) > 0 {
+			islRelayCache.Lock()
+			islRelayCache.entries = entries
+			islRelayCache.Unlock()
+		}
+		time.Sleep(10 * time.Minute)
+	}
+}
+
+func islPositions(now time.Time) []constellationSatPos {
+	islRelayCache.RLock()
+	entries := islRelayCache.entries
+	islRelayCache.RUnlock()
+
+	out := make([]constellationSatPos, 0, len(entries))
+	for _, e := range entries {
+		eci, err := orbital.Propagate(e.elem, now)
+		if err != nil {
+			continue
+		}
+		ecef := orbital.ECIToECEF(eci, now)
+		geo := orbital.ECEFToGeodetic(ecef)
+		out = append(out, constellationSatPos{
+			ID:     e.name,
+			Lat:    geo.LatitudeDeg,
+			Lon:    geo.LongitudeDeg,
+			AltM:   geo.AltitudeM,
+			Plane:  "ISL",
+			Source: "tle",
+		})
+	}
+	return out
 }
 
 var satPlane = map[string]string{
 	"Satellite-1": "A",
-	"Satellite-2": "ISL", "Satellite-3": "ISL",
 }
 
 func planeID(id string) string {
@@ -60,35 +126,6 @@ func planeID(id string) string {
 	return ""
 }
 
-func islPositions(now time.Time) []constellationSatPos {
-	out := make([]constellationSatPos, 0, len(islRelays))
-	for _, s := range islRelays {
-		elem := orbital.Elements{
-			SemiMajorAxis: s.sma,
-			Eccentricity:  s.ecc,
-			Inclination:   s.inc,
-			RAAN:          s.ran,
-			ArgPerigee:    0,
-			MeanAnomaly:   s.ma,
-			Epoch:         constellationEpoch,
-		}
-		eci, err := orbital.Propagate(elem, now)
-		if err != nil {
-			continue
-		}
-		ecef := orbital.ECIToECEF(eci, now)
-		geo := orbital.ECEFToGeodetic(ecef)
-		out = append(out, constellationSatPos{
-			ID:     s.id,
-			Lat:    geo.LatitudeDeg,
-			Lon:    geo.LongitudeDeg,
-			AltM:   geo.AltitudeM,
-			Plane:  "ISL",
-			Source: "sim",
-		})
-	}
-	return out
-}
 
 func constellationHandler() http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
