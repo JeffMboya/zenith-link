@@ -9,6 +9,8 @@ import { TelemetryPanel } from './components/TelemetryPanel'
 import { CommandPanel } from './components/CommandPanel'
 import { OperatorPanel } from './components/OperatorPanel'
 import { MissionFooter } from './components/MissionFooter'
+import { ContactTimeline } from './components/ContactTimeline'
+import { useContactWindows } from './hooks/useContactWindows'
 import { PRIMARY_SATELLITES, primarySatByName } from './data/primarySatellites'
 import { GROUND_STATIONS } from './data/groundStations'
 
@@ -48,7 +50,8 @@ export default function App() {
   const sc2 = useSatWebSocket('/spacecraft2/ws',  'sc2')
   const sc3 = useSatWebSocket('/spacecraft3/ws',  'sc3')
 
-  const orbitalPos  = useOrbitalPosition()
+  const orbitalPos       = useOrbitalPosition()
+  const contactWindows   = useContactWindows()
   const constellation = useConstellation()
   const relay1Health = useRelayHealth('/relay1/health')
   // relay2Health reserved for ISL beam coloring
@@ -184,6 +187,7 @@ export default function App() {
         tleSource={constellation.source}
         tleGroup={constellation.group}
       />
+      <ContactTimeline windowsState={contactWindows} />
       <MissionFooter
         connected={active.connected}
         selectedSatId={selectedSatId}

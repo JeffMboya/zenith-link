@@ -61,6 +61,7 @@ services:
       - gs6
       - spacecraft1
       - spacecraft2
+      - spacecraft3
       - relay-noaa20
       - relay-sentinel2a
       - relay-landsat9
@@ -79,6 +80,7 @@ services:
       - SPACECRAFT_SCID=90
       - SPACECRAFT_VCID=0
       - SPACECRAFT_APID=256
+      - SPACECRAFT_NAME=ISS
 
   spacecraft2:
     <<: *common
@@ -91,6 +93,20 @@ services:
       - SPACECRAFT_SCID=91
       - SPACECRAFT_VCID=0
       - SPACECRAFT_APID=257
+      - SPACECRAFT_NAME=Tiangong
+
+  spacecraft3:
+    <<: *common
+    build:
+      context: ..
+      dockerfile: docker/Dockerfile.spacecraft
+    environment:
+      - ORBITRON_HMAC_KEY=${ORBITRON_HMAC_KEY:?ORBITRON_HMAC_KEY must be set in .env}
+      - SPACECRAFT_ADDR=:8080
+      - SPACECRAFT_SCID=98
+      - SPACECRAFT_VCID=0
+      - SPACECRAFT_APID=258
+      - SPACECRAFT_NAME=HST
 
   groundstation:
     <<: *common
@@ -105,6 +121,7 @@ services:
       - GS_LON=36.8172
       - SC_ADDR=http://spacecraft1:8080
       - SC2_ADDR=http://spacecraft2:8080
+      - SC3_ADDR=http://spacecraft3:8080
       - SC_SCID=90
       - SC_VCID=0
       - RELAY1_ADDR=http://relay-noaa20:8082
@@ -119,6 +136,7 @@ services:
     depends_on:
       - spacecraft1
       - spacecraft2
+      - spacecraft3
 
   gs2:
     <<: *common
@@ -213,6 +231,7 @@ services:
       - RELAY_SCID=92
       - SC1_ADDR=http://spacecraft1:8080
       - SC2_ADDR=http://spacecraft2:8080
+      - SC3_ADDR=http://spacecraft3:8080
       - GS_ADDR=http://groundstation:8081
       - GS2_ADDR=http://gs2:8085
       - GS2_LAT=78.2232
@@ -245,6 +264,7 @@ services:
       - RELAY_SCID=93
       - SC1_ADDR=http://spacecraft1:8080
       - SC2_ADDR=http://spacecraft2:8080
+      - SC3_ADDR=http://spacecraft3:8080
       - GS_ADDR=http://groundstation:8081
       - GS2_ADDR=http://gs2:8085
       - GS2_LAT=78.2232
@@ -277,6 +297,7 @@ services:
       - RELAY_SCID=94
       - SC1_ADDR=http://spacecraft1:8080
       - SC2_ADDR=http://spacecraft2:8080
+      - SC3_ADDR=http://spacecraft3:8080
       - GS_ADDR=http://groundstation:8081
       - GS2_ADDR=http://gs2:8085
       - GS2_LAT=78.2232
@@ -309,6 +330,7 @@ services:
       - RELAY_SCID=95
       - SC1_ADDR=http://spacecraft1:8080
       - SC2_ADDR=http://spacecraft2:8080
+      - SC3_ADDR=http://spacecraft3:8080
       - GS_ADDR=http://groundstation:8081
       - GS2_ADDR=http://gs2:8085
       - GS2_LAT=78.2232
@@ -341,6 +363,7 @@ services:
       - RELAY_SCID=96
       - SC1_ADDR=http://spacecraft1:8080
       - SC2_ADDR=http://spacecraft2:8080
+      - SC3_ADDR=http://spacecraft3:8080
       - GS_ADDR=http://groundstation:8081
       - GS2_ADDR=http://gs2:8085
       - GS2_LAT=78.2232
@@ -373,6 +396,7 @@ services:
       - RELAY_SCID=97
       - SC1_ADDR=http://spacecraft1:8080
       - SC2_ADDR=http://spacecraft2:8080
+      - SC3_ADDR=http://spacecraft3:8080
       - GS_ADDR=http://groundstation:8081
       - GS2_ADDR=http://gs2:8085
       - GS2_LAT=78.2232

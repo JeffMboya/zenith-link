@@ -17,12 +17,21 @@ import (
 	"github.com/absmach/orbitron/pkg/orbitron"
 )
 
+// TaggedTelemetry wraps decoded telemetry with the source spacecraft identifier
+// set by the relay via the X-Source-SC HTTP header ("sc1", "sc2", "sc3").
+type TaggedTelemetry struct {
+	orbitron.Telemetry
+	SourceSC string // "sc1" | "sc2" | "sc3" — empty for legacy/untagged frames
+}
+
 type Service interface {
-	Receive(ctx context.Context, rawFrame []byte) (orbitron.Telemetry, error)
+	// Receive decodes a raw Orbitron frame and broadcasts it to subscribers.
+	// sourceSC identifies which spacecraft sent the frame ("sc1", "sc2", "sc3").
+	Receive(ctx context.Context, rawFrame []byte, sourceSC string) (orbitron.Telemetry, error)
 
 	Latest(ctx context.Context) (LatestState, error)
 
-	Subscribe(ctx context.Context) (<-chan orbitron.Telemetry, error)
+	Subscribe(ctx context.Context) (<-chan TaggedTelemetry, error)
 }
 
 type LatestState struct {
@@ -45,7 +54,7 @@ type service struct {
 	latest     *LatestState
 	frameCount uint64
 
-	subscribers []chan orbitron.Telemetry
+	subscribers []chan TaggedTelemetry
 }
 
 func New(cfg Config) Service {
@@ -55,11 +64,13 @@ func New(cfg Config) Service {
 	return &service{cfg: cfg}
 }
 
-func (s *service) Receive(ctx context.Context, rawFrame []byte) (orbitron.Telemetry, error) {
+func (s *service) Receive(_ context.Context, rawFrame []byte, sourceSC string) (orbitron.Telemetry, error) {
 	tm, err := orbitron.Decode(rawFrame, s.cfg.HMACKey)
 	if err != nil {
 		return orbitron.Telemetry{}, err
 	}
+
+	tagged := TaggedTelemetry{Telemetry: tm, SourceSC: sourceSC}
 
 	s.mu.Lock()
 	s.frameCount++
@@ -68,15 +79,14 @@ func (s *service) Receive(ctx context.Context, rawFrame []byte) (orbitron.Teleme
 		ReceivedAt:  time.Now().UTC(),
 		FrameNumber: s.frameCount,
 	}
-	subs := make([]chan orbitron.Telemetry, len(s.subscribers))
+	subs := make([]chan TaggedTelemetry, len(s.subscribers))
 	copy(subs, s.subscribers)
 	s.mu.Unlock()
 
 	for _, ch := range subs {
 		select {
-		case ch <- tm:
+		case ch <- tagged:
 		default:
-
 		}
 	}
 
@@ -92,22 +102,21 @@ func (s *service) Latest(_ context.Context) (LatestState, error) {
 	return *s.latest, nil
 }
 
-func (s *service) Subscribe(ctx context.Context) (<-chan orbitron.Telemetry, error) {
+func (s *service) Subscribe(ctx context.Context) (<-chan TaggedTelemetry, error) {
 	s.mu.Lock()
 	if len(s.subscribers) >= s.cfg.MaxSubscribers {
 		s.mu.Unlock()
 		return nil, errors.Wrap(errors.ErrInvalidField,
 			errors.New("maximum subscriber limit reached"))
 	}
-	internal := make(chan orbitron.Telemetry, 16)
+	internal := make(chan TaggedTelemetry, 16)
 	s.subscribers = append(s.subscribers, internal)
 	s.mu.Unlock()
 
-	public := make(chan orbitron.Telemetry, 16)
+	public := make(chan TaggedTelemetry, 16)
 
 	go func() {
 		defer func() {
-
 			s.mu.Lock()
 			for i, sub := range s.subscribers {
 				if sub == internal {
@@ -116,7 +125,6 @@ func (s *service) Subscribe(ctx context.Context) (<-chan orbitron.Telemetry, err
 				}
 			}
 			s.mu.Unlock()
-
 			close(public)
 		}()
 

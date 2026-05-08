@@ -33,6 +33,7 @@ var upgrader = websocket.Upgrader{
 type RouterConfig struct {
 	SpacecraftAddr  string
 	Spacecraft2Addr string
+	Spacecraft3Addr string
 
 	SCID uint16
 	VCID uint8
@@ -66,9 +67,22 @@ type commandForwarder struct {
 	client *http.Client
 }
 
-func (cf *commandForwarder) forward(ctx context.Context, commandID uint8, payload []byte) (commandFwdRes, error) {
-	if cf.cfg.SpacecraftAddr == "" {
-		return commandFwdRes{}, fmt.Errorf("satellite address not configured")
+// forward routes a CCSDS TC frame to the specified spacecraft target.
+// target: "sc1" (default), "sc2" (Tiangong), "sc3" (Hubble).
+func (cf *commandForwarder) forward(ctx context.Context, commandID uint8, payload []byte, target string) (commandFwdRes, error) {
+	addr := cf.cfg.SpacecraftAddr
+	switch target {
+	case "sc2":
+		if cf.cfg.Spacecraft2Addr != "" {
+			addr = cf.cfg.Spacecraft2Addr
+		}
+	case "sc3":
+		if cf.cfg.Spacecraft3Addr != "" {
+			addr = cf.cfg.Spacecraft3Addr
+		}
+	}
+	if addr == "" {
+		return commandFwdRes{}, fmt.Errorf("satellite address not configured for target %q", target)
 	}
 
 	data := make([]byte, 1+len(payload))
@@ -90,7 +104,7 @@ func (cf *commandForwarder) forward(ctx context.Context, commandID uint8, payloa
 		return commandFwdRes{}, fmt.Errorf("TC encode: %w", err)
 	}
 
-	url := cf.cfg.SpacecraftAddr + "/command"
+	url := addr + "/command"
 	req, err := http.NewRequestWithContext(ctx, http.MethodPost, url, bytes.NewReader(rawTC))
 	if err != nil {
 		return commandFwdRes{}, err
@@ -162,8 +176,9 @@ func NewRouter(svc groundstation.Service, cfg RouterConfig) http.Handler {
 		}
 		var nodes []nodeEntry
 		for _, sc := range []struct{ name, addr string }{
-			{"Spacecraft-1", cfg.SpacecraftAddr},
-			{"Spacecraft-2", cfg.Spacecraft2Addr},
+			{"Spacecraft-1 (ISS)",      cfg.SpacecraftAddr},
+			{"Spacecraft-2 (Tiangong)", cfg.Spacecraft2Addr},
+			{"Spacecraft-3 (Hubble)",   cfg.Spacecraft3Addr},
 		} {
 			if sc.addr != "" {
 				nodes = append(nodes, nodeEntry{sc.name, sc.addr})
@@ -251,6 +266,14 @@ func NewRouter(svc groundstation.Service, cfg RouterConfig) http.Handler {
 			sc2Proxy := mustReverseProxyStrip(cfg.Spacecraft2Addr, "/spacecraft2")
 			r.Handle("/spacecraft2/*", sc2Proxy)
 		}
+		if cfg.Spacecraft3Addr != "" {
+			sc3Proxy := mustReverseProxyStrip(cfg.Spacecraft3Addr, "/spacecraft3")
+			r.Handle("/spacecraft3/*", sc3Proxy)
+		}
+
+		// WebSocket paths filtered by scid — all served by this groundstation
+		// nginx proxies /spacecraft2/ws → groundstation:8081/ws?scid=sc2
+		// nginx proxies /spacecraft3/ws → groundstation:8081/ws?scid=sc3
 
 		for i, addr := range []string{cfg.Relay1Addr, cfg.Relay2Addr, cfg.Relay3Addr, cfg.Relay4Addr, cfg.Relay5Addr, cfg.Relay6Addr} {
 			if addr == "" {
@@ -330,8 +353,10 @@ func receiveHandler(svc groundstation.Service) http.HandlerFunc {
 		}
 
 		relayedBy := r.Header.Get("X-Relayed-By")
+		// X-Source-SC: "sc1" | "sc2" | "sc3" — set by relay when forwarding frames
+		sourceSC := r.Header.Get("X-Source-SC")
 
-		tm, err := svc.Receive(r.Context(), body)
+		tm, err := svc.Receive(r.Context(), body, sourceSC)
 		if err != nil {
 			writeError(w, http.StatusUnprocessableEntity, err)
 			return
@@ -371,7 +396,13 @@ func commandHandler(fwd *commandForwarder) http.HandlerFunc {
 			}
 		}
 
-		res, err := fwd.forward(r.Context(), req.CommandID, payload)
+		// ?target=sc1|sc2|sc3 routes TC frame to the correct spacecraft
+		target := r.URL.Query().Get("target")
+		if target == "" {
+			target = "sc1"
+		}
+
+		res, err := fwd.forward(r.Context(), req.CommandID, payload, target)
 		if err != nil {
 			writeError(w, http.StatusBadGateway, err)
 			return
@@ -397,8 +428,16 @@ func wsHandler(svc groundstation.Service) http.HandlerFunc {
 			return
 		}
 
-		for tm := range ch {
-			msg, err := json.Marshal(telemetryFromDomain(tm))
+		// scid filter: if ?scid= query param is set, only forward matching frames
+		scidFilter := r.URL.Query().Get("scid")
+
+		for tagged := range ch {
+			if scidFilter != "" && tagged.SourceSC != "" && tagged.SourceSC != scidFilter {
+				continue
+			}
+			raw := telemetryFromDomain(tagged.Telemetry)
+			raw.SatID = tagged.SourceSC
+			msg, err := json.Marshal(raw)
 			if err != nil {
 				break
 			}
@@ -467,6 +506,7 @@ type telemetryRes struct {
 	InferenceConf  *uint8 `json:"inference_conf,omitempty"`
 	InferenceLabel string `json:"inference_label,omitempty"`
 	RelayedBy      string `json:"relayed_by,omitempty"`
+	SatID          string `json:"sat_id,omitempty"` // "sc1" | "sc2" | "sc3" for frontend multiplex
 }
 
 func telemetryFromDomain(tm orbitron.Telemetry) telemetryRes {

@@ -2,7 +2,6 @@ import { useEffect, useState, useRef } from 'react'
 import type { LinkMetrics, SatelliteState } from '../types'
 import { TleSelector } from './TleSelector'
 
-const WINDOWS_POLL_MS = 30_000
 const INFERENCE_POLL_MS = 2_000
 
 interface Props {
@@ -15,32 +14,12 @@ interface Props {
   tleCount: number
 }
 
-interface ContactWindow { aos: string; los: string; duration_sec: number; max_elevation_deg: number }
-
-const RELAYS = [
-  { path: '/relay1', name: 'NOAA-20' },
-  { path: '/relay2', name: 'Sentinel-2A' },
-  { path: '/relay3', name: 'Landsat-9' },
-  { path: '/relay4', name: 'Aqua' },
-  { path: '/relay5', name: 'Terra' },
-  { path: '/relay6', name: 'NOAA-19' },
-]
-
-const GS_LIST = [
-  { name: 'Nairobi',      lat: -1.2864,  lon:  36.8172 },
-  { name: 'Svalbard',     lat: 78.2232,  lon:  15.6267 },
-  { name: 'Punta Arenas', lat: -53.1638, lon: -70.9171 },
-  { name: 'Fairbanks',    lat: 64.8201,  lon: -147.720 },
-  { name: 'Bangalore',    lat: 12.9716,  lon:  77.5946 },
-  { name: 'Perth',        lat: -31.9505, lon: 115.8605 },
-]
-
 interface DeliveryState {
-  aosMs: number | null
+  aosMs:     number | null
   durationMs: number
-  relay: string
-  gs: string
-  flowing: boolean
+  relay:     string
+  gs:        string
+  flowing:   boolean
 }
 
 function useNextDelivery() {
@@ -50,52 +29,11 @@ function useNextDelivery() {
   const [color, setColor]       = useState('var(--text-dim)')
   const [urgent, setUrgent]     = useState(false)
 
-  // Fetch all 36 relay×GS contact windows every 30s
+  // Consume delivery-state dispatched by useContactWindows in App.tsx (single 36-fetch poll)
   useEffect(() => {
-    let t: ReturnType<typeof setTimeout>
-    async function poll() {
-      const combos = RELAYS.flatMap(relay =>
-        GS_LIST.map(gs => ({
-          relay: relay.name,
-          gs: gs.name,
-          url: `${relay.path}/windows?gs_lat=${gs.lat}&gs_lon=${gs.lon}`,
-        }))
-      )
-
-      const results = await Promise.allSettled(
-        combos.map(c => fetch(c.url).then(r => r.ok ? r.json() : Promise.reject()))
-      )
-
-      let earliest: DeliveryState | null = null
-
-      results.forEach((r, i) => {
-        if (r.status !== 'fulfilled') return
-        const data = r.value as { windows: ContactWindow[]; in_contact: boolean }
-        const { relay, gs } = combos[i]
-
-        if (data.in_contact) {
-          // Currently flowing — highest priority
-          if (!earliest?.flowing) {
-            earliest = { aosMs: null, durationMs: 0, relay, gs, flowing: true }
-          }
-          return
-        }
-        if (!data.windows?.length) return
-
-        const aosMs = new Date(data.windows[0].aos).getTime()
-        const losMs = new Date(data.windows[0].los).getTime()
-        if (!earliest || earliest.flowing || (earliest.aosMs !== null && aosMs < earliest.aosMs)) {
-          if (!earliest?.flowing) {
-            earliest = { aosMs, durationMs: losMs - aosMs, relay, gs, flowing: false }
-          }
-        }
-      })
-
-      setDelivery(earliest)
-      t = setTimeout(poll, WINDOWS_POLL_MS)
-    }
-    poll()
-    return () => clearTimeout(t)
+    const h = (e: Event) => setDelivery((e as CustomEvent<DeliveryState>).detail)
+    window.addEventListener('delivery-state', h)
+    return () => window.removeEventListener('delivery-state', h)
   }, [])
 
   // Tick every second to update countdown

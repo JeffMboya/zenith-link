@@ -40,6 +40,7 @@ type Bundle struct {
 	HopCount    uint8
 	Payload     []byte
 	Priority    uint8
+	SourceSC    string // "sc1"|"sc2"|"sc3" — in-memory only, not serialized in Encode/Decode
 }
 
 func (b *Bundle) Expired() bool { return time.Since(b.CreatedAt) > b.Lifetime }

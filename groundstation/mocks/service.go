@@ -14,8 +14,8 @@ type Service struct {
 	mock.Mock
 }
 
-func (m *Service) Receive(ctx context.Context, rawFrame []byte) (orbitron.Telemetry, error) {
-	args := m.Called(ctx, rawFrame)
+func (m *Service) Receive(ctx context.Context, rawFrame []byte, sourceSC string) (orbitron.Telemetry, error) {
+	args := m.Called(ctx, rawFrame, sourceSC)
 	if tm, ok := args.Get(0).(orbitron.Telemetry); ok {
 		return tm, args.Error(1)
 	}
@@ -30,9 +30,9 @@ func (m *Service) Latest(ctx context.Context) (groundstation.LatestState, error)
 	return groundstation.LatestState{}, args.Error(1)
 }
 
-func (m *Service) Subscribe(ctx context.Context) (<-chan orbitron.Telemetry, error) {
+func (m *Service) Subscribe(ctx context.Context) (<-chan groundstation.TaggedTelemetry, error) {
 	args := m.Called(ctx)
-	if ch, ok := args.Get(0).(<-chan orbitron.Telemetry); ok {
+	if ch, ok := args.Get(0).(<-chan groundstation.TaggedTelemetry); ok {
 		return ch, args.Error(1)
 	}
 	return nil, args.Error(1)

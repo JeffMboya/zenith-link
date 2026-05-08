@@ -442,13 +442,13 @@ func pollLoop(ctx context.Context, client *http.Client, cfg config, node *relayN
 
 func fetchAll(ctx context.Context, client *http.Client, cfg config, node *relayNode, logger *slog.Logger) {
 	node.pollTotal.Add(1)
-	fetchFromPrimary(ctx, client, cfg.SC1Addr, "Primary-1", node.partitionSC1.Load(), cfg, node, logger)
+	fetchFromPrimary(ctx, client, cfg.SC1Addr, "Primary-1", "sc1", node.partitionSC1.Load(), cfg, node, logger)
 	if cfg.SC2Addr != "" {
-		fetchFromPrimary(ctx, client, cfg.SC2Addr, "Primary-2", node.partitionSC2.Load(), cfg, node, logger)
+		fetchFromPrimary(ctx, client, cfg.SC2Addr, "Primary-2", "sc2", node.partitionSC2.Load(), cfg, node, logger)
 	}
 }
 
-func fetchFromPrimary(ctx context.Context, client *http.Client, addr, name string, partitioned bool, cfg config, node *relayNode, logger *slog.Logger) {
+func fetchFromPrimary(ctx context.Context, client *http.Client, addr, name, sourceSC string, partitioned bool, cfg config, node *relayNode, logger *slog.Logger) {
 	if partitioned {
 		logger.Debug("relay: link partitioned — poll skipped", slog.String("primary", name))
 		return
@@ -487,6 +487,7 @@ func fetchFromPrimary(ctx context.Context, client *http.Client, addr, name strin
 		Lifetime:    2 * time.Hour,
 		Payload:     frame,
 		Priority:    extractPriority(frame),
+		SourceSC:    sourceSC,
 	}
 	node.store.Put(b)
 	node.stored.Add(1)
@@ -528,7 +529,7 @@ func forwardLoop(ctx context.Context, client *http.Client, cfg config, node *rel
 				if bfwd == nil {
 					break
 				}
-				if err := forwardFrame(ctx, client, gs.Addr, node.satName, bfwd.Payload); err != nil {
+				if err := forwardFrame(ctx, client, gs.Addr, node.satName, bfwd.SourceSC, bfwd.Payload); err != nil {
 					logger.Warn("relay: forward failed", slog.Uint64("bundle_id", bfwd.ID), slog.String("gs", gs.Name), slog.Any("error", err))
 					break
 				}
@@ -545,7 +546,7 @@ func forwardLoop(ctx context.Context, client *http.Client, cfg config, node *rel
 	}
 }
 
-func forwardFrame(ctx context.Context, client *http.Client, targetAddr, relayID string, frame []byte) error {
+func forwardFrame(ctx context.Context, client *http.Client, targetAddr, relayID, sourceSC string, frame []byte) error {
 	url := targetAddr + "/receive"
 	req, err := http.NewRequestWithContext(ctx, http.MethodPost, url, bytes.NewReader(frame))
 	if err != nil {
@@ -553,6 +554,9 @@ func forwardFrame(ctx context.Context, client *http.Client, targetAddr, relayID 
 	}
 	req.Header.Set("Content-Type", "application/octet-stream")
 	req.Header.Set("X-Relayed-By", relayID)
+	if sourceSC != "" {
+		req.Header.Set("X-Source-SC", sourceSC)
+	}
 	resp, err := client.Do(req)
 	if err != nil {
 		return err

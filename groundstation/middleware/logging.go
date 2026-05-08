@@ -21,11 +21,12 @@ func NewLogging(svc groundstation.Service, logger *slog.Logger) groundstation.Se
 	return &loggingMiddleware{logger: logger, svc: svc}
 }
 
-func (lm *loggingMiddleware) Receive(ctx context.Context, rawFrame []byte) (tm orbitron.Telemetry, err error) {
+func (lm *loggingMiddleware) Receive(ctx context.Context, rawFrame []byte, sourceSC string) (tm orbitron.Telemetry, err error) {
 	defer func(begin time.Time) {
 		args := []any{
 			slog.String("duration", time.Since(begin).String()),
 			slog.Int("frame_bytes", len(rawFrame)),
+			slog.String("source_sc", sourceSC),
 		}
 		if err != nil {
 			args = append(args, slog.Any("error", err))
@@ -35,7 +36,7 @@ func (lm *loggingMiddleware) Receive(ctx context.Context, rawFrame []byte) (tm o
 		args = append(args, slog.Uint64("sequence", uint64(tm.Sequence)))
 		lm.logger.Info("groundstation.Receive", args...)
 	}(time.Now())
-	return lm.svc.Receive(ctx, rawFrame)
+	return lm.svc.Receive(ctx, rawFrame, sourceSC)
 }
 
 func (lm *loggingMiddleware) Latest(ctx context.Context) (st groundstation.LatestState, err error) {
@@ -51,7 +52,7 @@ func (lm *loggingMiddleware) Latest(ctx context.Context) (st groundstation.Lates
 	return lm.svc.Latest(ctx)
 }
 
-func (lm *loggingMiddleware) Subscribe(ctx context.Context) (ch <-chan orbitron.Telemetry, err error) {
+func (lm *loggingMiddleware) Subscribe(ctx context.Context) (ch <-chan groundstation.TaggedTelemetry, err error) {
 	defer func(begin time.Time) {
 		args := []any{slog.String("duration", time.Since(begin).String())}
 		if err != nil {

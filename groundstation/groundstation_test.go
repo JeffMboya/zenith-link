@@ -82,7 +82,7 @@ func TestReceive(t *testing.T) {
 	for _, tc := range tests {
 		t.Run(tc.desc, func(t *testing.T) {
 			svc := groundstation.New(groundstation.Config{HMACKey: testKey})
-			got, err := svc.Receive(context.Background(), tc.frame(t))
+			got, err := svc.Receive(context.Background(), tc.frame(t), "sc1")
 			if tc.wantErr != nil {
 				assert.True(t, errors.Contains(err, tc.wantErr))
 				return
@@ -107,7 +107,7 @@ func TestLatest(t *testing.T) {
 		tm := defaultTelemetry()
 		frame := makeFrame(t, tm)
 
-		_, err := svc.Receive(context.Background(), frame)
+		_, err := svc.Receive(context.Background(), frame, "sc1")
 		require.NoError(t, err)
 
 		latest, err := svc.Latest(context.Background())
@@ -123,7 +123,7 @@ func TestLatest(t *testing.T) {
 		for i := range 3 {
 			tm := defaultTelemetry()
 			tm.Sequence = uint16(i)
-			_, err := svc.Receive(context.Background(), makeFrame(t, tm))
+			_, err := svc.Receive(context.Background(), makeFrame(t, tm), "sc1")
 			require.NoError(t, err)
 		}
 
@@ -143,7 +143,7 @@ func TestSubscribe(t *testing.T) {
 		require.NoError(t, err)
 
 		tm := defaultTelemetry()
-		_, err = svc.Receive(context.Background(), makeFrame(t, tm))
+		_, err = svc.Receive(context.Background(), makeFrame(t, tm), "sc1")
 		require.NoError(t, err)
 
 		select {
@@ -196,7 +196,7 @@ func TestSubscribe(t *testing.T) {
 			}()
 			go func() {
 				defer wg.Done()
-				_, _ = svc.Receive(context.Background(), frame)
+				_, _ = svc.Receive(context.Background(), frame, "sc1")
 			}()
 		}
 		wg.Wait()

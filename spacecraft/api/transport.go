@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"os"
 	"strconv"
 	"sync/atomic"
 	"time"
@@ -44,8 +45,15 @@ func NewRouter(svc spacecraft.Service) http.Handler {
 	r.Get("/inference/state", inferenceStateHandler(svc))
 
 	r.Get("/capabilities", func(w http.ResponseWriter, _ *http.Request) {
+		nodeName := os.Getenv("SPACECRAFT_NAME")
+		if nodeName == "" {
+			nodeName = os.Getenv("SPACECRAFT_SCID")
+		}
+		if nodeName == "" {
+			nodeName = "Spacecraft"
+		}
 		writeJSON(w, http.StatusOK, map[string]any{
-			"node_id":  "Satellite-1",
+			"node_id":  nodeName,
 			"role":     "spacecraft",
 			"protocols": []string{"orbitron-v2", "ccsds-tm", "ccsds-sp", "ccsds-tc"},
 			"features": []string{

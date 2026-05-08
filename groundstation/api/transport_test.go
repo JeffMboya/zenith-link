@@ -136,7 +136,7 @@ func TestReceiveHandler(t *testing.T) {
 			desc: "valid frame is accepted and decoded telemetry returned",
 			body: fakeFrame,
 			setupMock: func(svc *mocks.Service) {
-				svc.On("Receive", mock.Anything, fakeFrame).Return(tm, nil)
+				svc.On("Receive", mock.Anything, fakeFrame, mock.Anything).Return(tm, nil)
 			},
 			wantStatus: http.StatusOK,
 			check: func(t *testing.T, body map[string]any) {
@@ -150,7 +150,7 @@ func TestReceiveHandler(t *testing.T) {
 				"X-Relayed-By": "SC-2",
 			},
 			setupMock: func(svc *mocks.Service) {
-				svc.On("Receive", mock.Anything, fakeFrame).Return(tm, nil)
+				svc.On("Receive", mock.Anything, fakeFrame, mock.Anything).Return(tm, nil)
 			},
 			wantStatus: http.StatusOK,
 			check: func(t *testing.T, body map[string]any) {
@@ -161,7 +161,7 @@ func TestReceiveHandler(t *testing.T) {
 			desc: "invalid frame returns 422",
 			body: []byte{0x00},
 			setupMock: func(svc *mocks.Service) {
-				svc.On("Receive", mock.Anything, []byte{0x00}).
+				svc.On("Receive", mock.Anything, []byte{0x00}, mock.Anything).
 					Return(orbitron.Telemetry{}, errors.ErrFrameTooSmall)
 			},
 			wantStatus: http.StatusUnprocessableEntity,
@@ -271,7 +271,7 @@ func TestSubscribeBroadcast(t *testing.T) {
 		frame, err := orbitron.Encode(fakeTelemetry(), key)
 		require.NoError(t, err)
 
-		_, err = svc.Receive(context.Background(), frame)
+		_, err = svc.Receive(context.Background(), frame, "sc1")
 		require.NoError(t, err)
 
 		select {

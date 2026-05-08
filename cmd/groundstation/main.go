@@ -43,6 +43,7 @@ type config struct {
 	GSLon          float64 `env:"GS_LON"   envDefault:"36.8172"`
 	SCAddr         string  `env:"SC_ADDR"  envDefault:"http://spacecraft1:8080"`
 	SC2Addr        string  `env:"SC2_ADDR" envDefault:""`
+	SC3Addr        string  `env:"SC3_ADDR" envDefault:""`
 	SCSCID         uint16  `env:"SC_SCID"  envDefault:"90"`
 	SCVCID         uint8   `env:"SC_VCID"  envDefault:"0"`
 	StaticDir      string  `env:"STATIC_DIR"    envDefault:""`
@@ -83,6 +84,7 @@ func main() {
 	routerCfg := gsapi.RouterConfig{
 		SpacecraftAddr:  cfg.SCAddr,
 		Spacecraft2Addr: cfg.SC2Addr,
+		Spacecraft3Addr: cfg.SC3Addr,
 		SCID:            cfg.SCSCID,
 		VCID:            cfg.SCVCID,
 		GSLat:           cfg.GSLat,
