@@ -15,63 +15,133 @@ interface Props {
   tleCount: number
 }
 
-interface ContactWindow { aos: string; duration_sec: number; max_elevation_deg: number }
-interface NextPassWindow { aosMs: number; durationMs: number; elevDeg: number }
+interface ContactWindow { aos: string; los: string; duration_sec: number; max_elevation_deg: number }
 
-function useNextPass() {
-  const [win, setWin] = useState<NextPassWindow | null>(null)
-  const [label, setLabel] = useState('—')
-  const [color, setColor] = useState('var(--text-dim)')
-  const [urgent, setUrgent] = useState(false)
+const RELAYS = [
+  { path: '/relay1', name: 'NOAA-20' },
+  { path: '/relay2', name: 'Sentinel-2A' },
+  { path: '/relay3', name: 'Landsat-9' },
+  { path: '/relay4', name: 'Aqua' },
+  { path: '/relay5', name: 'Terra' },
+  { path: '/relay6', name: 'NOAA-19' },
+]
 
+const GS_LIST = [
+  { name: 'Nairobi',      lat: -1.2864,  lon:  36.8172 },
+  { name: 'Svalbard',     lat: 78.2232,  lon:  15.6267 },
+  { name: 'Punta Arenas', lat: -53.1638, lon: -70.9171 },
+  { name: 'Fairbanks',    lat: 64.8201,  lon: -147.720 },
+  { name: 'Bangalore',    lat: 12.9716,  lon:  77.5946 },
+  { name: 'Perth',        lat: -31.9505, lon: 115.8605 },
+]
+
+interface DeliveryState {
+  aosMs: number | null
+  durationMs: number
+  relay: string
+  gs: string
+  flowing: boolean
+}
+
+function useNextDelivery() {
+  const [delivery, setDelivery] = useState<DeliveryState | null>(null)
+  const [label, setLabel]       = useState('—')
+  const [detail, setDetail]     = useState('')
+  const [color, setColor]       = useState('var(--text-dim)')
+  const [urgent, setUrgent]     = useState(false)
+
+  // Fetch all 36 relay×GS contact windows every 30s
   useEffect(() => {
     let t: ReturnType<typeof setTimeout>
     async function poll() {
-      try {
-        const res = await fetch('/windows')
-        if (!res.ok) return
-        const data = await res.json() as { windows: ContactWindow[] }
-        if (data.windows?.length) {
-          const w = data.windows[0]
-          setWin({ aosMs: new Date(w.aos).getTime(), durationMs: w.duration_sec * 1000, elevDeg: w.max_elevation_deg })
-        } else {
-          setWin(null)
+      const combos = RELAYS.flatMap(relay =>
+        GS_LIST.map(gs => ({
+          relay: relay.name,
+          gs: gs.name,
+          url: `${relay.path}/windows?gs_lat=${gs.lat}&gs_lon=${gs.lon}`,
+        }))
+      )
+
+      const results = await Promise.allSettled(
+        combos.map(c => fetch(c.url).then(r => r.ok ? r.json() : Promise.reject()))
+      )
+
+      let earliest: DeliveryState | null = null
+
+      results.forEach((r, i) => {
+        if (r.status !== 'fulfilled') return
+        const data = r.value as { windows: ContactWindow[]; in_contact: boolean }
+        const { relay, gs } = combos[i]
+
+        if (data.in_contact) {
+          // Currently flowing — highest priority
+          if (!earliest?.flowing) {
+            earliest = { aosMs: null, durationMs: 0, relay, gs, flowing: true }
+          }
+          return
         }
-      } catch { /* silent */ }
+        if (!data.windows?.length) return
+
+        const aosMs = new Date(data.windows[0].aos).getTime()
+        const losMs = new Date(data.windows[0].los).getTime()
+        if (!earliest || earliest.flowing || (earliest.aosMs !== null && aosMs < earliest.aosMs)) {
+          if (!earliest?.flowing) {
+            earliest = { aosMs, durationMs: losMs - aosMs, relay, gs, flowing: false }
+          }
+        }
+      })
+
+      setDelivery(earliest)
       t = setTimeout(poll, WINDOWS_POLL_MS)
     }
     poll()
     return () => clearTimeout(t)
   }, [])
 
+  // Tick every second to update countdown
   useEffect(() => {
     function tick() {
-      if (!win) { setLabel('—'); setColor('var(--text-dim)'); setUrgent(false); return }
-      const now = Date.now()
-      const diffSec = Math.round((win.aosMs - now) / 1000)
-      if (diffSec < 0) {
-        const losSec = Math.round((win.aosMs + win.durationMs - now) / 1000)
-        if (losSec > 0) { setLabel(`IN PASS · ${losSec}s`); setColor('var(--green)'); setUrgent(true) }
-        else { setLabel('PASS DONE'); setColor('var(--text-dim)'); setUrgent(false) }
-      } else {
-        const h = Math.floor(diffSec / 3600)
-        const m = Math.floor((diffSec % 3600) / 60)
-        const s = diffSec % 60
-        const elev = win.elevDeg.toFixed(0)
-        const t = h > 0
-          ? `${h}h ${m}m ${String(s).padStart(2, '0')}s`
-          : m > 0 ? `${m}m ${String(s).padStart(2, '0')}s` : `${s}s`
-        setLabel(`${t} · ${elev}°`)
-        setColor(diffSec < 300 ? 'var(--amber)' : 'var(--cyan)')
-        setUrgent(diffSec < 300)
+      if (!delivery) {
+        setLabel('—'); setDetail(''); setColor('var(--text-dim)'); setUrgent(false)
+        return
       }
+      if (delivery.flowing) {
+        setLabel('DATA FLOWING')
+        setDetail(`${delivery.relay} → ${delivery.gs}`)
+        setColor('var(--green)')
+        setUrgent(true)
+        return
+      }
+      if (delivery.aosMs === null) return
+      const diffSec = Math.round((delivery.aosMs - Date.now()) / 1000)
+      if (diffSec < 0) {
+        const remaining = Math.round((delivery.aosMs + delivery.durationMs - Date.now()) / 1000)
+        if (remaining > 0) {
+          setLabel(`IN CONTACT · ${remaining}s`)
+          setDetail(`${delivery.relay} → ${delivery.gs}`)
+          setColor('var(--green)'); setUrgent(true)
+        } else {
+          setLabel('—'); setDetail(''); setColor('var(--text-dim)'); setUrgent(false)
+        }
+        return
+      }
+      const h = Math.floor(diffSec / 3600)
+      const m = Math.floor((diffSec % 3600) / 60)
+      const s = diffSec % 60
+      const t = h > 0
+        ? `${h}h ${m}m ${String(s).padStart(2, '0')}s`
+        : m > 0 ? `${m}m ${String(s).padStart(2, '0')}s` : `${s}s`
+      setLabel(t)
+      setDetail(`${delivery.relay} → ${delivery.gs}`)
+      setColor(diffSec < 300 ? 'var(--amber)' : 'var(--cyan)')
+      setUrgent(diffSec < 300)
     }
     tick()
     const id = setInterval(tick, 1000)
     return () => clearInterval(id)
-  }, [win])
+  }, [delivery])
 
-  return { label, color, urgent }
+  return { label, detail, color, urgent }
 }
 
 interface ChannelDetail { z: number; mean: number; std: number }
@@ -122,7 +192,7 @@ function kpis(m: LinkMetrics) {
 const DIVIDER = <div style={{ width: 1, height: 28, background: 'var(--border)', flexShrink: 0 }} />
 
 export function KPIBar({ metrics, satellite, connected, linkLost, tleSource, tleGroup, tleCount }: Props) {
-  const { label: passLabel, color: passColor, urgent: passUrgent } = useNextPass()
+  const { label: passLabel, detail: passDetail, color: passColor, urgent: passUrgent } = useNextDelivery()
   const inferenceDetail = useInferenceDetail()
   const aiRef = useRef<HTMLDivElement>(null)
   const [aiHover, setAiHover] = useState(false)
@@ -284,15 +354,24 @@ export function KPIBar({ metrics, satellite, connected, linkLost, tleSource, tle
         <div style={{
           padding: '0 20px',
           display: 'flex', flexDirection: 'column', justifyContent: 'center',
-          alignItems: 'flex-start', flexShrink: 0, minWidth: 140,
-          borderTop: passUrgent ? '2px solid var(--amber)' : '2px solid transparent',
-          background: passUrgent ? 'rgba(240,168,0,0.06)' : 'transparent',
+          alignItems: 'flex-start', flexShrink: 0, minWidth: 160,
+          borderTop: passUrgent
+            ? `2px solid ${passColor}`
+            : '2px solid transparent',
+          background: passUrgent
+            ? `color-mix(in srgb, ${passColor} 6%, transparent)`
+            : 'transparent',
           alignSelf: 'stretch',
         }}>
-          <span style={{ color: passColor, fontSize: 16, fontWeight: 700, lineHeight: 1.2, letterSpacing: 0.5, fontVariantNumeric: 'tabular-nums' }}>
+          <span style={{ color: passColor, fontSize: 15, fontWeight: 700, lineHeight: 1.2, letterSpacing: 0.3, fontVariantNumeric: 'tabular-nums', whiteSpace: 'nowrap' }}>
             {passLabel}
           </span>
-          <span style={{ color: 'var(--text-dim)', fontSize: 9, letterSpacing: 2, marginTop: 2 }}>NEXT PASS</span>
+          {passDetail && (
+            <span style={{ color: passColor, fontSize: 8, letterSpacing: 0.5, marginTop: 2, opacity: 0.7, whiteSpace: 'nowrap' }}>
+              {passDetail}
+            </span>
+          )}
+          <span style={{ color: 'var(--text-dim)', fontSize: 8, letterSpacing: 2, marginTop: passDetail ? 1 : 2 }}>NEXT DELIVERY</span>
         </div>
 
         {DIVIDER}
