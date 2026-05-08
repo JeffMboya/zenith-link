@@ -183,7 +183,7 @@ export function CommandPanel() {
         onClick={() => setOpen(true)}
         aria-label="Open command palette (Ctrl+K)"
         style={{
-          position: 'fixed', bottom: 0, left: 0, zIndex: 90,
+          position: 'fixed', bottom: 0, left: 0, zIndex: 115,
           padding: '6px 14px',
           background: 'rgba(4,13,28,0.90)',
           borderTop: `1px solid ${sending ? 'var(--amber)' : 'var(--border)'}`,
