@@ -1,6 +1,6 @@
 // Command relay runs the Orbitron ISL (Inter-Satellite Link) relay service.
 //
-// The relay satellite (SC-2) polls SC-1 for Orbitron telemetry frames, wraps
+// The relay satellite (Satellite-2) polls Satellite-1 for Orbitron telemetry frames, wraps
 // them in DTN bundles, buffers them in the bundle store, and forwards them to
 // whichever ground station has the best elevation angle at the time of contact.
 // Forwarded frames carry the X-Relayed-By header so the ground station can log
@@ -21,7 +21,7 @@
 //	GS3_LON           Punta Arenas longitude [degrees] (default: -70.9171)
 //	RELAY_SCID        This relay's CCSDS Spacecraft ID (default: 91)
 //	MIN_ELEV_DEG      Minimum elevation for contact [degrees] (default: 5.0)
-//	POLL_INTERVAL_SEC SC-1 poll interval in seconds (default: 30)
+//	POLL_INTERVAL_SEC Satellite-1 poll interval in seconds (default: 30)
 //	LINK_LOSS_RATE    Frame drop probability [0.0–1.0] to simulate BER (default: 0)
 package main
 
@@ -246,7 +246,7 @@ func main() {
 		switch req.Link {
 		case "sc1":
 			node.partitionSC1.Store(req.Active)
-			logger.Info("relay: SC-1 link partition updated", slog.Bool("active", req.Active))
+			logger.Info("relay: Satellite-1 link partition updated", slog.Bool("active", req.Active))
 		case "gs":
 			node.partitionGS.Store(req.Active)
 			logger.Info("relay: GS link partition updated", slog.Bool("active", req.Active))
@@ -262,7 +262,7 @@ func main() {
 	mux.HandleFunc("/capabilities", func(w http.ResponseWriter, _ *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
 		_ = json.NewEncoder(w).Encode(map[string]any{
-			"node_id":            "SC-2-relay",
+			"node_id":            "Satellite-2",
 			"role":               "relay",
 			"scid":               cfg.RelaySCID,
 			"protocols":          []string{"orbitron-v2", "dtn", "ccsds-tm", "ccsds-sp"},
@@ -312,13 +312,13 @@ func main() {
 		fmt.Fprintf(w, "# HELP orbitron_frames_dropped_total Frames dropped due to simulated link packet loss\n")
 		fmt.Fprintf(w, "# TYPE orbitron_frames_dropped_total counter\n")
 		fmt.Fprintf(w, "orbitron_frames_dropped_total{scid=%q} %d\n", scid, node.dropped.Load())
-		fmt.Fprintf(w, "# HELP orbitron_poll_total Total SC-1 poll attempts\n")
+		fmt.Fprintf(w, "# HELP orbitron_poll_total Total Satellite-1 poll attempts\n")
 		fmt.Fprintf(w, "# TYPE orbitron_poll_total counter\n")
 		fmt.Fprintf(w, "orbitron_poll_total{scid=%q} %d\n", scid, node.pollTotal.Load())
 		fmt.Fprintf(w, "# HELP orbitron_link_loss_rate Configured packet loss probability for this link\n")
 		fmt.Fprintf(w, "# TYPE orbitron_link_loss_rate gauge\n")
 		fmt.Fprintf(w, "orbitron_link_loss_rate{scid=%q} %g\n", scid, cfg.LossRate)
-		fmt.Fprintf(w, "# HELP orbitron_partition_sc1 1 if the SC-1 uplink is currently partitioned\n")
+		fmt.Fprintf(w, "# HELP orbitron_partition_sc1 1 if the Satellite-1 uplink is currently partitioned\n")
 		fmt.Fprintf(w, "# TYPE orbitron_partition_sc1 gauge\n")
 		fmt.Fprintf(w, "orbitron_partition_sc1{scid=%q} %g\n", scid, partSC1)
 		fmt.Fprintf(w, "# HELP orbitron_partition_gs 1 if the ground station downlink is currently partitioned\n")
@@ -377,7 +377,7 @@ func fetchAndStore(ctx context.Context, client *http.Client, cfg config, node *r
 	node.pollTotal.Add(1)
 
 	if node.partitionSC1.Load() {
-		logger.Debug("relay: SC-1 link partitioned — poll skipped")
+		logger.Debug("relay: Satellite-1 link partitioned — poll skipped")
 		return
 	}
 
@@ -389,23 +389,23 @@ func fetchAndStore(ctx context.Context, client *http.Client, cfg config, node *r
 	}
 	resp, err := client.Do(req)
 	if err != nil {
-		logger.Warn("relay poll: SC-1 unreachable", slog.String("url", url), slog.Any("error", err))
+		logger.Warn("relay poll: Satellite-1 unreachable", slog.String("url", url), slog.Any("error", err))
 		return
 	}
 	defer resp.Body.Close()
 
 	if resp.StatusCode != http.StatusOK {
-		logger.Warn("relay poll: SC-1 returned non-200", slog.Int("status", resp.StatusCode))
+		logger.Warn("relay poll: Satellite-1 returned non-200", slog.Int("status", resp.StatusCode))
 		return
 	}
 
 	frame, err := io.ReadAll(io.LimitReader(resp.Body, 8192))
 	if err != nil {
-		logger.Warn("relay poll: failed to read SC-1 response body", slog.Any("error", err))
+		logger.Warn("relay poll: failed to read Satellite-1 response body", slog.Any("error", err))
 		return
 	}
 	if len(frame) == 0 {
-		logger.Warn("relay poll: SC-1 returned empty frame body")
+		logger.Warn("relay poll: Satellite-1 returned empty frame body")
 		return
 	}
 
@@ -430,7 +430,7 @@ func fetchAndStore(ctx context.Context, client *http.Client, cfg config, node *r
 	}
 	node.store.Put(b)
 	node.stored.Add(1)
-	logger.Info("relay poll: SC-1 frame wrapped in DTN bundle and stored",
+	logger.Info("relay poll: Satellite-1 frame wrapped in DTN bundle and stored",
 		slog.Int("bytes", len(frame)),
 		slog.Uint64("bundle_id", b.ID),
 		slog.Uint64("priority", uint64(b.Priority)),
@@ -479,7 +479,7 @@ func forwardLoop(ctx context.Context, client *http.Client, cfg config, node *rel
 				if bfwd == nil {
 					break
 				}
-				if err := forwardFrame(ctx, client, gs.Addr, "SC-2-relay", bfwd.Payload); err != nil {
+				if err := forwardFrame(ctx, client, gs.Addr, "Satellite-2", bfwd.Payload); err != nil {
 					logger.Warn("relay: forward failed",
 						slog.Uint64("bundle_id", bfwd.ID),
 						slog.String("gs", gs.Name),
@@ -526,7 +526,7 @@ func relayTelemetryHandler(elem orbital.Elements, scid uint16) http.HandlerFunc 
 		w.Header().Set("Content-Type", "application/json")
 		_ = json.NewEncoder(w).Encode(map[string]any{
 			"scid":          scid,
-			"name":          "SC-2 (Relay-1)",
+			"name":          "Satellite-2",
 			"orbit":         "700km/98deg/sun-sync",
 			"bat_mv":        batV,
 			"solar_mv":      solarV,
