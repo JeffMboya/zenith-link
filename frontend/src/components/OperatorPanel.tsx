@@ -24,7 +24,6 @@ function useRelayStatus(path: string, windowsPath: string): RelayStatus {
   const [status, setStatus] = useState<RelayStatus>({
     online: false, bufferHasData: false, inContact: false, aosSec: null,
   })
-
   useEffect(() => {
     let timer: ReturnType<typeof setTimeout>
     async function poll() {
@@ -39,36 +38,62 @@ function useRelayStatus(path: string, windowsPath: string): RelayStatus {
       if (!inContact && w?.windows?.length) {
         aosSec = Math.max(0, Math.round((new Date(w.windows[0].aos).getTime() - Date.now()) / 1000))
       }
-      setStatus({
-        online: hr.status === 'fulfilled',
-        bufferHasData: h?.buffer_has_data ?? false,
-        inContact,
-        aosSec,
-      })
+      setStatus({ online: hr.status === 'fulfilled', bufferHasData: h?.buffer_has_data ?? false, inContact, aosSec })
       timer = setTimeout(poll, 5000)
     }
     poll()
     return () => clearTimeout(timer)
   }, [path, windowsPath])
-
   return status
 }
 
-function StatusDot({ online, active }: { online: boolean; active?: boolean }) {
-  const color = !online ? 'var(--red)' : active ? 'var(--green)' : 'var(--amber)'
+function fmtAOS(sec: number): string {
+  const h = Math.floor(sec / 3600)
+  const m = Math.floor((sec % 3600) / 60)
+  const s = sec % 60
+  if (h > 0) return `${h}h ${m}m`
+  if (m > 0) return `${m}m ${String(s).padStart(2, '0')}s`
+  return `${s}s`
+}
+
+function SectionHeader({ label, count, accent }: { label: string; count: number; accent: string }) {
   return (
     <div style={{
-      width: 6, height: 6, borderRadius: '50%', flexShrink: 0,
-      background: color,
-      boxShadow: online ? `0 0 4px ${color}` : 'none',
-    }} />
+      display: 'flex', alignItems: 'center', gap: 8,
+      padding: '10px 14px 6px',
+      borderTop: '1px solid var(--border)',
+      marginTop: 4,
+    }}>
+      <div style={{ width: 2, height: 14, background: accent, borderRadius: 1, flexShrink: 0 }} />
+      <span style={{ color: accent, fontSize: 8, fontWeight: 700, letterSpacing: 2, flex: 1 }}>{label}</span>
+      <span style={{
+        background: `color-mix(in srgb, ${accent} 15%, transparent)`,
+        color: accent, fontSize: 7, fontWeight: 700,
+        padding: '1px 5px', borderRadius: 8, letterSpacing: 1,
+      }}>{count}</span>
+    </div>
   )
 }
 
-function fmtAOS(sec: number): string {
-  const m = Math.floor(sec / 60)
-  const s = sec % 60
-  return m > 0 ? `${m}m ${String(s).padStart(2, '0')}s` : `${s}s`
+function StatusBadge({ online, inContact, bufferHasData, aosSec }: RelayStatus) {
+  let label: string
+  let color: string
+  if (!online) { label = 'OFFLINE'; color = 'var(--red)' }
+  else if (inContact) { label = 'IN CONTACT'; color = 'var(--green)' }
+  else if (bufferHasData) {
+    label = aosSec !== null ? `BUFFERED · ${fmtAOS(aosSec)}` : 'BUFFERED'
+    color = 'var(--cyan)'
+  } else {
+    label = aosSec !== null ? `IDLE · ${fmtAOS(aosSec)}` : 'IDLE'
+    color = 'var(--amber)'
+  }
+  return (
+    <span style={{
+      color, fontSize: 7, fontWeight: 700, letterSpacing: 1,
+      background: `color-mix(in srgb, ${color} 12%, transparent)`,
+      padding: '2px 6px', borderRadius: 3, whiteSpace: 'nowrap', flexShrink: 0,
+    }}>{label}</span>
+  )
 }
 
 interface Props {
@@ -90,7 +115,6 @@ export function OperatorPanel({ primaryOnline, primarySatId, tleSource, tleGroup
   const relay5 = useRelayStatus('/relay5/health', '/relay5/windows')
   const relay6 = useRelayStatus('/relay6/health', '/relay6/windows')
 
-  
   useEffect(() => {
     let timer: ReturnType<typeof setTimeout>
     async function poll() {
@@ -100,7 +124,7 @@ export function OperatorPanel({ primaryOnline, primarySatId, tleSource, tleGroup
           const data = await res.json() as AutonomousEvent[] | null
           if (Array.isArray(data)) setEvents(data.slice(0, 20))
         }
-      } catch {  }
+      } catch { /* silent */ }
       timer = setTimeout(poll, 3000)
     }
     poll()
@@ -108,41 +132,45 @@ export function OperatorPanel({ primaryOnline, primarySatId, tleSource, tleGroup
   }, [])
 
   const nonNominalCount = events.filter(e => e.class !== 'NOMINAL').length
-
-  const relayDetail = (r: RelayStatus) => {
-    if (!r.online) return { label: 'OFFLINE', color: 'var(--red)' }
-    if (r.inContact) return { label: 'IN CONTACT', color: 'var(--green)' }
-    if (r.bufferHasData) return {
-      label: r.aosSec !== null ? `BUFFERED · AOS ${fmtAOS(r.aosSec)}` : 'BUFFERED',
-      color: 'var(--cyan)',
-    }
-    return {
-      label: r.aosSec !== null ? `EMPTY · AOS ${fmtAOS(r.aosSec)}` : 'EMPTY',
-      color: 'var(--amber)',
-    }
-  }
-
-  const r1 = relayDetail(relay1)
-  const r2 = relayDetail(relay2)
-  const r3 = relayDetail(relay3)
-  const r4 = relayDetail(relay4)
-  const r5 = relayDetail(relay5)
-  const r6 = relayDetail(relay6)
-
   const TABS: Tab[] = ['FLEET', 'EVENTS']
+
+  const primaries = [
+    {
+      id: primarySatId,
+      label: tleSource === 'tle' ? primarySatId : 'Satellite-1',
+      orbit: tleSource === 'tle' ? `408 km · 51.6° · ${(tleGroup ?? 'TLE').toUpperCase()}` : '408 km · 51.6° · SIM',
+      online: primaryOnline,
+    },
+    {
+      id: 'CSS (TIANHE)',
+      label: 'Tiangong',
+      orbit: '380 km · 41.5° · LIVE TLE',
+      online: primaryOnline,
+    },
+  ]
+
+  const relays = [
+    { id: 'NOAA-20',     name: 'NOAA-20',     orbit: '824 km · 98.7°', status: relay1 },
+    { id: 'Sentinel-2A', name: 'Sentinel-2A', orbit: '786 km · 98.6°', status: relay2 },
+    { id: 'Landsat-9',   name: 'Landsat-9',   orbit: '705 km · 98.2°', status: relay3 },
+    { id: 'Aqua',        name: 'Aqua',        orbit: '705 km · 98.2°', status: relay4 },
+    { id: 'Terra',       name: 'Terra',       orbit: '705 km · 98.2°', status: relay5 },
+    { id: 'NOAA-19',     name: 'NOAA-19',     orbit: '870 km · 99.1°', status: relay6 },
+  ]
 
   return (
     <div style={{
       position: 'fixed', top: 48, left: 0, bottom: 0, zIndex: 109,
-      width: open ? 320 : 32,
+      width: open ? 300 : 32,
       transition: 'width 0.2s ease',
-      background: 'rgba(4,13,28,0.96)',
+      background: 'rgba(4,13,28,0.97)',
       borderRight: '1px solid var(--border)',
       backdropFilter: 'blur(10px)',
       overflow: 'hidden',
       display: 'flex', flexDirection: 'column',
     }}>
-      
+
+      {/* Collapse toggle */}
       <button
         onClick={() => setOpen(o => !o)}
         title={open ? 'Collapse panel' : 'Expand panel'}
@@ -157,11 +185,7 @@ export function OperatorPanel({ primaryOnline, primarySatId, tleSource, tleGroup
       >
         <div style={{ display: 'flex', flexDirection: 'column', gap: 2.5, flexShrink: 0 }}>
           {[0, 1, 2].map(i => (
-            <div key={i} style={{
-              width: 14, height: 1.5,
-              background: open ? 'var(--cyan)' : 'var(--text-dim)',
-              borderRadius: 1,
-            }} />
+            <div key={i} style={{ width: 14, height: 1.5, background: open ? 'var(--cyan)' : 'var(--text-dim)', borderRadius: 1 }} />
           ))}
         </div>
         {open && (
@@ -171,7 +195,7 @@ export function OperatorPanel({ primaryOnline, primarySatId, tleSource, tleGroup
         )}
       </button>
 
-      
+      {/* Tabs */}
       {open && (
         <div style={{ display: 'flex', borderBottom: '1px solid var(--border)', flexShrink: 0 }}>
           {TABS.map(t => (
@@ -192,8 +216,7 @@ export function OperatorPanel({ primaryOnline, primarySatId, tleSource, tleGroup
                   position: 'absolute', top: 4, right: 4,
                   width: 14, height: 14, borderRadius: '50%',
                   background: 'var(--red)', color: '#fff',
-                  fontSize: 7, display: 'flex', alignItems: 'center', justifyContent: 'center',
-                  fontWeight: 700,
+                  fontSize: 7, display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: 700,
                 }}>
                   {nonNominalCount > 9 ? '9+' : nonNominalCount}
                 </span>
@@ -203,107 +226,110 @@ export function OperatorPanel({ primaryOnline, primarySatId, tleSource, tleGroup
         </div>
       )}
 
-      
       {open && (
-        <div style={{ flex: 1, overflowY: 'auto', padding: '8px 0' }}>
+        <div style={{ flex: 1, overflowY: 'auto' }}>
 
-          
           {tab === 'FLEET' && (
-            <div>
-              
-              <div style={{ padding: '6px 14px 4px', color: 'var(--text-dim)', fontSize: 7, letterSpacing: 2 }}>
-                PRIMARY SPACECRAFT
-              </div>
-              {[
-                { id: primarySatId,   label: tleSource === 'tle' ? primarySatId : 'Satellite-1',  sub: tleSource === 'tle' ? `LIVE TLE · ${(tleGroup ?? 'tle').toUpperCase()}` : '408 km · 51.6° · SIM', online: primaryOnline },
-                { id: 'CSS (TIANHE)', label: 'Tiangong (CSS)', sub: '380 km · 41.5° · LIVE TLE', online: primaryOnline },
-              ].map(p => (
+            <>
+              {/* Primary spacecraft */}
+              <SectionHeader label="PRIMARY SPACECRAFT" count={primaries.length} accent="var(--cyan)" />
+              {primaries.map(p => (
                 <div
                   key={p.id}
                   onClick={() => window.dispatchEvent(new CustomEvent('select-sat', { detail: p.id }))}
-                  style={{ padding: '8px 14px', borderBottom: '1px solid var(--bg-dark)', cursor: 'pointer', display: 'flex', alignItems: 'flex-start', gap: 10 }}
+                  style={{
+                    padding: '10px 14px',
+                    borderBottom: '1px solid var(--bg-dark)',
+                    borderLeft: '2px solid transparent',
+                    cursor: 'pointer',
+                    transition: 'background 0.1s',
+                  }}
+                  onMouseEnter={e => (e.currentTarget.style.background = 'rgba(0,224,240,0.04)')}
+                  onMouseLeave={e => (e.currentTarget.style.background = 'transparent')}
                 >
-                  <StatusDot online={p.online} active={p.online} />
-                  <div style={{ flex: 1 }}>
-                    <div style={{ color: 'var(--cyan)', fontSize: 10, fontWeight: 700, letterSpacing: 1, marginBottom: 2 }}>
-                      {p.label}
-                    </div>
-                    <div style={{ color: 'var(--text-dim)', fontSize: 8, letterSpacing: 0.5, marginBottom: 4 }}>
-                      {p.sub}
-                    </div>
-                    <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                      <span style={{ color: p.online ? 'var(--green)' : 'var(--red)', fontSize: 8, fontWeight: 700, letterSpacing: 1 }}>
-                        {p.online ? '● LIVE' : '● OFFLINE'}
-                      </span>
-                      <span style={{ color: 'var(--text-dim)', fontSize: 8, letterSpacing: 1 }}>
-                        SIMULATED TELEMETRY
+                  <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 4 }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 7 }}>
+                      <div style={{
+                        width: 7, height: 7, borderRadius: '50%', flexShrink: 0,
+                        background: p.online ? 'var(--green)' : 'var(--red)',
+                        boxShadow: p.online ? '0 0 5px var(--green)' : 'none',
+                      }} />
+                      <span style={{ color: 'var(--cyan)', fontSize: 11, fontWeight: 700, letterSpacing: 0.5 }}>
+                        {p.label}
                       </span>
                     </div>
+                    <span style={{
+                      color: p.online ? 'var(--green)' : 'var(--red)',
+                      fontSize: 7, fontWeight: 700, letterSpacing: 1,
+                      background: p.online ? 'rgba(0,232,120,0.12)' : 'rgba(240,80,80,0.12)',
+                      padding: '2px 6px', borderRadius: 3,
+                    }}>
+                      {p.online ? 'LIVE' : 'OFFLINE'}
+                    </span>
+                  </div>
+                  <div style={{ color: 'var(--text-dim)', fontSize: 8, letterSpacing: 0.5, paddingLeft: 14 }}>
+                    {p.orbit}
                   </div>
                 </div>
               ))}
 
-              
-              <div style={{ padding: '10px 14px 4px', color: 'var(--text-dim)', fontSize: 7, letterSpacing: 2 }}>
-                ISL RELAY NODES
-              </div>
-              {([
-                { id: 'NOAA-20',     name: 'NOAA-20',     orbit: '824 km · 98.7° · SUN-SYNC', status: r1, relay: relay1 },
-                { id: 'Sentinel-2A', name: 'Sentinel-2A', orbit: '786 km · 98.6° · SUN-SYNC', status: r2, relay: relay2 },
-                { id: 'Landsat-9',   name: 'Landsat-9',   orbit: '705 km · 98.2° · SUN-SYNC', status: r3, relay: relay3 },
-                { id: 'Aqua',        name: 'Aqua',        orbit: '705 km · 98.2° · SUN-SYNC', status: r4, relay: relay4 },
-                { id: 'Terra',       name: 'Terra',       orbit: '705 km · 98.2° · SUN-SYNC', status: r5, relay: relay5 },
-                { id: 'NOAA-19',     name: 'NOAA-19',     orbit: '870 km · 99.1° · SUN-SYNC', status: r6, relay: relay6 },
-              ]).map(node => (
+              {/* ISL relay mesh */}
+              <SectionHeader label="ISL RELAY MESH" count={relays.length} accent="var(--teal)" />
+              {relays.map(node => (
                 <div
                   key={node.id}
                   onClick={() => window.dispatchEvent(new CustomEvent('select-sat', { detail: node.id }))}
                   style={{
-                    padding: '8px 14px', borderBottom: '1px solid var(--bg-dark)',
-                    cursor: 'pointer', display: 'flex', alignItems: 'flex-start', gap: 10,
+                    padding: '8px 14px',
+                    borderBottom: '1px solid var(--bg-dark)',
+                    cursor: 'pointer',
                   }}
+                  onMouseEnter={e => (e.currentTarget.style.background = 'rgba(0,180,160,0.04)')}
+                  onMouseLeave={e => (e.currentTarget.style.background = 'transparent')}
                 >
-                  <StatusDot online={node.relay.online} active={node.relay.inContact} />
-                  <div style={{ flex: 1 }}>
-                    <div style={{ color: 'var(--teal)', fontSize: 10, fontWeight: 700, letterSpacing: 1, marginBottom: 2 }}>
-                      {node.name}
-                    </div>
-                    <div style={{ color: 'var(--text-dim)', fontSize: 8, letterSpacing: 0.5, marginBottom: 4 }}>
-                      {node.orbit}
-                    </div>
-                    <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-                      <span style={{ color: node.status.color, fontSize: 8, fontWeight: 700, letterSpacing: 1 }}>
-                        {node.status.label}
+                  <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 3 }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 7 }}>
+                      <div style={{
+                        width: 6, height: 6, borderRadius: '50%', flexShrink: 0,
+                        background: !node.status.online ? 'var(--red)' : node.status.inContact ? 'var(--green)' : 'var(--cyan)',
+                        boxShadow: node.status.online ? `0 0 4px ${node.status.inContact ? 'var(--green)' : 'var(--cyan)'}` : 'none',
+                      }} />
+                      <span style={{ color: 'var(--teal)', fontSize: 10, fontWeight: 700, letterSpacing: 0.5 }}>
+                        {node.name}
                       </span>
                     </div>
+                    <StatusBadge {...node.status} />
+                  </div>
+                  <div style={{ color: 'var(--text-dim)', fontSize: 7, letterSpacing: 0.5, paddingLeft: 13 }}>
+                    {node.orbit} · SUN-SYNC
                   </div>
                 </div>
               ))}
 
-              
-              <div style={{
-                margin: '10px 14px 0',
-                padding: '8px 10px',
-                background: 'var(--bg-deep)',
-                border: '1px solid var(--border)',
-                borderRadius: 3,
-              }}>
-                <div style={{ color: 'var(--text-dim)', fontSize: 7, letterSpacing: 2, marginBottom: 4 }}>CONSTELLATION</div>
-                <div style={{ color: 'var(--text-mid)', fontSize: 8, lineHeight: 1.5 }}>
-                  {tleSource === 'tle'
-                    ? `Live ${tleGroup ?? 'TLE'} constellation. Primary: ${primarySatId} + Tiangong. Shared ISL mesh: NOAA-20, Sentinel-2A, Landsat-9, Aqua, Terra, NOAA-19.`
-                    : 'Satellite-1 + Tiangong simulated primaries. Shared ISL mesh: 6 relay satellites forwarding to 3 ground stations.'
-                  }
+              {/* Ground stations summary */}
+              <SectionHeader label="GROUND STATIONS" count={3} accent="var(--amber)" />
+              {[
+                { name: 'Nairobi', coords: '1.3°S · 36.8°E' },
+                { name: 'Svalbard', coords: '78.2°N · 15.6°E' },
+                { name: 'Punta Arenas', coords: '53.2°S · 70.9°W' },
+              ].map(gs => (
+                <div key={gs.name} style={{ padding: '7px 14px', borderBottom: '1px solid var(--bg-dark)', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 7 }}>
+                    <div style={{ width: 5, height: 5, borderRadius: 1, background: 'var(--amber)', flexShrink: 0 }} />
+                    <span style={{ color: 'var(--text-body)', fontSize: 9, fontWeight: 600, letterSpacing: 0.5 }}>{gs.name}</span>
+                  </div>
+                  <span style={{ color: 'var(--text-dim)', fontSize: 7, letterSpacing: 0.5 }}>{gs.coords}</span>
                 </div>
-              </div>
-            </div>
+              ))}
+            </>
           )}
 
-          
           {tab === 'EVENTS' && (
             <div>
-              <div style={{ padding: '0 14px 8px', color: 'var(--text-dim)', fontSize: 7, letterSpacing: 2 }}>
-                AUTONOMOUS EVENTS · LAST {events.length}
+              <div style={{ padding: '10px 14px 6px', borderTop: '1px solid var(--border)', marginTop: 4, display: 'flex', alignItems: 'center', gap: 8 }}>
+                <div style={{ width: 2, height: 14, background: 'var(--purple)', borderRadius: 1 }} />
+                <span style={{ color: 'var(--purple)', fontSize: 8, fontWeight: 700, letterSpacing: 2, flex: 1 }}>AUTONOMOUS EVENTS</span>
+                <span style={{ color: 'var(--text-dim)', fontSize: 7, letterSpacing: 1 }}>LAST {events.length}</span>
               </div>
               {events.length === 0 ? (
                 <div style={{ padding: '20px 14px', color: 'var(--text-dim)', fontSize: 9, textAlign: 'center' }}>
@@ -321,23 +347,15 @@ export function OperatorPanel({ primaryOnline, primarySatId, tleSource, tleGroup
                         padding: '6px 14px',
                         borderBottom: '1px solid var(--bg-dark)',
                         borderLeft: isAnomalous ? `2px solid ${color}` : '2px solid transparent',
-                        background: isAnomalous && i === 0
-                          ? `color-mix(in srgb, ${color} 6%, transparent)`
-                          : 'transparent',
+                        background: isAnomalous && i === 0 ? `color-mix(in srgb, ${color} 6%, transparent)` : 'transparent',
                         opacity: 1 - i * 0.04,
                       }}
                     >
                       <div style={{ display: 'flex', gap: 6, alignItems: 'baseline', marginBottom: 2 }}>
-                        <span style={{ color: 'var(--text-dim)', fontSize: 7, fontVariantNumeric: 'tabular-nums', flexShrink: 0 }}>
-                          {ts}
-                        </span>
-                        <span style={{ color, fontSize: 8, fontWeight: 700, letterSpacing: 1 }}>
-                          {ev.class}
-                        </span>
+                        <span style={{ color: 'var(--text-dim)', fontSize: 7, fontVariantNumeric: 'tabular-nums', flexShrink: 0 }}>{ts}</span>
+                        <span style={{ color, fontSize: 8, fontWeight: 700, letterSpacing: 1 }}>{ev.class}</span>
                       </div>
-                      <div style={{ color: 'var(--text-mid)', fontSize: 8, lineHeight: 1.4 }}>
-                        {ev.action}
-                      </div>
+                      <div style={{ color: 'var(--text-mid)', fontSize: 8, lineHeight: 1.4 }}>{ev.action}</div>
                     </div>
                   )
                 })
