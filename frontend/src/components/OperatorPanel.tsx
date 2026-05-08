@@ -171,9 +171,12 @@ export function OperatorPanel({ primaryOnline, primarySatId, tleSource, tleGroup
   ]
 
   const groundStations = [
-    { name: 'Nairobi',      coords: '1.3°S  36.8°E' },
-    { name: 'Svalbard',     coords: '78.2°N  15.6°E' },
-    { name: 'Punta Arenas', coords: '53.2°S  70.9°W' },
+    { name: 'Nairobi',      coords: '1.3°S  36.8°E'   },
+    { name: 'Svalbard',     coords: '78.2°N  15.6°E'  },
+    { name: 'Punta Arenas', coords: '53.2°S  70.9°W'  },
+    { name: 'Fairbanks',    coords: '64.8°N  147.7°W' },
+    { name: 'Bangalore',    coords: '13.0°N  77.6°E'  },
+    { name: 'Perth',        coords: '32.0°S  115.9°E' },
   ]
 
   return (
@@ -203,27 +206,40 @@ export function OperatorPanel({ primaryOnline, primarySatId, tleSource, tleGroup
 
       {/* Tabs */}
       {open && (
-        <div style={{ display: 'flex', borderBottom: '1px solid #0e1a28', flexShrink: 0 }}>
-          {(['FLEET', 'EVENTS'] as Tab[]).map(t => (
-            <button key={t} onClick={() => setTab(t)} style={{
-              flex: 1, padding: '8px 0', position: 'relative',
-              background: 'none', border: 'none', cursor: 'pointer',
-              borderBottom: tab === t ? '1px solid #4a7090' : '1px solid transparent',
-              color: tab === t ? '#90b4cc' : '#8ab0c8',
-              fontSize: 11, letterSpacing: 2, fontFamily: 'inherit', fontWeight: 600,
-            }}>
-              {t}
-              {t === 'EVENTS' && nonNominalCount > 0 && (
-                <span style={{
-                  position: 'absolute', top: 5, right: 8,
-                  background: '#b03030', color: '#fff',
-                  fontSize: 9, fontWeight: 700, padding: '1px 4px', borderRadius: 3,
-                }}>
-                  {nonNominalCount > 9 ? '9+' : nonNominalCount}
-                </span>
-              )}
-            </button>
-          ))}
+        <div style={{ display: 'flex', gap: 6, padding: '8px 10px', borderBottom: '1px solid #0e1a28', flexShrink: 0, background: '#040c18' }}>
+          {(['FLEET', 'EVENTS'] as Tab[]).map(t => {
+            const active = tab === t
+            return (
+              <button
+                key={t}
+                onClick={() => setTab(t)}
+                style={{
+                  flex: 1, padding: '6px 0', position: 'relative',
+                  background: active ? '#0e1e30' : 'transparent',
+                  border: active ? '1px solid #1e3a50' : '1px solid #0e1a28',
+                  borderRadius: 5,
+                  cursor: 'pointer',
+                  color: active ? '#c0d8ec' : '#6a8898',
+                  fontSize: 10, letterSpacing: 2, fontFamily: 'inherit',
+                  fontWeight: active ? 700 : 500,
+                  display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 7,
+                  transition: 'all 0.15s',
+                }}
+              >
+                <span>{t}</span>
+                {t === 'EVENTS' && nonNominalCount > 0 && (
+                  <span style={{
+                    background: '#c03030', color: '#fff',
+                    fontSize: 9, fontWeight: 700,
+                    padding: '1px 5px', borderRadius: 10,
+                    lineHeight: 1.4,
+                  }}>
+                    {nonNominalCount > 9 ? '9+' : nonNominalCount}
+                  </span>
+                )}
+              </button>
+            )
+          })}
         </div>
       )}
 

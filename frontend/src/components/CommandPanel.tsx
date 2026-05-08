@@ -37,9 +37,12 @@ const NODES: SatItem[] = [
   { id: 'Aqua',         label: 'Aqua',          description: 'ISL Relay · 705 km · 98.2° sun-sync', kind: 'satellite'      },
   { id: 'Terra',        label: 'Terra',         description: 'ISL Relay · 705 km · 98.2° sun-sync', kind: 'satellite'      },
   { id: 'NOAA-19',      label: 'NOAA-19',       description: 'ISL Relay · 870 km · 99.1° sun-sync', kind: 'satellite'      },
-  { id: 'gs-nairobi',   label: 'Nairobi',       description: 'Ground Station · 1.3°S  36.8°E',      kind: 'groundstation'  },
-  { id: 'gs-svalbard',  label: 'Svalbard',      description: 'Ground Station · 78.2°N  15.6°E',     kind: 'groundstation'  },
-  { id: 'gs-punta',     label: 'Punta Arenas',  description: 'Ground Station · 53.2°S  70.9°W',     kind: 'groundstation'  },
+  { id: 'gs-nairobi',    label: 'Nairobi',       description: 'Ground Station · 1.3°S  36.8°E',    kind: 'groundstation' },
+  { id: 'gs-svalbard',   label: 'Svalbard',      description: 'Ground Station · 78.2°N  15.6°E',   kind: 'groundstation' },
+  { id: 'gs-punta',      label: 'Punta Arenas',  description: 'Ground Station · 53.2°S  70.9°W',   kind: 'groundstation' },
+  { id: 'gs-fairbanks',  label: 'Fairbanks',     description: 'Ground Station · 64.8°N  147.7°W',  kind: 'groundstation' },
+  { id: 'gs-bangalore',  label: 'Bangalore',     description: 'Ground Station · 13.0°N  77.6°E',   kind: 'groundstation' },
+  { id: 'gs-perth',      label: 'Perth',         description: 'Ground Station · 32.0°S  115.9°E',  kind: 'groundstation' },
 ]
 
 const CATEGORY_COLOR: Record<Command['category'], string> = {
