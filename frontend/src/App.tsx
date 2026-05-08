@@ -45,9 +45,6 @@ export default function App() {
   const [selectedSatId, setSelectedSatId] = useState('Satellite-1')
 
   
-  useEffect(() => {
-    fetch('/tle/import?group=stations', { method: 'POST' }).catch(() => {})
-  }, [])
 
   
   

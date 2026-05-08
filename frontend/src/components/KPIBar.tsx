@@ -257,7 +257,7 @@ export function KPIBar({ metrics, satellite, connected, linkLost, tleSource, tle
   const offlineColor = linkLost ? 'var(--red)' : nearestRelay ? 'var(--cyan)' : 'var(--text-dim)'
 
   return (
-    <div style={{ position: 'fixed', top: 0, left: 0, right: 0, zIndex: 100 }}>
+    <div style={{ position: 'fixed', top: 0, left: 0, right: 0, zIndex: 110 }}>
     
     {preFaultClass && (
       <div style={{
