@@ -12,6 +12,7 @@ import { MissionFooter } from './components/MissionFooter'
 import { ContactTimeline } from './components/ContactTimeline'
 import { useContactWindows } from './hooks/useContactWindows'
 import { useCommandEngine, CommandEngineContext } from './hooks/useCommandEngine'
+import { useSatCommandState } from './hooks/useSatCommandState'
 import { PRIMARY_SATELLITES, primarySatByName } from './data/primarySatellites'
 import { GROUND_STATIONS } from './data/groundStations'
 
@@ -54,6 +55,7 @@ export default function App() {
   const orbitalPos       = useOrbitalPosition()
   const contactWindows   = useContactWindows()
   const commandEngine    = useCommandEngine()
+  const cmdState         = useSatCommandState()
   const constellation = useConstellation()
   const relay1Health = useRelayHealth('/relay1/health')
   // relay2Health reserved for ISL beam coloring
@@ -165,6 +167,7 @@ export default function App() {
         tleSource={constellation.source}
         primarySatId={primarySatId}
         primarySatIds={PRIMARY_IDS}
+        cmdState={cmdState}
       />
       <KPIBar
         metrics={active.latest?.metrics ?? null}
@@ -174,6 +177,8 @@ export default function App() {
         tleSource={constellation.source}
         tleGroup={constellation.group}
         tleCount={constellation.satellites.length}
+        selectedSatId={selectedSatId}
+        cmdState={cmdState}
       />
       <TelemetryPanel
         state={active.latest?.satellite ?? null}
@@ -189,6 +194,7 @@ export default function App() {
         primarySatIds={PRIMARY_IDS}
         tleSource={constellation.source}
         tleGroup={constellation.group}
+        cmdState={cmdState}
       />
       <ContactTimeline windowsState={contactWindows} />
       <MissionFooter

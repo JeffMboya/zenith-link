@@ -87,6 +87,9 @@ export function CommandPanel({ selectedSatId }: Props) {
   const [confirmInput,  setConfirmInput]  = useState('')
   const [recentIds,     setRecentIds]     = useState<string[]>([])
   const [focused,       setFocused]       = useState(false)
+  const [pitchPrompt,   setPitchPrompt]   = useState<Command | null>(null)
+  const [pitchValue,    setPitchValue]    = useState('')
+  const pitchRef = useRef<HTMLInputElement>(null)
 
   const inputRef   = useRef<HTMLInputElement>(null)
   const confirmRef = useRef<HTMLInputElement>(null)
@@ -172,7 +175,8 @@ export function CommandPanel({ selectedSatId }: Props) {
   }, [sending])
 
   const selectCommand = useCallback((cmd: Command) => {
-    if (cmd.destructive) { setConfirming(cmd); setConfirmInput('') }
+    if (cmd.id === 'set_pitch') { setPitchPrompt(cmd); setPitchValue(''); setTimeout(() => pitchRef.current?.focus(), 30) }
+    else if (cmd.destructive) { setConfirming(cmd); setConfirmInput('') }
     else transmit(cmd)
   }, [transmit])
 
@@ -212,7 +216,52 @@ export function CommandPanel({ selectedSatId }: Props) {
       }}>
 
         {/* Confirmation view — overlays the input when active */}
-        {confirming ? (
+        {pitchPrompt ? (
+          <div style={{
+            background: '#07111f', border: '1px solid var(--border)',
+            borderRadius: 8, overflow: 'hidden',
+            boxShadow: '0 20px 60px rgba(0,0,0,0.6)',
+          }}>
+            <div style={{ padding: '14px 18px', borderBottom: '1px solid #0e1a28' }}>
+              <div style={{ color: 'var(--cyan)', fontSize: 9, letterSpacing: 2, marginBottom: 5, fontWeight: 700 }}>ADCS PARAMETER</div>
+              <div style={{ color: '#e0eef8', fontSize: 13, fontWeight: 700, marginBottom: 3 }}>Set Pitch Threshold</div>
+              <div style={{ color: '#8ab0c0', fontSize: 10 }}>Enter attitude deadband (0.1 – 5.0 degrees)</div>
+            </div>
+            <div style={{ padding: '14px 18px', borderBottom: '1px solid #0e1a28' }}>
+              <div style={{ color: '#8ab0c0', fontSize: 10, marginBottom: 10 }}>
+                Enter value then press <span style={{ color: 'var(--cyan)', fontWeight: 700 }}>Enter</span> · Esc to cancel
+              </div>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+                <span style={{ color: 'var(--cyan)', fontSize: 14 }}>›</span>
+                <input
+                  ref={pitchRef}
+                  value={pitchValue}
+                  onChange={e => setPitchValue(e.target.value.replace(/[^0-9.]/g, ''))}
+                  onKeyDown={e => {
+                    if (e.key === 'Enter') {
+                      const v = parseFloat(pitchValue)
+                      if (v >= 0.1 && v <= 5.0) {
+                        engine.execute('set_pitch', selectedSatId, { value: pitchValue })
+                        setLog(l => [...l, { ts: Date.now(), text: `ADCS Threshold → ±${pitchValue}° · ${selectedSatId.split(' ')[0]}`, type: 'ack' }])
+                        setPitchPrompt(null); setPitchValue('')
+                      }
+                    }
+                    if (e.key === 'Escape') { setPitchPrompt(null); setPitchValue('') }
+                  }}
+                  placeholder="e.g. 1.5"
+                  style={{ flex: 1, background: 'transparent', border: 'none', outline: 'none', color: 'var(--cyan)', fontSize: 13, fontFamily: 'monospace', letterSpacing: 2 }}
+                />
+                <span style={{ color: 'var(--text-dim)', fontSize: 9 }}>° (0.1–5.0)</span>
+              </div>
+            </div>
+            <div style={{ padding: '8px 18px' }}>
+              <button onClick={() => { setPitchPrompt(null); setPitchValue('') }}
+                style={{ background: 'none', border: 'none', color: '#8ab0c0', fontSize: 10, cursor: 'pointer' }}>
+                ← Cancel
+              </button>
+            </div>
+          </div>
+        ) : confirming ? (
           <div style={{
             background: '#07111f',
             border: '1px solid #c03030',
@@ -405,9 +454,9 @@ export function CommandPanel({ selectedSatId }: Props) {
       </div>
 
       {/* Backdrop — only when results are open, light so globe stays visible */}
-      {(showResults || !!confirming) && (
+      {(showResults || !!confirming || !!pitchPrompt) && (
         <div
-          onClick={() => { setQuery(''); setConfirming(null); inputRef.current?.blur() }}
+          onClick={() => { setQuery(''); setConfirming(null); setPitchPrompt(null); inputRef.current?.blur() }}
           style={{ position: 'fixed', inset: 0, zIndex: 299, background: 'rgba(2,7,16,0.3)' }}
         />
       )}

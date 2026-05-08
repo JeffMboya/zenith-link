@@ -1,4 +1,4 @@
-import { useEffect, useRef } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import {
   Ion,
   Cartesian3,
@@ -20,6 +20,7 @@ import type { StateUpdate } from '../types'
 import type { OrbitalPos } from '../hooks/useOrbitalPosition'
 import type { ConstellationSat } from '../hooks/useConstellation'
 import type { GroundStationConfig } from '../data/groundStations'
+import type { SatCommandStateMap } from '../hooks/useSatCommandState'
 import { useForwardTrack } from '../hooks/useForwardTrack'
 
 Ion.defaultAccessToken = (import.meta as unknown as { env: Record<string, string> }).env.VITE_CESIUM_TOKEN ?? ''
@@ -86,10 +87,10 @@ interface Props {
   selectedSatId: string
   onSelectSat:   (id: string) => void
   relay1Health?: RelayHealth | null
-  // relay2Health reserved for future beam coloring
   tleSource:     'sim' | 'tle'
-  primarySatId:  string        // first primary (ISS) — kept for backwards compat
-  primarySatIds: string[]      // all primary TLE names
+  primarySatId:  string
+  primarySatIds: string[]
+  cmdState:      SatCommandStateMap
 }
 
 export function Globe3D({
@@ -97,6 +98,7 @@ export function Globe3D({
   selectedSatId, onSelectSat,
   relay1Health,
   tleSource, primarySatId, primarySatIds,
+  cmdState,
 }: Props) {
   const viewerRef     = useRef<{ cesiumElement: CesiumViewer } | null>(null)
   const flew          = useRef(false)
@@ -104,6 +106,42 @@ export function Globe3D({
   const clickHandlerRef = useRef<ScreenSpaceEventHandler | null>(null)
   const allEntityIds  = useRef<Set<string>>(new Set())
   const forwardTrack  = useForwardTrack()
+
+  // Sonar ring animation — local radius that expands from 0 → 600km then fades
+  const [sonarRadii, setSonarRadii] = useState<Record<string, number>>({})
+
+  useEffect(() => {
+    if (cmdState.sonarSats.length === 0) return
+    const id = setInterval(() => {
+      setSonarRadii(prev => {
+        const next = { ...prev }
+        let changed = false
+        for (const satId of cmdState.sonarSats) {
+          const r = (prev[satId] ?? 0) + 30_000  // expand 30km per tick
+          next[satId] = r
+          changed = true
+        }
+        if (!changed) return prev
+        return next
+      })
+    }, 80)
+    return () => clearInterval(id)
+  }, [cmdState.sonarSats])
+
+  // Reset sonar radius when ring cleared
+  useEffect(() => {
+    setSonarRadii(prev => {
+      const next = { ...prev }
+      let changed = false
+      for (const key of Object.keys(prev)) {
+        if (!cmdState.sonarSats.includes(key)) {
+          delete next[key]
+          changed = true
+        }
+      }
+      return changed ? next : prev
+    })
+  }, [cmdState.sonarSats])
 
   // Track all entity IDs for click detection
   useEffect(() => {
@@ -237,6 +275,23 @@ export function Globe3D({
     .map(id => constellation.find(s => s.id === id))
     .filter((s): s is ConstellationSat => !!s)
 
+  // All primary sat positions (for federated beam and badges)
+  const allPrimaryPositions = primarySatIds.map(id => {
+    if (id === primarySatId) return { id, pos: satPos, lat: satLat, lon: satLon, alt: satAlt }
+    const sat = constellation.find(s => s.id === id)
+    if (!sat) return null
+    return { id, pos: Cartesian3.fromDegrees(sat.lon, sat.lat, sat.alt_m), lat: sat.lat, lon: sat.lon, alt: sat.alt_m }
+  }).filter((p): p is { id: string; pos: Cartesian3; lat: number; lon: number; alt: number } => !!p)
+
+  // Dot color for a primary satellite based on command state
+  const primaryDotColor = (satId: string): Color => {
+    const phase = cmdState.rebootPhase[satId]
+    const mode  = cmdState.modes[satId]
+    if (phase === 'red') return cmdState.blinkTick ? Color.RED : Color.RED.withAlpha(0.15)
+    if (mode  === 'safe') return Color.fromCssColorString('#f0a800')  // amber
+    return satId === primarySatId ? Color.CYAN : Color.fromCssColorString('#00e878')
+  }
+
   return (
     <Viewer
       ref={viewerRef as never}
@@ -290,27 +345,99 @@ export function Globe3D({
         </Entity>
       )}
 
-      {/* Primary satellite (ISS / first primary) */}
-      <Entity position={satPos} name={primarySatId}
-        description={`Primary spacecraft: ${primarySatId}`}
-      >
-        <PointGraphics
-          color={Color.CYAN}
-          pixelSize={selectedSatId === primarySatId ? 12 : 10}
-          outlineColor={selectedSatId === primarySatId ? Color.WHITE.withAlpha(0.9) : Color.fromCssColorString('#004060')}
-          outlineWidth={selectedSatId === primarySatId ? 2.5 : 2}
-        />
-        <LabelGraphics
-          text={primaryLabel}
-          fillColor={Color.CYAN}
-          font="12px 'IBM Plex Mono', 'Courier New', monospace"
-          pixelOffset={new Cartesian2(14, 0)}
-          style={LabelStyle.FILL}
-          showBackground={false}
-          disableDepthTestDistance={Number.POSITIVE_INFINITY}
-          scaleByDistance={new NearFarScalar(1e6, 1.0, 8e6, 0.8)}
-        />
-      </Entity>
+      {/* Primary satellite (ISS) — mode-aware color, reboot hide, sonar ring, badge */}
+      {cmdState.rebootPhase[primarySatId] !== 'hidden' && (
+        <Entity position={satPos} name={primarySatId}
+          description={`Primary spacecraft: ${primarySatId}`}
+        >
+          <PointGraphics
+            color={primaryDotColor(primarySatId)}
+            pixelSize={selectedSatId === primarySatId ? 13 : 10}
+            outlineColor={selectedSatId === primarySatId ? Color.WHITE.withAlpha(0.9) : Color.fromCssColorString('#004060')}
+            outlineWidth={selectedSatId === primarySatId ? 2.5 : 2}
+          />
+          <LabelGraphics
+            text={
+              (cmdState.deployedAgents[primarySatId] ?? []).includes('edge-inference')
+                ? `${primaryLabel} ⋆`
+                : primaryLabel
+            }
+            fillColor={primaryDotColor(primarySatId)}
+            font="12px 'IBM Plex Mono', 'Courier New', monospace"
+            pixelOffset={new Cartesian2(14, 0)}
+            style={LabelStyle.FILL}
+            showBackground={false}
+            disableDepthTestDistance={Number.POSITIVE_INFINITY}
+            scaleByDistance={new NearFarScalar(1e6, 1.0, 8e6, 0.8)}
+          />
+        </Entity>
+      )}
+
+      {/* Sonar ring — expands from satellite position outward */}
+      {cmdState.sonarSats.includes(primarySatId) && (sonarRadii[primarySatId] ?? 0) > 0 && (
+        <Entity position={satPos} name={`sonar-${primarySatId}`}>
+          <EllipseGraphics
+            semiMajorAxis={sonarRadii[primarySatId] ?? 0}
+            semiMinorAxis={sonarRadii[primarySatId] ?? 0}
+            material={Color.fromCssColorString('#00c8f0').withAlpha(
+              Math.max(0, 0.6 - (sonarRadii[primarySatId] ?? 0) / 700_000)
+            )}
+            outline={true}
+            outlineColor={Color.fromCssColorString('#00c8f0').withAlpha(0.8)}
+            height={satAlt}
+          />
+        </Entity>
+      )}
+
+      {/* Federated beam — teal pulsing lines between all primaries when active */}
+      {cmdState.federatedBeam && allPrimaryPositions.length >= 2 && (
+        <>
+          {allPrimaryPositions.slice(0, -1).map((p, i) => (
+            <Entity key={`fed-beam-${p.id}-${allPrimaryPositions[i+1].id}`} name={`fed-beam-${i}`}>
+              <PolylineGraphics
+                positions={[p.pos, allPrimaryPositions[i+1].pos]}
+                width={2.5}
+                material={Color.fromCssColorString('#00e8c0').withAlpha(0.55)}
+              />
+            </Entity>
+          ))}
+          {/* Close the triangle */}
+          {allPrimaryPositions.length >= 3 && (
+            <Entity name="fed-beam-close">
+              <PolylineGraphics
+                positions={[allPrimaryPositions[0].pos, allPrimaryPositions[2].pos]}
+                width={2.5}
+                material={Color.fromCssColorString('#00e8c0').withAlpha(0.55)}
+              />
+            </Entity>
+          )}
+        </>
+      )}
+
+      {/* Orbit predictor — extended forward track (dotted) when deployed */}
+      {cmdState.orbitPredictors.has(primarySatId) && futureTrack.length >= 2 && (
+        <Entity name="orbit-predictor-ext">
+          <PolylineGraphics
+            positions={futureTrack}
+            width={1}
+            material={Color.fromCssColorString('#c060f0').withAlpha(0.5)}
+          />
+        </Entity>
+      )}
+
+      {/* Shield overlay dot for anomaly detector */}
+      {(cmdState.deployedAgents[primarySatId] ?? []).includes('anomaly-detector') && (
+        <Entity position={satPos} name={`shield-${primarySatId}`}>
+          <EllipseGraphics
+            semiMajorAxis={35_000}
+            semiMinorAxis={35_000}
+            material={Color.fromCssColorString('#40d080').withAlpha(0.12)}
+            outline={true}
+            outlineColor={Color.fromCssColorString('#40d080').withAlpha(0.6)}
+            height={satAlt}
+          />
+        </Entity>
+      )}
 
       {/* All ground stations (all 6) with elevation rings */}
       {groundStations.map(gs => {
@@ -369,11 +496,17 @@ export function Globe3D({
 
       {/* All constellation satellites (relay + other primaries) */}
       {constellation.filter(s => s.id !== primarySatId).map(s => {
-        const isPrimary    = primarySatIds.includes(s.id)
-        const color        = isPrimary ? Color.fromCssColorString('#00e878').withAlpha(0.9) : (PLANE_COLOR[s.plane] ?? Color.WHITE.withAlpha(0.7))
-        const isSelected   = s.id === selectedSatId
-        const shortName    = s.id.split(' ')[0].replace(/[()]/g, '').slice(0, 8)
-        const satDescr     = isPrimary ? `Primary spacecraft: ${s.id}` : `ISL Relay: ${s.id}`
+        const isPrimary  = primarySatIds.includes(s.id)
+        const isSelected = s.id === selectedSatId
+        const isHidden   = cmdState.rebootPhase[s.id] === 'hidden'
+        const baseColor  = isPrimary
+          ? primaryDotColor(s.id)
+          : (PLANE_COLOR[s.plane] ?? Color.WHITE.withAlpha(0.7))
+        const shortName  = s.id.split(' ')[0].replace(/[()]/g, '').slice(0, 8)
+        const badgeLabel = isPrimary && (cmdState.deployedAgents[s.id] ?? []).includes('edge-inference')
+          ? `${shortName} ⋆` : shortName
+        const satDescr   = isPrimary ? `Primary spacecraft: ${s.id}` : `ISL Relay: ${s.id}`
+        if (isHidden) return null
         return (
           <Entity
             key={s.id}
@@ -382,20 +515,38 @@ export function Globe3D({
             description={satDescr}
           >
             <PointGraphics
-              color={color}
+              color={baseColor}
               pixelSize={isSelected ? 10 : (isPrimary ? 8 : 5)}
               outlineColor={isSelected ? Color.WHITE.withAlpha(0.9) : Color.BLACK.withAlpha(0.3)}
               outlineWidth={isSelected ? 2 : 1}
             />
             <LabelGraphics
-              text={shortName}
-              fillColor={color}
+              text={badgeLabel}
+              fillColor={baseColor}
               font="12px 'IBM Plex Mono', 'Courier New', monospace"
               pixelOffset={new Cartesian2(12, 0)}
               style={LabelStyle.FILL}
               showBackground={false}
               disableDepthTestDistance={Number.POSITIVE_INFINITY}
               scaleByDistance={new NearFarScalar(1e6, 1.0, 8e6, 0.8)}
+            />
+          </Entity>
+        )
+      })}
+
+      {/* Sonar rings for non-primary-1 satellites */}
+      {cmdState.sonarSats.filter(id => id !== primarySatId).map(satId => {
+        const sat = constellation.find(s => s.id === satId)
+        if (!sat || !(sonarRadii[satId] > 0)) return null
+        return (
+          <Entity key={`sonar-${satId}`} position={Cartesian3.fromDegrees(sat.lon, sat.lat, sat.alt_m)} name={`sonar-${satId}`}>
+            <EllipseGraphics
+              semiMajorAxis={sonarRadii[satId]}
+              semiMinorAxis={sonarRadii[satId]}
+              material={Color.fromCssColorString('#00c8f0').withAlpha(Math.max(0, 0.6 - sonarRadii[satId] / 700_000))}
+              outline={true}
+              outlineColor={Color.fromCssColorString('#00c8f0').withAlpha(0.8)}
+              height={sat.alt_m}
             />
           </Entity>
         )

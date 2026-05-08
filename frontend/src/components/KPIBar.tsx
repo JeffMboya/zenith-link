@@ -1,17 +1,20 @@
 import { useEffect, useState, useRef } from 'react'
 import type { LinkMetrics, SatelliteState } from '../types'
+import type { SatCommandStateMap } from '../hooks/useSatCommandState'
 import { TleSelector } from './TleSelector'
 
 const INFERENCE_POLL_MS = 2_000
 
 interface Props {
-  metrics: LinkMetrics | null
-  satellite: SatelliteState | null
-  connected: boolean
-  linkLost: boolean
-  tleSource: 'sim' | 'tle'
-  tleGroup: string
-  tleCount: number
+  metrics:       LinkMetrics | null
+  satellite:     SatelliteState | null
+  connected:     boolean
+  linkLost:      boolean
+  tleSource:     'sim' | 'tle'
+  tleGroup:      string
+  tleCount:      number
+  selectedSatId: string
+  cmdState:      SatCommandStateMap
 }
 
 interface DeliveryState {
@@ -129,7 +132,7 @@ function kpis(m: LinkMetrics) {
 
 const DIVIDER = <div style={{ width: 1, height: 28, background: 'var(--border)', flexShrink: 0 }} />
 
-export function KPIBar({ metrics, satellite, connected, linkLost, tleSource, tleGroup, tleCount }: Props) {
+export function KPIBar({ metrics, satellite, connected, linkLost, tleSource, tleGroup, tleCount, selectedSatId, cmdState }: Props) {
   const { label: passLabel, detail: passDetail, color: passColor, urgent: passUrgent, delivery } = useNextDelivery()
   const inferenceDetail = useInferenceDetail()
   const aiRef = useRef<HTMLDivElement>(null)
@@ -158,6 +161,24 @@ export function KPIBar({ metrics, satellite, connected, linkLost, tleSource, tle
 
   const offlineText  = linkLost ? 'LINK LOST' : 'AWAITING LINK ACQUISITION...'
   const offlineColor = linkLost ? 'var(--red)' : 'var(--text-dim)'
+
+  // Derive alive dot appearance from command state of selected satellite
+  const satMode     = cmdState.modes[selectedSatId]
+  const isRebooting = !!cmdState.rebootPhase[selectedSatId]
+  const isSafe      = satMode === 'safe'
+  const dotColor    = !connected ? 'var(--red)' : isSafe ? 'var(--amber)' : 'var(--green)'
+  const dotGlow     = !connected ? 'var(--red)' : isSafe ? 'var(--amber)' : 'var(--green)'
+  const dotAnim     = connected && !isSafe && !isRebooting
+    ? 'liveDotBlink 1s step-start infinite'
+    : connected && isSafe
+      ? 'liveDotBlink 2s step-start infinite'  // slow amber pulse in safe mode
+      : 'none'
+  const liveLabel   = connected
+    ? (isSafe ? 'SAFE MODE' : isRebooting ? 'REBOOTING' : 'LIVE')
+    : 'OFFLINE'
+  const liveTextColor = !connected ? 'var(--red)' : isSafe ? 'var(--amber)' : 'var(--green)'
+  // During reboot, show blank metrics
+  const showMetrics = !!metrics && !isRebooting
 
   // Dispatch delivery-state to MissionFooter whenever it changes
   useEffect(() => {
@@ -218,16 +239,13 @@ export function KPIBar({ metrics, satellite, connected, linkLost, tleSource, tle
         }}>
           <div style={{
             width: 9, height: 9, borderRadius: '50%',
-            background: connected ? 'var(--green)' : 'var(--red)',
-            boxShadow: connected ? '0 0 8px var(--green)' : '0 0 8px var(--red)',
+            background: dotColor,
+            boxShadow: `0 0 8px ${dotGlow}`,
             flexShrink: 0,
-            animation: connected ? 'liveDotBlink 1s step-start infinite' : 'none',
+            animation: dotAnim,
           }} />
-          <span style={{
-            color: connected ? 'var(--green)' : 'var(--red)',
-            fontSize: 12, fontWeight: 700, letterSpacing: 1.5,
-          }}>
-            {connected ? 'LIVE' : 'OFFLINE'}
+          <span style={{ color: liveTextColor, fontSize: 12, fontWeight: 700, letterSpacing: 1.5 }}>
+            {liveLabel}
           </span>
         </div>
 
@@ -329,8 +347,8 @@ export function KPIBar({ metrics, satellite, connected, linkLost, tleSource, tle
 
         {/* 5. KPI stats — secondary metrics, flex fills remaining space */}
         <div style={{ flex: 1, display: 'flex', alignItems: 'center' }}>
-          {metrics
-            ? kpis(metrics).map(({ label, value, color, nacks }) => (
+          {showMetrics
+            ? kpis(metrics!).map(({ label, value, color, nacks }) => (
                 <div key={label} style={{
                   padding: '0 16px', borderRight: '1px solid var(--bg-dark)',
                   display: 'flex', flexDirection: 'column', alignItems: 'center',
@@ -347,9 +365,14 @@ export function KPIBar({ metrics, satellite, connected, linkLost, tleSource, tle
                   </div>
                 </div>
               ))
-            : connected
+            : isRebooting
               ? (
-                  // TX details — show live protocol/bitrate when connected but metrics not yet populated
+                  <div style={{ padding: '0 20px', color: 'var(--amber)', fontSize: 10, letterSpacing: 2, fontWeight: 700 }}>
+                    REBOOTING OBC...
+                  </div>
+                )
+              : connected
+              ? (
                   <div style={{ padding: '0 16px', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', minWidth: 100, alignSelf: 'stretch' }}>
                     <span style={{ color: 'var(--cyan)', fontSize: 11, fontWeight: 700, fontVariantNumeric: 'tabular-nums' }}>
                       ORBITRON v2

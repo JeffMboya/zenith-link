@@ -3,6 +3,7 @@ import { Satellite, Radio, MapPin } from 'lucide-react'
 import type { AutonomousEvent } from '../types'
 import { PRIMARY_SATELLITES } from '../data/primarySatellites'
 import { GROUND_STATIONS } from '../data/groundStations'
+import type { SatCommandStateMap } from '../hooks/useSatCommandState'
 
 type Tab = 'FLEET' | 'EVENTS'
 
@@ -136,14 +137,14 @@ interface Props {
   primarySatIds: string[]
   tleSource:     'sim' | 'tle'
   tleGroup?:     string
+  cmdState:      SatCommandStateMap
 }
 
 interface SatEvent extends AutonomousEvent {
   satId?: string
 }
 
-// tleSource/tleGroup reserved for future use
-export function OperatorPanel({ satConnected, primarySatIds }: Props) {
+export function OperatorPanel({ satConnected, primarySatIds, cmdState }: Props) {
   const [open,       setOpen]       = useState(true)
   const [tab,        setTab]        = useState<Tab>('FLEET')
   const [selectedId, setSelectedId] = useState(primarySatIds[0])
@@ -324,9 +325,16 @@ export function OperatorPanel({ satConnected, primarySatIds }: Props) {
               />
 
               {PRIMARY_SATELLITES.map(sat => {
-                const active  = sat.tleName === selectedId
-                const online  = !!satConnected[sat.tleName]
-                const liveColor = online ? '#40d080' : '#e05050'
+                const active      = sat.tleName === selectedId
+                const online      = !!satConnected[sat.tleName]
+                const satMode     = cmdState.modes[sat.tleName]
+                const isRebooting = !!cmdState.rebootPhase[sat.tleName]
+                const isExecuting = !!cmdState.executingSats[sat.tleName]
+                const isSafe      = satMode === 'safe'
+                const liveColor   = !online ? '#e05050' : isSafe ? '#f0a800' : isRebooting ? '#e05050' : '#40d080'
+                const statusLabel = !online ? 'OFFLINE' : isRebooting ? 'REBOOTING' : isSafe ? 'SAFE MODE' : 'LIVE'
+                const dotAnim     = online && !isSafe && !isRebooting && active ? 'liveDotBlink 1s step-start infinite'
+                  : online && isSafe ? 'liveDotBlink 2s step-start infinite' : 'none'
                 return (
                   <div
                     key={sat.tleName}
@@ -336,7 +344,7 @@ export function OperatorPanel({ satConnected, primarySatIds }: Props) {
                     }}
                     role="button"
                     tabIndex={0}
-                    aria-label={`Select ${sat.displayName}, ${online ? 'live' : 'offline'}`}
+                    aria-label={`Select ${sat.displayName}, ${statusLabel}`}
                     onKeyDown={e => {
                       if (e.key === 'Enter' || e.key === ' ') {
                         setSelectedId(sat.tleName)
@@ -359,8 +367,8 @@ export function OperatorPanel({ satConnected, primarySatIds }: Props) {
                           width: active ? 7 : 5, height: active ? 7 : 5,
                           borderRadius: '50%', background: liveColor, flexShrink: 0,
                           boxShadow: active ? `0 0 6px ${liveColor}` : 'none',
-                          animation: online && active ? 'liveDotBlink 1s step-start infinite' : 'none',
-                          transition: 'all 0.15s',
+                          animation: dotAnim,
+                          transition: 'background 0.3s, all 0.15s',
                         }} />
                         <span style={{
                           color: active ? '#e0eef8' : '#a0b4c4',
@@ -372,12 +380,22 @@ export function OperatorPanel({ satConnected, primarySatIds }: Props) {
                           {sat.displayName}
                         </span>
                       </div>
-                      <span style={{ color: liveColor, fontSize: 10, fontWeight: 700, letterSpacing: 1.5 }}>
-                        {online ? 'LIVE' : 'OFFLINE'}
-                      </span>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                        {isExecuting && (
+                          <span style={{ color: 'var(--amber)', fontSize: 8, letterSpacing: 1, border: '1px solid var(--amber)', padding: '1px 4px', borderRadius: 2, animation: 'spin 1.2s linear infinite', display: 'inline-block' }}>⟳</span>
+                        )}
+                        <span style={{ color: liveColor, fontSize: 10, fontWeight: 700, letterSpacing: 1.5 }}>
+                          {statusLabel}
+                        </span>
+                      </div>
                     </div>
                     <div style={{ color: '#8ab0c0', fontSize: 10, letterSpacing: 0.4, paddingLeft: 14, marginBottom: 7 }}>
                       LEO · {sat.altKm} km · {sat.incDeg}° · TLE
+                      {(cmdState.deployedAgents[sat.tleName] ?? []).length > 0 && (
+                        <span style={{ color: 'var(--teal)', marginLeft: 6, fontSize: 8 }}>
+                          {(cmdState.deployedAgents[sat.tleName] ?? []).length} agent{(cmdState.deployedAgents[sat.tleName] ?? []).length > 1 ? 's' : ''} active
+                        </span>
+                      )}
                     </div>
                     <div style={{ display: 'flex', alignItems: 'center', gap: 6, paddingLeft: 14 }}>
                       <LinkBars satId={sat.tleName} online={online} />
