@@ -38,10 +38,10 @@ function fmtBps(bps: number): string {
 // ─── cloud cover ─────────────────────────────────────────────────────────────
 
 interface GSCloudEntry {
-  name:            string
-  cloud_cover_pct: number
-  impaired:        boolean
-  source:          string
+  name:             string
+  cloud_cover_pct?: number
+  impaired:         boolean
+  source:           string
 }
 
 function useCloudCover(): GSCloudEntry[] {
@@ -496,9 +496,9 @@ export function KPIBar({ metrics, satellite, connected, linkLost, tleSource, tle
             ) : cloudEntries.map(gs => (
               <KPICard
                 key={gs.name}
-                value={`${gs.cloud_cover_pct.toFixed(0)}%`}
+                value={gs.cloud_cover_pct != null ? `${gs.cloud_cover_pct.toFixed(0)}%` : '—'}
                 label={`☁ ${gsShortName(gs.name)}`}
-                color={cloudColor(gs.cloud_cover_pct, gs.impaired)}
+                color={cloudColor(gs.cloud_cover_pct ?? -1, gs.impaired)}
                 sub={gs.impaired ? 'IMPAIRED' : gs.source === 'open-meteo' ? 'LIVE' : 'EST'}
               />
             ))}
