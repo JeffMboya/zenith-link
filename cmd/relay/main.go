@@ -187,10 +187,9 @@ func elevationDegForGS(elem orbital.Elements, lat, lon float64) (float64, bool) 
 	return elevRad * 180 / math.Pi, true
 }
 
-// selectGS returns the ground station with the best elevation angle that is also
-// not cloud-covered. When cloudThreshold is 0 the cloud cover check is skipped.
-func selectGS(elem orbital.Elements, targets []gsTarget, minElevDeg, cloudThreshold float64) *gsTarget {
-	now := time.Now().UTC()
+// selectGS returns the ground station with the best elevation angle that also
+// passes the impairment check. isImpaired may be nil to skip the check.
+func selectGS(elem orbital.Elements, targets []gsTarget, minElevDeg float64, isImpaired func(lat, lon float64) bool) *gsTarget {
 	var best *gsTarget
 	bestElev := math.Inf(-1)
 	for i := range targets {
@@ -201,7 +200,7 @@ func selectGS(elem orbital.Elements, targets []gsTarget, minElevDeg, cloudThresh
 		if !ok || elevDeg < minElevDeg {
 			continue
 		}
-		if cloudThreshold > 0 && cloudcover.IsImpaired(targets[i].Lat, targets[i].Lon, now, cloudThreshold) {
+		if isImpaired != nil && isImpaired(targets[i].Lat, targets[i].Lon) {
 			continue
 		}
 		if elevDeg > bestElev {
@@ -267,8 +266,25 @@ func main() {
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer stop()
 
+	// Seed the cloud cover fetcher with all configured ground stations.
+	// It refreshes from Open-Meteo every 30 minutes in the background and
+	// falls back to the deterministic model when the API is unreachable.
+	ccFetcher := cloudcover.NewFetcher(client)
+	var gsCoords []cloudcover.GSCoord
+	for _, gs := range cfg.gsTargets() {
+		gsCoords = append(gsCoords, cloudcover.GSCoord{Lat: gs.Lat, Lon: gs.Lon})
+	}
+	ccFetcher.Start(ctx, gsCoords)
+
+	impaired := func(lat, lon float64) bool {
+		if cfg.CloudCoverThreshold <= 0 {
+			return false
+		}
+		return ccFetcher.IsImpaired(lat, lon, time.Now().UTC(), cfg.CloudCoverThreshold)
+	}
+
 	go pollLoop(ctx, client, cfg, node, logger)
-	go forwardLoop(ctx, client, cfg, node, logger)
+	go forwardLoop(ctx, client, cfg, node, impaired, logger)
 
 	go func() {
 		ticker := time.NewTicker(time.Minute)
@@ -298,6 +314,21 @@ func main() {
 	mux := http.NewServeMux()
 
 	mux.HandleFunc("/health", func(w http.ResponseWriter, _ *http.Request) {
+		// Attach live cloud cover readings for each configured GS.
+		gsCloudCover := make(map[string]any)
+		for _, gs := range cfg.gsTargets() {
+			idx := ccFetcher.CachedIndex(gs.Lat, gs.Lon)
+			entry := map[string]any{"name": gs.Name, "lat": gs.Lat, "lon": gs.Lon}
+			if idx >= 0 {
+				entry["cloud_cover_pct"] = idx * 100
+				entry["source"] = "open-meteo"
+				entry["impaired"] = idx >= cfg.CloudCoverThreshold
+			} else {
+				entry["source"] = "fallback"
+				entry["impaired"] = cloudcover.IsImpaired(gs.Lat, gs.Lon, time.Now().UTC(), cfg.CloudCoverThreshold)
+			}
+			gsCloudCover[gs.Name] = entry
+		}
 		w.Header().Set("Content-Type", "application/json")
 		_ = json.NewEncoder(w).Encode(map[string]any{
 			"status":                "ok",
@@ -315,6 +346,7 @@ func main() {
 			"hop_count_max":         8,
 			"link_loss_rate":        cfg.LossRate,
 			"cloud_cover_threshold": cfg.CloudCoverThreshold,
+			"cloud_cover":           gsCloudCover,
 			"max_bundle_depth":      cfg.MaxBundleDepth,
 			"peer_relay1":           cfg.PeerRelay1Addr,
 			"peer_relay2":           cfg.PeerRelay2Addr,
@@ -664,7 +696,7 @@ func fetchFromPrimary(ctx context.Context, client *http.Client, addr, name, sour
 	)
 }
 
-func forwardLoop(ctx context.Context, client *http.Client, cfg config, node *relayNode, logger *slog.Logger) {
+func forwardLoop(ctx context.Context, client *http.Client, cfg config, node *relayNode, impaired func(lat, lon float64) bool, logger *slog.Logger) {
 	ticker := time.NewTicker(10 * time.Second)
 	defer ticker.Stop()
 	var lastForwarded time.Time
@@ -680,7 +712,7 @@ func forwardLoop(ctx context.Context, client *http.Client, cfg config, node *rel
 				logger.Debug("relay: GS link partitioned — bundle buffered")
 				continue
 			}
-			gs := selectGS(node.elements, cfg.gsTargets(), cfg.MinElevDeg, cfg.CloudCoverThreshold)
+			gs := selectGS(node.elements, cfg.gsTargets(), cfg.MinElevDeg, impaired)
 			if gs == nil {
 				// No GS in view or all reachable GS are cloud-blocked — try ISL peer relay handoff.
 				if peers := cfg.peerRelayAddrs(); len(peers) > 0 {
