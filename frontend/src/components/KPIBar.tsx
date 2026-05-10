@@ -320,10 +320,11 @@ export function KPIBar({ metrics, satellite, connected, linkLost, tleSource, tle
         </div>
       )}
 
-      {/* ── TOP ROW — 44px — mission-critical status ── */}
+      {/* ── TOP ROW — 58px — mission-critical status ── */}
       <div style={{
         display: 'flex', alignItems: 'center',
-        height: 44,
+        height: 58,
+        overflow: 'hidden',
         background: 'rgba(4,13,28,0.97)',
         borderBottom: '1px solid var(--border)',
         backdropFilter: 'blur(8px)',
@@ -447,10 +448,11 @@ export function KPIBar({ metrics, satellite, connected, linkLost, tleSource, tle
 
       </div>
 
-      {/* ── BOTTOM ROW — 52px — grouped telemetry data ── */}
+      {/* ── BOTTOM ROW — 48px — grouped telemetry data ── */}
       <div style={{
         display: 'flex', alignItems: 'stretch',
-        height: 52,
+        height: 48,
+        overflow: 'hidden',
         background: 'rgba(2,8,18,0.97)',
         borderBottom: '1px solid var(--border)',
       }}>

@@ -208,7 +208,7 @@ export function CommandPanel({ selectedSatId }: Props) {
       {/* Persistent command bar — always visible */}
       <div style={{
         position: 'fixed',
-        top: 100,
+        top: 110,
         left: '50%',
         transform: 'translateX(-50%)',
         width: 620,
