@@ -18,6 +18,8 @@ import (
 	"github.com/go-chi/chi/v5/middleware"
 )
 
+const islBufMaxBytes = 8192
+
 func NewRouter(svc spacecraft.Service) http.Handler {
 	var framesServed atomic.Int64
 
@@ -52,9 +54,14 @@ func NewRouter(svc spacecraft.Service) http.Handler {
 		if nodeName == "" {
 			nodeName = "Spacecraft"
 		}
+		stats := svc.PreprocessStats()
+		var reductionPct float64
+		if stats.FramesIn > 0 {
+			reductionPct = float64(stats.FramesIn-stats.FramesOut) / float64(stats.FramesIn) * 100
+		}
 		writeJSON(w, http.StatusOK, map[string]any{
-			"node_id":  nodeName,
-			"role":     "spacecraft",
+			"node_id": nodeName,
+			"role":    "spacecraft",
 			"protocols": []string{"orbitron-v2", "ccsds-tm", "ccsds-sp", "ccsds-tc"},
 			"features": []string{
 				"telemetry_generation",
@@ -65,6 +72,8 @@ func NewRouter(svc spacecraft.Service) http.Handler {
 				"payload_deploy",
 				"link_budget_compute",
 				"space_weather_monitoring",
+				"onboard_preprocessing",
+				"isl_crosslink",
 			},
 			"inference_classes": []string{
 				"NOMINAL", "POWER_ANOMALY", "THERMAL_EVENT",
@@ -72,10 +81,20 @@ func NewRouter(svc spacecraft.Service) http.Handler {
 				"ECLIPSE_ENTRY", "ECLIPSE_COMPUTE", "UNKNOWN",
 			},
 			"bandwidth_bps": 20480,
+			"preprocessing": map[string]any{
+				"frames_in":          stats.FramesIn,
+				"frames_out":         stats.FramesOut,
+				"suppressed":         stats.Suppressed,
+				"channel_mask_apply": stats.ChannelMaskApply,
+				"reduction_pct":      reductionPct,
+			},
 		})
 	})
 
 	r.Get("/query-health-ai", queryHealthAIHandler(svc))
+
+	r.Post("/isl/receive", islReceiveHandler(svc))
+	r.Get("/isl/frame", islFrameHandler(svc))
 
 	r.Get("/metrics", func(w http.ResponseWriter, _ *http.Request) {
 		w.Header().Set("Content-Type", "text/plain; version=0.0.4")
@@ -152,9 +171,43 @@ func orbitronFrameHandler(svc spacecraft.Service) http.HandlerFunc {
 			writeError(w, http.StatusInternalServerError, err)
 			return
 		}
+		if len(b) == 0 {
+			// Pre-processor suppressed this frame (delta below threshold, NOMINAL class).
+			w.WriteHeader(http.StatusNoContent)
+			return
+		}
 		w.Header().Set("Content-Type", "application/octet-stream")
 		w.WriteHeader(http.StatusOK)
 		_, _ = w.Write(b)
+	}
+}
+
+func islReceiveHandler(svc spacecraft.Service) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		frame, err := io.ReadAll(io.LimitReader(r.Body, islBufMaxBytes))
+		if err != nil || len(frame) == 0 {
+			w.WriteHeader(http.StatusBadRequest)
+			return
+		}
+		sourceSC := r.Header.Get("X-Source-SC")
+		svc.ISLReceive(frame, sourceSC)
+		w.WriteHeader(http.StatusOK)
+	}
+}
+
+func islFrameHandler(svc spacecraft.Service) http.HandlerFunc {
+	return func(w http.ResponseWriter, _ *http.Request) {
+		payload, sourceSC, ok := svc.ISLNextFrame()
+		if !ok {
+			w.WriteHeader(http.StatusNoContent)
+			return
+		}
+		w.Header().Set("Content-Type", "application/octet-stream")
+		if sourceSC != "" {
+			w.Header().Set("X-Source-SC", sourceSC)
+		}
+		w.WriteHeader(http.StatusOK)
+		_, _ = w.Write(payload)
 	}
 }
 

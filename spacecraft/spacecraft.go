@@ -7,15 +7,19 @@
 //   - Orbitron v2 binary frame encoding with HMAC-SHA256
 //   - TC uplink command processing (inference, reboot, mode select)
 //   - Contact window computation for a configurable ground station
+//   - Onboard pre-processing (channel masking + delta suppression)
+//   - ISL cross-links: push frames to peer spacecraft when RF_DEGRADATION detected
 //
 // External dependencies: none beyond the standard library + pkg/.
 package spacecraft
 
 import (
+	"bytes"
 	"context"
 	"fmt"
 	"log/slog"
 	"math"
+	"net/http"
 	"os"
 	"slices"
 	"strings"
@@ -27,8 +31,9 @@ import (
 	"github.com/absmach/orbitron/pkg/ccsds/tmframe"
 	"github.com/absmach/orbitron/pkg/errors"
 	"github.com/absmach/orbitron/pkg/orbital"
-	"github.com/absmach/orbitron/pkg/spaceweather"
 	"github.com/absmach/orbitron/pkg/orbitron"
+	"github.com/absmach/orbitron/pkg/preprocess"
+	"github.com/absmach/orbitron/pkg/spaceweather"
 	"github.com/absmach/orbitron/spacecraft/inference"
 )
 
@@ -115,6 +120,15 @@ type Service interface {
 	StormLevel() string
 
 	KpIndex() float64
+
+	// ISLReceive accepts a raw Orbitron frame from a peer spacecraft via a cross-link.
+	ISLReceive(frame []byte, sourceSC string)
+
+	// ISLNextFrame pops the next ISL-buffered frame and its originating spacecraft tag.
+	ISLNextFrame() ([]byte, string, bool)
+
+	// PreprocessStats returns onboard pre-processing reduction counters.
+	PreprocessStats() preprocess.Stats
 }
 
 type State struct {
@@ -136,6 +150,14 @@ type Config struct {
 	TelemetryAPID uint16
 
 	SequenceCount uint16
+
+	// ISLPeerAddrs are HTTP base URLs of peer spacecraft that this spacecraft
+	// will push frames to when RF_DEGRADATION is detected.
+	ISLPeerAddrs []string
+
+	// ISLSourceTag is the "sc1"/"sc2"/"sc3" label sent in X-Source-SC headers
+	// so that receiving relays can correctly attribute ISL-forwarded frames.
+	ISLSourceTag string
 }
 
 type inferenceState struct {
@@ -143,11 +165,20 @@ type inferenceState struct {
 	conf  uint8
 }
 
+type islFrame struct {
+	payload  []byte
+	sourceSC string
+}
+
 type service struct {
 	cfg      Config
 	mu       sync.Mutex
 	detector *inference.Detector
 	sw       *spaceweather.Monitor
+
+	preprocessor preprocess.Filter
+	islBuf       chan islFrame
+	islClient    *http.Client
 
 	seqCount uint16
 	frameSeq uint16
@@ -167,15 +198,22 @@ type service struct {
 func New(cfg Config) Service {
 	sw := spaceweather.NewMonitor()
 	return &service{
-		cfg:      cfg,
-		seqCount: cfg.SequenceCount,
-		detector: inference.NewDetector(),
-		sw:       sw,
+		cfg:       cfg,
+		seqCount:  cfg.SequenceCount,
+		detector:  inference.NewDetector(),
+		sw:        sw,
+		islBuf:    make(chan islFrame, 32),
+		islClient: &http.Client{Timeout: 5 * time.Second},
 	}
 }
 
 func (s *service) Telemetry(ctx context.Context, t time.Time) (orbitron.Telemetry, error) {
-	s.autonomyOnce.Do(func() { go s.autonomyLoop() })
+	s.autonomyOnce.Do(func() {
+		go s.autonomyLoop()
+		if len(s.cfg.ISLPeerAddrs) > 0 {
+			go s.islPushLoop()
+		}
+	})
 
 	st, err := s.State(ctx, t)
 	if err != nil {
@@ -304,7 +342,19 @@ func (s *service) TelemetryFrame(ctx context.Context, t time.Time) ([]byte, erro
 	if err != nil {
 		return nil, err
 	}
-	return orbitron.Encode(tm, s.cfg.HMACKey)
+
+	s.mu.Lock()
+	infClass := inference.NOMINAL
+	if s.lastInference != nil {
+		infClass = inference.Class(s.lastInference.class)
+	}
+	s.mu.Unlock()
+
+	filtered, transmit := s.preprocessor.Apply(tm, infClass)
+	if !transmit {
+		return nil, nil // suppressed — caller should return HTTP 204
+	}
+	return orbitron.Encode(filtered, s.cfg.HMACKey)
 }
 
 func (s *service) TMFrame(ctx context.Context, t time.Time, frameSize int) ([]byte, error) {
@@ -764,6 +814,85 @@ func (s *service) pushEvent(class, action string) {
 func (s *service) StormLevel() string { return s.sw.StormLevel() }
 
 func (s *service) KpIndex() float64 { return s.sw.Current().Kp }
+
+// ISLReceive accepts a raw Orbitron frame forwarded from a peer spacecraft via
+// an inter-satellite cross-link. The frame is buffered for the next relay poll.
+func (s *service) ISLReceive(frame []byte, sourceSC string) {
+	cp := make([]byte, len(frame))
+	copy(cp, frame)
+	select {
+	case s.islBuf <- islFrame{payload: cp, sourceSC: sourceSC}:
+	default:
+		slog.Warn("spacecraft: ISL buffer full — peer frame dropped", slog.String("source_sc", sourceSC))
+	}
+}
+
+// ISLNextFrame pops the next ISL-buffered frame (a frame this spacecraft received
+// from a peer and is carrying on its behalf). Returns the payload, originating
+// spacecraft tag, and whether a frame was available.
+func (s *service) ISLNextFrame() ([]byte, string, bool) {
+	select {
+	case f := <-s.islBuf:
+		return f.payload, f.sourceSC, true
+	default:
+		return nil, "", false
+	}
+}
+
+// PreprocessStats returns a snapshot of the onboard pre-processing reduction counters.
+func (s *service) PreprocessStats() preprocess.Stats {
+	return s.preprocessor.Stats()
+}
+
+// islPushLoop fires when RF_DEGRADATION is detected and pushes the current frame
+// directly to configured ISL peer spacecraft, bypassing the relay poll cycle.
+func (s *service) islPushLoop() {
+	ticker := time.NewTicker(30 * time.Second)
+	defer ticker.Stop()
+	for range ticker.C {
+		s.mu.Lock()
+		inf := s.lastInference
+		s.mu.Unlock()
+		if inf == nil || inference.Class(inf.class) != inference.RF_DEGRADATION {
+			continue
+		}
+		// Build a raw frame (bypasses the preprocessor's suppression — we need to transmit urgently).
+		tm, err := s.Telemetry(context.Background(), time.Now().UTC())
+		if err != nil {
+			continue
+		}
+		frame, err := orbitron.Encode(tm, s.cfg.HMACKey)
+		if err != nil || len(frame) == 0 {
+			continue
+		}
+		for _, peer := range s.cfg.ISLPeerAddrs {
+			go s.pushISLFrame(peer, frame)
+		}
+	}
+}
+
+func (s *service) pushISLFrame(peerAddr string, frame []byte) {
+	url := peerAddr + "/isl/receive"
+	req, err := http.NewRequest(http.MethodPost, url, bytes.NewReader(frame))
+	if err != nil {
+		return
+	}
+	req.Header.Set("Content-Type", "application/octet-stream")
+	if s.cfg.ISLSourceTag != "" {
+		req.Header.Set("X-Source-SC", s.cfg.ISLSourceTag)
+	}
+	resp, err := s.islClient.Do(req)
+	if err != nil {
+		slog.Warn("spacecraft: ISL push failed", slog.String("peer", peerAddr), slog.Any("error", err))
+		return
+	}
+	defer resp.Body.Close()
+	slog.Info("spacecraft: ISL frame pushed to peer",
+		slog.String("peer", peerAddr),
+		slog.String("source_sc", s.cfg.ISLSourceTag),
+		slog.Int("bytes", len(frame)),
+	)
+}
 
 func (s *service) nextSeqLocked() uint16 {
 	v := s.seqCount

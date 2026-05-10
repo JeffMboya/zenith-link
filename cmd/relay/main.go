@@ -2,31 +2,35 @@
 //
 // Each relay instance polls one or more primary spacecraft for telemetry frames,
 // stores them in a DTN bundle store, and forwards them to whichever ground station
-// has the best elevation angle at the time of contact. The relay's own orbit is
-// fetched from CelesTrak at startup using its NORAD catalog number; a hardcoded
-// fallback is used if the fetch fails.
+// has the best elevation angle and clearest atmospheric conditions at the time of
+// contact. When cloud cover impairs all reachable ground stations, the relay hands
+// bundles off to peer relays via the ISL mesh (/receive/bundle endpoint).
+//
+// The relay also polls /isl/frame on each primary spacecraft to collect frames that
+// a peer spacecraft pushed to that primary via a direct cross-link (e.g. ISS → Tiangong).
 //
 // Configuration is read from environment variables:
 //
-//	RELAY_ADDR        HTTP listen address (default: :8082)
-//	RELAY_NORAD_ID    NORAD catalog number for this relay's own orbit (e.g. 43013)
-//	SC1_ADDR          Primary-1 spacecraft base URL (required)
-//	SC2_ADDR          Primary-2 spacecraft base URL (optional)
-//	GS_ADDR           Ground Station Nairobi base URL (required)
-//	GS_LAT            Nairobi latitude  [degrees] (default: -1.2864)
-//	GS_LON            Nairobi longitude [degrees] (default: 36.8172)
-//	GS2_ADDR          Ground Station Svalbard base URL (optional)
-//	GS2_LAT           Svalbard latitude  [degrees] (default: 78.2232)
-//	GS2_LON           Svalbard longitude [degrees] (default: 15.6267)
-//	GS3_ADDR          Ground Station Punta Arenas base URL (optional)
-//	GS3_LAT           Punta Arenas latitude  [degrees] (default: -53.1638)
-//	GS3_LON           Punta Arenas longitude [degrees] (default: -70.9171)
-//	RELAY_SCID        This relay's CCSDS Spacecraft ID (default: 91)
-//	MIN_ELEV_DEG      Minimum elevation for GS contact [degrees] (default: 5.0)
-//	POLL_INTERVAL_SEC Spacecraft poll interval in seconds (default: 30)
-//	LINK_LOSS_RATE    Frame drop probability [0.0–1.0] to simulate BER (default: 0)
-//	FALLBACK_SMA_M    Fallback semi-major axis in metres if TLE fetch fails (default: 7078000)
-//	FALLBACK_INC_DEG  Fallback inclination in degrees if TLE fetch fails (default: 98.0)
+//	RELAY_ADDR             HTTP listen address (default: :8082)
+//	RELAY_NORAD_ID         NORAD catalog number for this relay's own orbit (e.g. 43013)
+//	SC1_ADDR               Primary-1 spacecraft base URL (required)
+//	SC2_ADDR               Primary-2 spacecraft base URL (optional)
+//	SC3_ADDR               Primary-3 spacecraft base URL (optional)
+//	GS_ADDR                Ground Station Nairobi base URL (required)
+//	GS_LAT / GS_LON        Nairobi coordinates (default: -1.2864, 36.8172)
+//	GS2_ADDR / GS2_LAT / GS2_LON  Svalbard (optional)
+//	GS3_ADDR / GS3_LAT / GS3_LON  Punta Arenas (optional)
+//	GS4_ADDR … GS6_ADDR    Additional ground stations (optional)
+//	PEER_RELAY1_ADDR       Peer relay for ISL handoff when GS link is cloud-blocked (optional)
+//	PEER_RELAY2_ADDR       Second peer relay (optional)
+//	RELAY_SCID             This relay's CCSDS Spacecraft ID (default: 91)
+//	MIN_ELEV_DEG           Minimum elevation for GS contact [degrees] (default: 5.0)
+//	CLOUD_COVER_THRESHOLD  Cloud cover index [0–1] above which GS link is considered impaired (default: 0.65)
+//	MAX_BUNDLE_DEPTH       Maximum DTN store depth before low-priority bundles are dropped (default: 100)
+//	POLL_INTERVAL_SEC      Spacecraft poll interval in seconds (default: 30)
+//	LINK_LOSS_RATE         Frame drop probability [0.0–1.0] to simulate BER (default: 0)
+//	FALLBACK_SMA_M         Fallback semi-major axis in metres if TLE fetch fails (default: 7078000)
+//	FALLBACK_INC_DEG       Fallback inclination in degrees if TLE fetch fails (default: 98.0)
 package main
 
 import (
@@ -45,6 +49,7 @@ import (
 	"syscall"
 	"time"
 
+	"github.com/absmach/orbitron/pkg/cloudcover"
 	"github.com/absmach/orbitron/pkg/dtn"
 	"github.com/absmach/orbitron/pkg/link"
 	"github.com/absmach/orbitron/pkg/orbital"
@@ -54,34 +59,39 @@ import (
 )
 
 type config struct {
-	Addr            string  `env:"RELAY_ADDR"         envDefault:":8082"`
-	NoradID         string  `env:"RELAY_NORAD_ID"     envDefault:""`
-	SC1Addr         string  `env:"SC1_ADDR,required"`
-	SC2Addr         string  `env:"SC2_ADDR"           envDefault:""`
-	GSAddr          string  `env:"GS_ADDR,required"`
-	RelaySCID       uint16  `env:"RELAY_SCID"         envDefault:"91"`
-	GSLat           float64 `env:"GS_LAT"             envDefault:"-1.2864"`
-	GSLon           float64 `env:"GS_LON"             envDefault:"36.8172"`
-	GS2Addr         string  `env:"GS2_ADDR"           envDefault:""`
-	GS2Lat          float64 `env:"GS2_LAT"            envDefault:"78.2232"`
-	GS2Lon          float64 `env:"GS2_LON"            envDefault:"15.6267"`
-	GS3Addr         string  `env:"GS3_ADDR"           envDefault:""`
-	GS3Lat          float64 `env:"GS3_LAT"            envDefault:"-53.1638"`
-	GS3Lon          float64 `env:"GS3_LON"            envDefault:"-70.9171"`
-	GS4Addr         string  `env:"GS4_ADDR"           envDefault:""`
-	GS4Lat          float64 `env:"GS4_LAT"            envDefault:"64.8201"`
-	GS4Lon          float64 `env:"GS4_LON"            envDefault:"-147.7200"`
-	GS5Addr         string  `env:"GS5_ADDR"           envDefault:""`
-	GS5Lat          float64 `env:"GS5_LAT"            envDefault:"12.9716"`
-	GS5Lon          float64 `env:"GS5_LON"            envDefault:"77.5946"`
-	GS6Addr         string  `env:"GS6_ADDR"           envDefault:""`
-	GS6Lat          float64 `env:"GS6_LAT"            envDefault:"-31.9505"`
-	GS6Lon          float64 `env:"GS6_LON"            envDefault:"115.8605"`
-	MinElevDeg      float64 `env:"MIN_ELEV_DEG"       envDefault:"5.0"`
-	PollIntervalSec int     `env:"POLL_INTERVAL_SEC"  envDefault:"30"`
-	LossRate        float64 `env:"LINK_LOSS_RATE"     envDefault:"0"`
-	FallbackSMAM    float64 `env:"FALLBACK_SMA_M"     envDefault:"7078000"`
-	FallbackIncDeg  float64 `env:"FALLBACK_INC_DEG"   envDefault:"98.0"`
+	Addr                 string  `env:"RELAY_ADDR"              envDefault:":8082"`
+	NoradID              string  `env:"RELAY_NORAD_ID"          envDefault:""`
+	SC1Addr              string  `env:"SC1_ADDR,required"`
+	SC2Addr              string  `env:"SC2_ADDR"                envDefault:""`
+	SC3Addr              string  `env:"SC3_ADDR"                envDefault:""`
+	GSAddr               string  `env:"GS_ADDR,required"`
+	RelaySCID            uint16  `env:"RELAY_SCID"              envDefault:"91"`
+	GSLat                float64 `env:"GS_LAT"                  envDefault:"-1.2864"`
+	GSLon                float64 `env:"GS_LON"                  envDefault:"36.8172"`
+	GS2Addr              string  `env:"GS2_ADDR"                envDefault:""`
+	GS2Lat               float64 `env:"GS2_LAT"                 envDefault:"78.2232"`
+	GS2Lon               float64 `env:"GS2_LON"                 envDefault:"15.6267"`
+	GS3Addr              string  `env:"GS3_ADDR"                envDefault:""`
+	GS3Lat               float64 `env:"GS3_LAT"                 envDefault:"-53.1638"`
+	GS3Lon               float64 `env:"GS3_LON"                 envDefault:"-70.9171"`
+	GS4Addr              string  `env:"GS4_ADDR"                envDefault:""`
+	GS4Lat               float64 `env:"GS4_LAT"                 envDefault:"64.8201"`
+	GS4Lon               float64 `env:"GS4_LON"                 envDefault:"-147.7200"`
+	GS5Addr              string  `env:"GS5_ADDR"                envDefault:""`
+	GS5Lat               float64 `env:"GS5_LAT"                 envDefault:"12.9716"`
+	GS5Lon               float64 `env:"GS5_LON"                 envDefault:"77.5946"`
+	GS6Addr              string  `env:"GS6_ADDR"                envDefault:""`
+	GS6Lat               float64 `env:"GS6_LAT"                 envDefault:"-31.9505"`
+	GS6Lon               float64 `env:"GS6_LON"                 envDefault:"115.8605"`
+	PeerRelay1Addr       string  `env:"PEER_RELAY1_ADDR"        envDefault:""`
+	PeerRelay2Addr       string  `env:"PEER_RELAY2_ADDR"        envDefault:""`
+	MinElevDeg           float64 `env:"MIN_ELEV_DEG"            envDefault:"5.0"`
+	CloudCoverThreshold  float64 `env:"CLOUD_COVER_THRESHOLD"   envDefault:"0.65"`
+	MaxBundleDepth       int     `env:"MAX_BUNDLE_DEPTH"        envDefault:"100"`
+	PollIntervalSec      int     `env:"POLL_INTERVAL_SEC"       envDefault:"30"`
+	LossRate             float64 `env:"LINK_LOSS_RATE"          envDefault:"0"`
+	FallbackSMAM         float64 `env:"FALLBACK_SMA_M"          envDefault:"7078000"`
+	FallbackIncDeg       float64 `env:"FALLBACK_INC_DEG"        envDefault:"98.0"`
 }
 
 func (cfg config) gsTargets() []gsTarget {
@@ -109,7 +119,21 @@ func (cfg config) primarySources() []string {
 	if cfg.SC2Addr != "" {
 		srcs = append(srcs, cfg.SC2Addr)
 	}
+	if cfg.SC3Addr != "" {
+		srcs = append(srcs, cfg.SC3Addr)
+	}
 	return srcs
+}
+
+func (cfg config) peerRelayAddrs() []string {
+	var peers []string
+	if cfg.PeerRelay1Addr != "" {
+		peers = append(peers, cfg.PeerRelay1Addr)
+	}
+	if cfg.PeerRelay2Addr != "" {
+		peers = append(peers, cfg.PeerRelay2Addr)
+	}
+	return peers
 }
 
 type gsTarget struct {
@@ -127,12 +151,14 @@ type relayNode struct {
 
 	partitionSC1 atomic.Bool
 	partitionSC2 atomic.Bool
+	partitionSC3 atomic.Bool
 	partitionGS  atomic.Bool
 	dropped      atomic.Int64
 	stored       atomic.Int64
 	forwarded    atomic.Int64
 	expired      atomic.Int64
 	pollTotal    atomic.Int64
+	islForwarded atomic.Int64
 }
 
 type partitionReq struct {
@@ -161,7 +187,10 @@ func elevationDegForGS(elem orbital.Elements, lat, lon float64) (float64, bool) 
 	return elevRad * 180 / math.Pi, true
 }
 
-func selectGS(elem orbital.Elements, targets []gsTarget, minElevDeg float64) *gsTarget {
+// selectGS returns the ground station with the best elevation angle that is also
+// not cloud-covered. When cloudThreshold is 0 the cloud cover check is skipped.
+func selectGS(elem orbital.Elements, targets []gsTarget, minElevDeg, cloudThreshold float64) *gsTarget {
+	now := time.Now().UTC()
 	var best *gsTarget
 	bestElev := math.Inf(-1)
 	for i := range targets {
@@ -170,6 +199,9 @@ func selectGS(elem orbital.Elements, targets []gsTarget, minElevDeg float64) *gs
 		}
 		elevDeg, ok := elevationDegForGS(elem, targets[i].Lat, targets[i].Lon)
 		if !ok || elevDeg < minElevDeg {
+			continue
+		}
+		if cloudThreshold > 0 && cloudcover.IsImpaired(targets[i].Lat, targets[i].Lon, now, cloudThreshold) {
 			continue
 		}
 		if elevDeg > bestElev {
@@ -250,6 +282,15 @@ func main() {
 					node.expired.Add(int64(n))
 					logger.Info("relay: pruned expired bundles", slog.Int("count", n))
 				}
+				if cfg.MaxBundleDepth > 0 {
+					if n := node.store.DropLowPriority(cfg.MaxBundleDepth); n > 0 {
+						node.expired.Add(int64(n))
+						logger.Info("relay: dropped low-priority bundles (depth limit)",
+							slog.Int("count", n),
+							slog.Int("max_depth", cfg.MaxBundleDepth),
+						)
+					}
+				}
 			}
 		}
 	}()
@@ -265,6 +306,7 @@ func main() {
 			"relay_scid":            cfg.RelaySCID,
 			"sc1_addr":              cfg.SC1Addr,
 			"sc2_addr":              cfg.SC2Addr,
+			"sc3_addr":              cfg.SC3Addr,
 			"gs_addr":               cfg.GSAddr,
 			"buffer_has_data":       node.store.HasData(),
 			"bundle_count":          node.store.Len(),
@@ -272,9 +314,15 @@ func main() {
 			"bundle_ttl_sec":        7200,
 			"hop_count_max":         8,
 			"link_loss_rate":        cfg.LossRate,
+			"cloud_cover_threshold": cfg.CloudCoverThreshold,
+			"max_bundle_depth":      cfg.MaxBundleDepth,
+			"peer_relay1":           cfg.PeerRelay1Addr,
+			"peer_relay2":           cfg.PeerRelay2Addr,
 			"partition_sc1":         node.partitionSC1.Load(),
 			"partition_sc2":         node.partitionSC2.Load(),
+			"partition_sc3":         node.partitionSC3.Load(),
 			"partition_gs":          node.partitionGS.Load(),
+			"isl_forwarded":         node.islForwarded.Load(),
 		})
 	})
 
@@ -310,16 +358,50 @@ func main() {
 		case "sc2":
 			node.partitionSC2.Store(req.Active)
 			logger.Info("relay: Primary-2 link partition updated", slog.Bool("active", req.Active))
+		case "sc3":
+			node.partitionSC3.Store(req.Active)
+			logger.Info("relay: Primary-3 link partition updated", slog.Bool("active", req.Active))
 		case "gs":
 			node.partitionGS.Store(req.Active)
 			logger.Info("relay: GS link partition updated", slog.Bool("active", req.Active))
 		default:
 			w.WriteHeader(http.StatusBadRequest)
-			_ = json.NewEncoder(w).Encode(map[string]string{"error": "link must be 'sc1', 'sc2', or 'gs'"})
+			_ = json.NewEncoder(w).Encode(map[string]string{"error": "link must be 'sc1', 'sc2', 'sc3', or 'gs'"})
 			return
 		}
 		w.Header().Set("Content-Type", "application/json")
 		_ = json.NewEncoder(w).Encode(map[string]any{"link": req.Link, "active": req.Active})
+	})
+
+	mux.HandleFunc("/receive/bundle", func(w http.ResponseWriter, r *http.Request) {
+		if r.Method != http.MethodPost {
+			w.WriteHeader(http.StatusMethodNotAllowed)
+			return
+		}
+		data, err := io.ReadAll(io.LimitReader(r.Body, 65536))
+		if err != nil || len(data) == 0 {
+			w.WriteHeader(http.StatusBadRequest)
+			return
+		}
+		b, err := dtn.DecodeBundle(data)
+		if err != nil {
+			w.WriteHeader(http.StatusBadRequest)
+			return
+		}
+		if b.HopCount >= 8 {
+			w.WriteHeader(http.StatusConflict) // hop limit exceeded
+			return
+		}
+		b.HopCount++
+		node.store.Put(b)
+		node.stored.Add(1)
+		logger.Info("relay: bundle received from ISL peer relay",
+			slog.Uint64("bundle_id", b.ID),
+			slog.Int("bytes", len(b.Payload)),
+			slog.Uint64("hop_count", uint64(b.HopCount)),
+			slog.String("source_sc", b.SourceSC),
+		)
+		w.WriteHeader(http.StatusOK)
 	})
 
 	mux.HandleFunc("/capabilities", func(w http.ResponseWriter, _ *http.Request) {
@@ -336,17 +418,24 @@ func main() {
 			"features": []string{
 				"store_carry_forward",
 				"isl_mesh",
+				"isl_peer_relay",
+				"cloud_cover_routing",
 				"multi_primary",
+				"isl_frame_poll",
 				"link_throttle",
 				"packet_loss_sim",
 				"partition_sim",
 				"multi_gs_downlink",
+				"bandwidth_aware_drop",
 			},
-			"primaries":      cfg.primarySources(),
-			"link_loss_rate": cfg.LossRate,
-			"partition_sc1":  node.partitionSC1.Load(),
-			"partition_sc2":  node.partitionSC2.Load(),
-			"partition_gs":   node.partitionGS.Load(),
+			"primaries":             cfg.primarySources(),
+			"peer_relays":           cfg.peerRelayAddrs(),
+			"cloud_cover_threshold": cfg.CloudCoverThreshold,
+			"link_loss_rate":        cfg.LossRate,
+			"partition_sc1":         node.partitionSC1.Load(),
+			"partition_sc2":         node.partitionSC2.Load(),
+			"partition_sc3":         node.partitionSC3.Load(),
+			"partition_gs":          node.partitionGS.Load(),
 		})
 	})
 
@@ -378,6 +467,9 @@ func main() {
 		fmt.Fprintf(w, "# HELP orbitron_frames_dropped_total Frames dropped due to simulated packet loss\n")
 		fmt.Fprintf(w, "# TYPE orbitron_frames_dropped_total counter\n")
 		fmt.Fprintf(w, "orbitron_frames_dropped_total{scid=%q} %d\n", scid, node.dropped.Load())
+		fmt.Fprintf(w, "# HELP orbitron_isl_forwarded_total Total bundles handed off to peer relays via ISL mesh\n")
+		fmt.Fprintf(w, "# TYPE orbitron_isl_forwarded_total counter\n")
+		fmt.Fprintf(w, "orbitron_isl_forwarded_total{scid=%q} %d\n", scid, node.islForwarded.Load())
 		fmt.Fprintf(w, "# HELP orbitron_poll_total Total upstream poll attempts\n")
 		fmt.Fprintf(w, "# TYPE orbitron_poll_total counter\n")
 		fmt.Fprintf(w, "orbitron_poll_total{scid=%q} %d\n", scid, node.pollTotal.Load())
@@ -390,6 +482,13 @@ func main() {
 		fmt.Fprintf(w, "# HELP orbitron_partition_sc2 1 if Primary-2 uplink is partitioned\n")
 		fmt.Fprintf(w, "# TYPE orbitron_partition_sc2 gauge\n")
 		fmt.Fprintf(w, "orbitron_partition_sc2{scid=%q} %g\n", scid, partSC2)
+		partSC3 := 0.0
+		if node.partitionSC3.Load() {
+			partSC3 = 1
+		}
+		fmt.Fprintf(w, "# HELP orbitron_partition_sc3 1 if Primary-3 uplink is partitioned\n")
+		fmt.Fprintf(w, "# TYPE orbitron_partition_sc3 gauge\n")
+		fmt.Fprintf(w, "orbitron_partition_sc3{scid=%q} %g\n", scid, partSC3)
 		fmt.Fprintf(w, "# HELP orbitron_partition_gs 1 if GS downlink is partitioned\n")
 		fmt.Fprintf(w, "# TYPE orbitron_partition_gs gauge\n")
 		fmt.Fprintf(w, "orbitron_partition_gs{scid=%q} %g\n", scid, partGS)
@@ -446,6 +545,67 @@ func fetchAll(ctx context.Context, client *http.Client, cfg config, node *relayN
 	if cfg.SC2Addr != "" {
 		fetchFromPrimary(ctx, client, cfg.SC2Addr, "Primary-2", "sc2", node.partitionSC2.Load(), cfg, node, logger)
 	}
+	if cfg.SC3Addr != "" {
+		fetchFromPrimary(ctx, client, cfg.SC3Addr, "Primary-3", "sc3", node.partitionSC3.Load(), cfg, node, logger)
+	}
+	// Poll ISL buffers on each primary: frames a peer spacecraft pushed to them via cross-link.
+	fetchISLFrames(ctx, client, cfg.SC1Addr, "sc1", cfg, node, logger)
+	if cfg.SC2Addr != "" {
+		fetchISLFrames(ctx, client, cfg.SC2Addr, "sc2", cfg, node, logger)
+	}
+	if cfg.SC3Addr != "" {
+		fetchISLFrames(ctx, client, cfg.SC3Addr, "sc3", cfg, node, logger)
+	}
+}
+
+// fetchISLFrames polls /isl/frame on a primary spacecraft to collect any frames
+// that a peer spacecraft pushed to it via a direct cross-link.
+func fetchISLFrames(ctx context.Context, client *http.Client, addr, primaryTag string, cfg config, node *relayNode, logger *slog.Logger) {
+	url := addr + "/isl/frame"
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, url, nil)
+	if err != nil {
+		return
+	}
+	resp, err := client.Do(req)
+	if err != nil {
+		return
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode == http.StatusNoContent {
+		return
+	}
+	if resp.StatusCode != http.StatusOK {
+		return
+	}
+	frame, err := io.ReadAll(io.LimitReader(resp.Body, 8192))
+	if err != nil || len(frame) == 0 {
+		return
+	}
+	sourceSC := resp.Header.Get("X-Source-SC")
+	if sourceSC == "" {
+		sourceSC = "isl-" + primaryTag
+	}
+	if link.ShouldDrop(cfg.LossRate) {
+		node.dropped.Add(1)
+		return
+	}
+	b := &dtn.Bundle{
+		ID:          uint64(time.Now().UnixNano()) ^ 0x1,
+		Source:      dtn.EID{Node: 2, Service: 1},
+		Destination: dtn.EID{Node: 0, Service: 1},
+		CreatedAt:   time.Now().UTC(),
+		Lifetime:    2 * time.Hour,
+		Payload:     frame,
+		Priority:    extractPriority(frame),
+		SourceSC:    sourceSC,
+	}
+	node.store.Put(b)
+	node.stored.Add(1)
+	logger.Info("relay: ISL frame stored from primary cross-link",
+		slog.String("primary", primaryTag),
+		slog.String("source_sc", sourceSC),
+		slog.Int("bytes", len(frame)),
+	)
 }
 
 func fetchFromPrimary(ctx context.Context, client *http.Client, addr, name, sourceSC string, partitioned bool, cfg config, node *relayNode, logger *slog.Logger) {
@@ -465,6 +625,11 @@ func fetchFromPrimary(ctx context.Context, client *http.Client, addr, name, sour
 		return
 	}
 	defer resp.Body.Close()
+	if resp.StatusCode == http.StatusNoContent {
+		// Onboard pre-processor suppressed this frame — nothing to store.
+		logger.Debug("relay poll: frame suppressed by onboard pre-processor", slog.String("primary", name))
+		return
+	}
 	if resp.StatusCode != http.StatusOK {
 		logger.Warn("relay poll: primary returned non-200", slog.String("primary", name), slog.Int("status", resp.StatusCode))
 		return
@@ -508,17 +673,31 @@ func forwardLoop(ctx context.Context, client *http.Client, cfg config, node *rel
 		case <-ctx.Done():
 			return
 		case <-ticker.C:
-			b := node.store.Next()
-			if b == nil {
+			if !node.store.HasData() {
 				continue
 			}
 			if node.partitionGS.Load() {
-				logger.Debug("relay: GS link partitioned — bundle buffered", slog.Uint64("bundle_id", b.ID))
+				logger.Debug("relay: GS link partitioned — bundle buffered")
 				continue
 			}
-			gs := selectGS(node.elements, cfg.gsTargets(), cfg.MinElevDeg)
+			gs := selectGS(node.elements, cfg.gsTargets(), cfg.MinElevDeg, cfg.CloudCoverThreshold)
 			if gs == nil {
-				logger.Debug("relay: not in contact with any GS — bundle buffered", slog.Uint64("bundle_id", b.ID))
+				// No GS in view or all reachable GS are cloud-blocked — try ISL peer relay handoff.
+				if peers := cfg.peerRelayAddrs(); len(peers) > 0 {
+					if b := node.store.Next(); b != nil {
+						if ok := tryPeerRelays(ctx, client, peers, b, logger); ok {
+							node.store.Remove(b.ID)
+							node.forwarded.Add(1)
+							node.islForwarded.Add(1)
+							logger.Info("relay: bundle handed off to ISL peer relay",
+								slog.Uint64("bundle_id", b.ID),
+								slog.String("source_sc", b.SourceSC),
+							)
+						}
+					}
+				} else {
+					logger.Debug("relay: not in contact with any clear GS — bundle buffered")
+				}
 				continue
 			}
 			for {
@@ -530,7 +709,11 @@ func forwardLoop(ctx context.Context, client *http.Client, cfg config, node *rel
 					break
 				}
 				if err := forwardFrame(ctx, client, gs.Addr, node.satName, bfwd.SourceSC, bfwd.Payload); err != nil {
-					logger.Warn("relay: forward failed", slog.Uint64("bundle_id", bfwd.ID), slog.String("gs", gs.Name), slog.Any("error", err))
+					logger.Warn("relay: forward failed",
+						slog.Uint64("bundle_id", bfwd.ID),
+						slog.String("gs", gs.Name),
+						slog.Any("error", err),
+					)
 					break
 				}
 				node.store.Remove(bfwd.ID)
@@ -540,10 +723,41 @@ func forwardLoop(ctx context.Context, client *http.Client, cfg config, node *rel
 					slog.Uint64("bundle_id", bfwd.ID),
 					slog.Int("bytes", len(bfwd.Payload)),
 					slog.String("gs_name", gs.Name),
+					slog.String("source_sc", bfwd.SourceSC),
 				)
 			}
 		}
 	}
+}
+
+// tryPeerRelays attempts to hand a bundle off to one of the configured peer relays.
+// Returns true if a peer accepted the bundle.
+func tryPeerRelays(ctx context.Context, client *http.Client, peers []string, b *dtn.Bundle, logger *slog.Logger) bool {
+	if b.HopCount >= 8 {
+		logger.Warn("relay: bundle hop limit reached — dropping", slog.Uint64("bundle_id", b.ID))
+		return false
+	}
+	b.HopCount++
+	encoded := b.Encode()
+	for _, peer := range peers {
+		url := peer + "/receive/bundle"
+		req, err := http.NewRequestWithContext(ctx, http.MethodPost, url, bytes.NewReader(encoded))
+		if err != nil {
+			continue
+		}
+		req.Header.Set("Content-Type", "application/octet-stream")
+		resp, err := client.Do(req)
+		if err != nil {
+			logger.Debug("relay: peer relay unreachable", slog.String("peer", peer), slog.Any("error", err))
+			continue
+		}
+		resp.Body.Close()
+		if resp.StatusCode == http.StatusOK {
+			return true
+		}
+	}
+	b.HopCount-- // restore on failure
+	return false
 }
 
 func forwardFrame(ctx context.Context, client *http.Client, targetAddr, relayID, sourceSC string, frame []byte) error {

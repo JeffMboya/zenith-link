@@ -6,6 +6,7 @@ import (
 
 	"github.com/absmach/orbitron/pkg/orbital"
 	"github.com/absmach/orbitron/pkg/orbitron"
+	"github.com/absmach/orbitron/pkg/preprocess"
 	"github.com/absmach/orbitron/spacecraft"
 	"github.com/absmach/orbitron/spacecraft/inference"
 	"github.com/stretchr/testify/mock"
@@ -94,4 +95,22 @@ func (m *Service) StormLevel() string {
 func (m *Service) KpIndex() float64 {
 	args := m.Called()
 	return args.Get(0).(float64)
+}
+
+func (m *Service) ISLReceive(frame []byte, sourceSC string) {
+	m.Called(frame, sourceSC)
+}
+
+func (m *Service) ISLNextFrame() ([]byte, string, bool) {
+	args := m.Called()
+	b, _ := args.Get(0).([]byte)
+	return b, args.String(1), args.Bool(2)
+}
+
+func (m *Service) PreprocessStats() preprocess.Stats {
+	args := m.Called()
+	if s, ok := args.Get(0).(preprocess.Stats); ok {
+		return s
+	}
+	return preprocess.Stats{}
 }

@@ -14,6 +14,7 @@ x-relay: &relay
     - RELAY_ADDR=:8082
     - SC1_ADDR=http://spacecraft1:8080
     - SC2_ADDR=http://spacecraft2:8080
+    - SC3_ADDR=http://spacecraft3:8080
     - GS_ADDR=http://groundstation:8081
     - GS2_ADDR=http://gs2:8085
     - GS2_LAT=78.2232
@@ -24,11 +25,14 @@ x-relay: &relay
     - GS_LAT=-1.2864
     - GS_LON=36.8172
     - MIN_ELEV_DEG=5.0
+    - CLOUD_COVER_THRESHOLD=0.65
+    - MAX_BUNDLE_DEPTH=100
     - POLL_INTERVAL_SEC=30
     - LINK_LOSS_RATE=${LINK_LOSS_RATE:-0.05}
   depends_on:
     - spacecraft1
     - spacecraft2
+    - spacecraft3
     - groundstation
     - gs2
     - gs3
@@ -48,6 +52,9 @@ services:
       - SPACECRAFT_VCID=0
       - SPACECRAFT_APID=256
       - SPACECRAFT_NAME=ISS
+      - ISL_SOURCE_TAG=sc1
+      - ISL_PEER1_ADDR=http://spacecraft2:8080
+      - ISL_PEER2_ADDR=http://spacecraft3:8080
 
   spacecraft2:
     <<: *common
@@ -63,6 +70,9 @@ services:
       - SPACECRAFT_VCID=0
       - SPACECRAFT_APID=257
       - SPACECRAFT_NAME=Tiangong
+      - ISL_SOURCE_TAG=sc2
+      - ISL_PEER1_ADDR=http://spacecraft1:8080
+      - ISL_PEER2_ADDR=http://spacecraft3:8080
 
   spacecraft3:
     <<: *common
@@ -78,6 +88,9 @@ services:
       - SPACECRAFT_VCID=0
       - SPACECRAFT_APID=258
       - SPACECRAFT_NAME=HST
+      - ISL_SOURCE_TAG=sc3
+      - ISL_PEER1_ADDR=http://spacecraft1:8080
+      - ISL_PEER2_ADDR=http://spacecraft2:8080
 
   groundstation:
     <<: *common
@@ -167,10 +180,14 @@ services:
       - GS_LAT=-1.2864
       - GS_LON=36.8172
       - MIN_ELEV_DEG=5.0
+      - CLOUD_COVER_THRESHOLD=0.65
+      - MAX_BUNDLE_DEPTH=100
       - POLL_INTERVAL_SEC=30
       - LINK_LOSS_RATE=${LINK_LOSS_RATE:-0.05}
       - FALLBACK_SMA_M=7195000
       - FALLBACK_INC_DEG=98.7
+      - PEER_RELAY1_ADDR=http://relay-sentinel2a:8082
+      - PEER_RELAY2_ADDR=http://relay-landsat9:8082
 
   relay-sentinel2a:
     <<: *relay
@@ -193,10 +210,14 @@ services:
       - GS_LAT=-1.2864
       - GS_LON=36.8172
       - MIN_ELEV_DEG=5.0
+      - CLOUD_COVER_THRESHOLD=0.65
+      - MAX_BUNDLE_DEPTH=100
       - POLL_INTERVAL_SEC=30
       - LINK_LOSS_RATE=${LINK_LOSS_RATE:-0.05}
       - FALLBACK_SMA_M=7164000
       - FALLBACK_INC_DEG=98.6
+      - PEER_RELAY1_ADDR=http://relay-noaa20:8082
+      - PEER_RELAY2_ADDR=http://relay-aqua:8082
 
   relay-landsat9:
     <<: *relay
@@ -219,10 +240,14 @@ services:
       - GS_LAT=-1.2864
       - GS_LON=36.8172
       - MIN_ELEV_DEG=5.0
+      - CLOUD_COVER_THRESHOLD=0.65
+      - MAX_BUNDLE_DEPTH=100
       - POLL_INTERVAL_SEC=30
       - LINK_LOSS_RATE=${LINK_LOSS_RATE:-0.05}
       - FALLBACK_SMA_M=7083000
       - FALLBACK_INC_DEG=98.2
+      - PEER_RELAY1_ADDR=http://relay-aqua:8082
+      - PEER_RELAY2_ADDR=http://relay-noaa20:8082
 
   relay-aqua:
     <<: *relay
@@ -245,10 +270,14 @@ services:
       - GS_LAT=-1.2864
       - GS_LON=36.8172
       - MIN_ELEV_DEG=5.0
+      - CLOUD_COVER_THRESHOLD=0.65
+      - MAX_BUNDLE_DEPTH=100
       - POLL_INTERVAL_SEC=30
       - LINK_LOSS_RATE=${LINK_LOSS_RATE:-0.05}
       - FALLBACK_SMA_M=7083000
       - FALLBACK_INC_DEG=98.2
+      - PEER_RELAY1_ADDR=http://relay-landsat9:8082
+      - PEER_RELAY2_ADDR=http://relay-terra:8082
 
   relay-terra:
     <<: *relay
@@ -271,10 +300,14 @@ services:
       - GS_LAT=-1.2864
       - GS_LON=36.8172
       - MIN_ELEV_DEG=5.0
+      - CLOUD_COVER_THRESHOLD=0.65
+      - MAX_BUNDLE_DEPTH=100
       - POLL_INTERVAL_SEC=30
       - LINK_LOSS_RATE=${LINK_LOSS_RATE:-0.05}
       - FALLBACK_SMA_M=7083000
       - FALLBACK_INC_DEG=98.2
+      - PEER_RELAY1_ADDR=http://relay-noaa19:8082
+      - PEER_RELAY2_ADDR=http://relay-aqua:8082
 
   relay-noaa19:
     <<: *relay
@@ -297,7 +330,11 @@ services:
       - GS_LAT=-1.2864
       - GS_LON=36.8172
       - MIN_ELEV_DEG=5.0
+      - CLOUD_COVER_THRESHOLD=0.65
+      - MAX_BUNDLE_DEPTH=100
       - POLL_INTERVAL_SEC=30
       - LINK_LOSS_RATE=${LINK_LOSS_RATE:-0.05}
       - FALLBACK_SMA_M=7248000
       - FALLBACK_INC_DEG=99.1
+      - PEER_RELAY1_ADDR=http://relay-terra:8082
+      - PEER_RELAY2_ADDR=http://relay-sentinel2a:8082

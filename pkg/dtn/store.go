@@ -107,3 +107,40 @@ func (s *Store) OldestAge() time.Duration {
 	}
 	return time.Since(oldest)
 }
+
+// DropLowPriority removes the oldest low-priority bundles until the store depth
+// is at or below maxDepth. Returns the number of bundles dropped.
+// Used by the relay to shed load when cloud cover or outages cause the store to
+// grow beyond a useful size.
+func (s *Store) DropLowPriority(maxDepth int) int {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	if len(s.bundles) <= maxDepth {
+		return 0
+	}
+
+	type candidate struct {
+		id  uint64
+		age time.Time
+	}
+	var low []candidate
+	for id, b := range s.bundles {
+		if b.Priority < 2 {
+			low = append(low, candidate{id, b.CreatedAt})
+		}
+	}
+	sort.Slice(low, func(i, j int) bool {
+		return low[i].age.Before(low[j].age)
+	})
+
+	dropped := 0
+	for _, c := range low {
+		if len(s.bundles) <= maxDepth {
+			break
+		}
+		delete(s.bundles, c.id)
+		dropped++
+	}
+	return dropped
+}

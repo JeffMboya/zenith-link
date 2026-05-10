@@ -146,19 +146,14 @@ func TestTelemetry(t *testing.T) {
 }
 
 func TestTelemetryFrame(t *testing.T) {
-	cfg := issConfig()
-	svc := spacecraft.New(cfg)
 	ctx := context.Background()
-	t0 := cfg.Elements.Epoch
 
 	tests := []struct {
 		desc  string
-		t     time.Time
 		check func(t *testing.T, b []byte)
 	}{
 		{
 			desc: "frame is decodable with correct HMAC key",
-			t:    t0,
 			check: func(t *testing.T, b []byte) {
 				tm, err := orbitron.Decode(b, testKey)
 				require.NoError(t, err)
@@ -167,7 +162,6 @@ func TestTelemetryFrame(t *testing.T) {
 		},
 		{
 			desc: "frame fails decode with wrong HMAC key",
-			t:    t0,
 			check: func(t *testing.T, b []byte) {
 				_, err := orbitron.Decode(b, []byte("wrong"))
 				assert.Error(t, err)
@@ -175,7 +169,6 @@ func TestTelemetryFrame(t *testing.T) {
 		},
 		{
 			desc: "frame has minimum required size",
-			t:    t0,
 			check: func(t *testing.T, b []byte) {
 				assert.GreaterOrEqual(t, len(b), orbitron.MinFrameSize)
 			},
@@ -184,8 +177,13 @@ func TestTelemetryFrame(t *testing.T) {
 
 	for _, tc := range tests {
 		t.Run(tc.desc, func(t *testing.T) {
-			got, err := svc.TelemetryFrame(ctx, tc.t)
+			// Fresh service per case: ensures the preprocessor has no prior state
+			// and the first call is always transmitted (not suppressed).
+			cfg := issConfig()
+			svc := spacecraft.New(cfg)
+			got, err := svc.TelemetryFrame(ctx, cfg.Elements.Epoch)
 			require.NoError(t, err)
+			require.NotEmpty(t, got, "first TelemetryFrame call must not be suppressed")
 			if tc.check != nil {
 				tc.check(t, got)
 			}

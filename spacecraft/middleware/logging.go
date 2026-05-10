@@ -8,6 +8,7 @@ import (
 
 	"github.com/absmach/orbitron/pkg/orbital"
 	"github.com/absmach/orbitron/pkg/orbitron"
+	"github.com/absmach/orbitron/pkg/preprocess"
 	"github.com/absmach/orbitron/spacecraft"
 	"github.com/absmach/orbitron/spacecraft/inference"
 )
@@ -145,4 +146,16 @@ func (lm *loggingMiddleware) StormLevel() string {
 
 func (lm *loggingMiddleware) KpIndex() float64 {
 	return lm.svc.KpIndex()
+}
+
+func (lm *loggingMiddleware) ISLReceive(frame []byte, sourceSC string) {
+	lm.svc.ISLReceive(frame, sourceSC)
+}
+
+func (lm *loggingMiddleware) ISLNextFrame() ([]byte, string, bool) {
+	return lm.svc.ISLNextFrame()
+}
+
+func (lm *loggingMiddleware) PreprocessStats() preprocess.Stats {
+	return lm.svc.PreprocessStats()
 }

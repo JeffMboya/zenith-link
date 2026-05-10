@@ -28,11 +28,14 @@ import (
 )
 
 type config struct {
-	Addr    string `env:"SPACECRAFT_ADDR" envDefault:":8080"`
-	SCID    uint16 `env:"SPACECRAFT_SCID" envDefault:"90"`
-	VCID    uint8  `env:"SPACECRAFT_VCID" envDefault:"0"`
-	APID    uint16 `env:"SPACECRAFT_APID" envDefault:"256"`
-	HMACKey string `env:"ORBITRON_HMAC_KEY,required"`
+	Addr         string `env:"SPACECRAFT_ADDR"   envDefault:":8080"`
+	SCID         uint16 `env:"SPACECRAFT_SCID"   envDefault:"90"`
+	VCID         uint8  `env:"SPACECRAFT_VCID"   envDefault:"0"`
+	APID         uint16 `env:"SPACECRAFT_APID"   envDefault:"256"`
+	HMACKey      string `env:"ORBITRON_HMAC_KEY,required"`
+	ISLPeer1Addr string `env:"ISL_PEER1_ADDR"   envDefault:""`
+	ISLPeer2Addr string `env:"ISL_PEER2_ADDR"   envDefault:""`
+	ISLSourceTag string `env:"ISL_SOURCE_TAG"   envDefault:"sc1"`
 }
 
 func adjustForEarlyContact(elem orbital.Elements, gsLat, gsLon, minElevDeg, targetLeadSec float64, logger *slog.Logger) orbital.Elements {
@@ -82,12 +85,22 @@ func main() {
 		Epoch:         time.Now().UTC(),
 	}, -1.2864, 36.8172, 5.0, 600.0, logger)
 
+	var islPeers []string
+	if cfg.ISLPeer1Addr != "" {
+		islPeers = append(islPeers, cfg.ISLPeer1Addr)
+	}
+	if cfg.ISLPeer2Addr != "" {
+		islPeers = append(islPeers, cfg.ISLPeer2Addr)
+	}
+
 	svcCfg := spacecraft.Config{
 		SCID:          cfg.SCID,
 		VCID:          cfg.VCID,
 		TelemetryAPID: cfg.APID,
 		HMACKey:       []byte(cfg.HMACKey),
 		Elements:      elem,
+		ISLPeerAddrs:  islPeers,
+		ISLSourceTag:  cfg.ISLSourceTag,
 	}
 
 	svc := middleware.NewLogging(spacecraft.New(svcCfg), logger)
