@@ -290,18 +290,6 @@ export function KPIBar({ metrics, satellite, connected, linkLost, tleSource, tle
   const sessionBytes    = metrics?.bytes_received_orbitron ?? 0
   const hasThroughput   = throughputBps > 10 // ignore noise below 10 B/s
 
-  // Dispatch delivery-state to MissionFooter whenever it changes
-  useEffect(() => {
-    if (!delivery) return
-    const snap = {
-      aosMs:   'aosMs' in delivery ? (delivery as { aosMs: number | null }).aosMs : null,
-      relay:   delivery.relay,
-      gs:      delivery.gs,
-      flowing: delivery.flowing,
-    }
-    window.dispatchEvent(new CustomEvent('delivery-state', { detail: snap }))
-  }, [delivery])
-
   return (
     <div style={{ position: 'fixed', top: 0, left: 0, right: 0, zIndex: 110 }}>
 

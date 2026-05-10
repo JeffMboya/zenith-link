@@ -1,4 +1,32 @@
-import { useState, useEffect, useRef } from 'react'
+import { useState, useEffect, useRef, Component } from 'react'
+import type { ReactNode, ErrorInfo } from 'react'
+
+class ErrorBoundary extends Component<{ children: ReactNode }, { error: Error | null }> {
+  constructor(props: { children: ReactNode }) {
+    super(props)
+    this.state = { error: null }
+  }
+  static getDerivedStateFromError(error: Error) { return { error } }
+  componentDidCatch(error: Error, info: ErrorInfo) {
+    console.error('[ErrorBoundary]', error, info)
+  }
+  render() {
+    if (this.state.error) {
+      return (
+        <div style={{ position: 'fixed', inset: 0, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', background: '#040d1c', color: '#f87171', fontFamily: 'monospace', padding: 40, gap: 16 }}>
+          <div style={{ fontSize: 11, letterSpacing: 3, color: '#f87171' }}>RENDER FAULT</div>
+          <div style={{ fontSize: 13, color: '#e2e8f0', maxWidth: 600, wordBreak: 'break-word', whiteSpace: 'pre-wrap', background: 'rgba(255,255,255,0.05)', padding: '12px 16px', borderRadius: 4 }}>
+            {this.state.error.message}
+          </div>
+          <button onClick={() => this.setState({ error: null })} style={{ marginTop: 8, padding: '6px 20px', background: 'transparent', border: '1px solid #38bdf8', color: '#38bdf8', cursor: 'pointer', fontSize: 11, letterSpacing: 2 }}>
+            RETRY
+          </button>
+        </div>
+      )
+    }
+    return this.props.children
+  }
+}
 import { useSatWebSocket } from './hooks/useSatWebSocket'
 import { useOrbitalPosition } from './hooks/useOrbitalPosition'
 import { useConstellation } from './hooks/useConstellation'
@@ -177,6 +205,7 @@ export default function App() {
   const primarySatId = PRIMARY_SATELLITES[0].tleName
 
   return (
+    <ErrorBoundary>
     <CommandEngineContext.Provider value={commandEngine}>
     <>
       <Globe3D
@@ -226,5 +255,6 @@ export default function App() {
       />
     </>
     </CommandEngineContext.Provider>
+    </ErrorBoundary>
   )
 }
