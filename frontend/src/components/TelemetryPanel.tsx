@@ -67,6 +67,15 @@ function Section({ title, accent = 'var(--cyan-dim)', children }: {
 export function TelemetryPanel({ state, selectedSatId, selectedSat, hasTelemetry, tleSource, primarySatId }: Props) {
   const [open, setOpen] = useState(true)
   const payload = usePayload()
+
+  useEffect(() => {
+    const h = (e: Event) => {
+      const section = (e as CustomEvent<string>).detail
+      if (section === 'telemetry' || section === 'ai') setOpen(true)
+    }
+    window.addEventListener('nav-section', h)
+    return () => window.removeEventListener('nav-section', h)
+  }, [])
   const meta = primarySatByName(selectedSatId)
   const planeColor = 'var(--cyan)'
 
@@ -79,7 +88,7 @@ export function TelemetryPanel({ state, selectedSatId, selectedSat, hasTelemetry
 
   return (
     <div style={{
-      position: 'fixed', right: 0, top: 106, bottom: 0, width: open ? 220 : 32,
+      position: 'fixed', right: 0, top: 48, bottom: 0, width: open ? 220 : 32,
       background: 'rgba(4,13,28,0.90)', borderLeft: '1px solid var(--border)',
       backdropFilter: 'blur(6px)', zIndex: 90,
       transition: 'width 0.2s ease', overflow: 'hidden',

@@ -165,6 +165,19 @@ export function OperatorPanel({ satConnected, primarySatIds, cmdState }: Props) 
     return () => window.removeEventListener('switch-tab', h)
   }, [])
 
+  // Open panel when nav bar dispatches fleet/relays section
+  useEffect(() => {
+    const h = (e: Event) => {
+      const section = (e as CustomEvent<string>).detail
+      if (section === 'fleet' || section === 'relays') {
+        setOpen(true)
+        setTab('FLEET')
+      }
+    }
+    window.addEventListener('nav-section', h)
+    return () => window.removeEventListener('nav-section', h)
+  }, [])
+
   const relay1 = useRelayStatus('/relay1/health', '/relay1/windows')
   const relay2 = useRelayStatus('/relay2/health', '/relay2/windows')
   const relay3 = useRelayStatus('/relay3/health', '/relay3/windows')
@@ -225,7 +238,7 @@ export function OperatorPanel({ satConnected, primarySatIds, cmdState }: Props) 
       role="navigation"
       aria-label="Operator fleet panel"
       style={{
-        position: 'fixed', top: 106, left: 0, bottom: 28, zIndex: 109,
+        position: 'fixed', top: 48, left: 0, bottom: 28, zIndex: 109,
         width: open ? 310 : 52,
         transition: 'width 0.2s ease',
         background: 'linear-gradient(180deg, #060f1e 0%, #040c18 100%)',
