@@ -320,11 +320,11 @@ export function KPIBar({ metrics, satellite, connected, linkLost, tleSource, tle
         </div>
       )}
 
-      {/* Main bar */}
+      {/* ── TOP ROW — 44px — mission-critical status ── */}
       <div style={{
         display: 'flex', alignItems: 'center',
-        height: 54,
-        background: 'rgba(4,13,28,0.94)',
+        height: 44,
+        background: 'rgba(4,13,28,0.97)',
         borderBottom: '1px solid var(--border)',
         backdropFilter: 'blur(8px)',
       }}>
@@ -379,7 +379,7 @@ export function KPIBar({ metrics, satellite, connected, linkLost, tleSource, tle
             </span>
           )}
 
-          {/* AI hover tooltip */}
+          {/* AI hover tooltip — anchored below top row */}
           {aiHover && inferenceDetail?.channels && (
             <div style={{
               position: 'absolute', top: '100%', left: 0, zIndex: 200,
@@ -437,61 +437,82 @@ export function KPIBar({ metrics, satellite, connected, linkLost, tleSource, tle
           <span style={{ color: 'var(--text-dim)', fontSize: 10, letterSpacing: 2, marginTop: passDetail ? 1 : 2 }}>NEXT DELIVERY</span>
         </div>
 
-        {DIVIDER}
+        {/* flex spacer pushes TLE badge to far right */}
+        <div style={{ flex: 1 }} />
 
-        {/* 5. KPI card row — always rendered when connected; placeholders until first WS frame */}
-        <div style={{ flex: 1, display: 'flex', alignItems: 'center', overflow: 'hidden' }}>
-          {isRebooting ? (
-            <div style={{ padding: '0 20px', color: 'var(--amber)', fontSize: 12, letterSpacing: 2, fontWeight: 700 }}>
-              REBOOTING OBC...
-            </div>
-          ) : !connected ? (
-            <div style={{ padding: '0 20px', color: offlineColor, fontSize: 12, letterSpacing: 2, fontWeight: linkLost ? 700 : 400 }}>
-              {offlineText}
-            </div>
-          ) : (
-            <>
-              {/* Link stats — always shown when connected, '—' until first frame */}
-              {kpiCards(metrics).map(({ label, value, color, nacks }) => (
-                <KPICard key={label} value={value} label={label} color={color} nacks={nacks} dimmed={!metrics} />
-              ))}
-
-              {/* Throughput — own card, visible when data is moving */}
-              <KPICard
-                value={hasThroughput ? fmtBps(throughputBps) : '—'}
-                label="THROUGHPUT"
-                color={hasThroughput ? (flowing ? 'var(--green)' : 'var(--cyan)') : 'var(--text-dim)'}
-                dimmed={!hasThroughput}
-              />
-
-              {/* Session bytes — own card */}
-              <KPICard
-                value={sessionBytes > 0 ? fmtBytes(sessionBytes) : '—'}
-                label="SESSION"
-                color={sessionBytes > 0 ? 'var(--teal)' : 'var(--text-dim)'}
-                dimmed={sessionBytes === 0}
-              />
-
-              {/* Cloud cover — one card per ground station */}
-              {cloudEntries.length > 0 && (
-                <div style={{ width: 1, height: 28, background: 'var(--border)', flexShrink: 0, margin: '0 4px' }} />
-              )}
-              {cloudEntries.map(gs => (
-                <KPICard
-                  key={gs.name}
-                  value={`${gs.cloud_cover_pct.toFixed(0)}%`}
-                  label={`☁ ${gsShortName(gs.name)}`}
-                  color={cloudColor(gs.cloud_cover_pct, gs.impaired)}
-                  sub={gs.impaired ? 'IMPAIRED' : gs.source === 'open-meteo' ? 'LIVE' : 'EST'}
-                />
-              ))}
-            </>
-          )}
+        {/* 5. TLE badge */}
+        <div style={{ padding: '0 14px', borderLeft: '1px solid var(--border)', flexShrink: 0, alignSelf: 'stretch', display: 'flex', alignItems: 'center' }}>
+          <TleSelector source={tleSource} group={tleGroup} count={tleCount} />
         </div>
 
-        {/* 6. TLE badge */}
-        <div style={{ padding: '0 14px', borderLeft: '1px solid var(--border)', flexShrink: 0 }}>
-          <TleSelector source={tleSource} group={tleGroup} count={tleCount} />
+      </div>
+
+      {/* ── BOTTOM ROW — 52px — grouped telemetry data ── */}
+      <div style={{
+        display: 'flex', alignItems: 'stretch',
+        height: 52,
+        background: 'rgba(2,8,18,0.97)',
+        borderBottom: '1px solid var(--border)',
+      }}>
+
+        {/* GROUP: LINK METRICS */}
+        <div style={{ display: 'flex', flexDirection: 'column', borderRight: '1px solid var(--border)', flexShrink: 0 }}>
+          {/* header strip */}
+          <div style={{ height: 14, display: 'flex', alignItems: 'center', padding: '0 10px', borderBottom: '1px solid rgba(255,255,255,0.04)' }}>
+            <span style={{ color: 'var(--text-dim)', fontSize: 8, letterSpacing: 1.8, opacity: 0.7 }}>LINK METRICS</span>
+          </div>
+          {/* cards */}
+          <div style={{ flex: 1, display: 'flex', alignItems: 'center', overflow: 'hidden' }}>
+            {isRebooting ? (
+              <div style={{ padding: '0 16px', color: 'var(--amber)', fontSize: 12, letterSpacing: 2, fontWeight: 700 }}>
+                REBOOTING OBC...
+              </div>
+            ) : !connected ? (
+              <div style={{ padding: '0 16px', color: offlineColor, fontSize: 12, letterSpacing: 2, fontWeight: linkLost ? 700 : 400 }}>
+                {offlineText}
+              </div>
+            ) : (
+              <>
+                {kpiCards(metrics).map(({ label, value, color, nacks }) => (
+                  <KPICard key={label} value={value} label={label} color={color} nacks={nacks} dimmed={!metrics} />
+                ))}
+                <KPICard
+                  value={hasThroughput ? fmtBps(throughputBps) : '—'}
+                  label="THROUGHPUT"
+                  color={hasThroughput ? (flowing ? 'var(--green)' : 'var(--cyan)') : 'var(--text-dim)'}
+                  dimmed={!hasThroughput}
+                />
+                <KPICard
+                  value={sessionBytes > 0 ? fmtBytes(sessionBytes) : '—'}
+                  label="SESSION"
+                  color={sessionBytes > 0 ? 'var(--teal)' : 'var(--text-dim)'}
+                  dimmed={sessionBytes === 0}
+                />
+              </>
+            )}
+          </div>
+        </div>
+
+        {/* GROUP: CLOUD COVER */}
+        <div style={{ display: 'flex', flexDirection: 'column', flex: 1, minWidth: 0 }}>
+          {/* header strip */}
+          <div style={{ height: 14, display: 'flex', alignItems: 'center', padding: '0 10px', borderBottom: '1px solid rgba(255,255,255,0.04)' }}>
+            <span style={{ color: 'var(--text-dim)', fontSize: 8, letterSpacing: 1.8, opacity: 0.7 }}>CLOUD COVER</span>
+          </div>
+          {/* cards */}
+          <div style={{ flex: 1, display: 'flex', alignItems: 'center', overflowX: 'auto', overflowY: 'hidden' }}>
+            {cloudEntries.length === 0 ? (
+              <span style={{ padding: '0 16px', color: 'var(--text-dim)', fontSize: 10, letterSpacing: 1, opacity: 0.5 }}>POLLING...</span>
+            ) : cloudEntries.map(gs => (
+              <KPICard
+                key={gs.name}
+                value={`${gs.cloud_cover_pct.toFixed(0)}%`}
+                label={`☁ ${gsShortName(gs.name)}`}
+                color={cloudColor(gs.cloud_cover_pct, gs.impaired)}
+                sub={gs.impaired ? 'IMPAIRED' : gs.source === 'open-meteo' ? 'LIVE' : 'EST'}
+              />
+            ))}
+          </div>
         </div>
 
       </div>

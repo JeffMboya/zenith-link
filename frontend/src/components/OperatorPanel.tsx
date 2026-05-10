@@ -225,7 +225,7 @@ export function OperatorPanel({ satConnected, primarySatIds, cmdState }: Props) 
       role="navigation"
       aria-label="Operator fleet panel"
       style={{
-        position: 'fixed', top: 48, left: 0, bottom: 28, zIndex: 109,
+        position: 'fixed', top: 96, left: 0, bottom: 28, zIndex: 109,
         width: open ? 310 : 52,
         transition: 'width 0.2s ease',
         background: 'linear-gradient(180deg, #060f1e 0%, #040c18 100%)',
