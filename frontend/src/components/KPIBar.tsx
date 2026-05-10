@@ -288,8 +288,6 @@ export function KPIBar({ metrics, satellite, connected, linkLost, tleSource, tle
   const dotAnim     = connected && !isSafe && !isRebooting
     ? 'liveDotBlink 1s step-start infinite'
     : connected && isSafe ? 'liveDotBlink 2s step-start infinite' : 'none'
-  const liveLabel     = connected ? (isSafe ? 'SAFE' : isRebooting ? 'REBOOTING' : 'LIVE') : 'OFFLINE'
-  const liveTextColor = !connected ? 'var(--red)' : isSafe ? 'var(--amber)' : 'var(--green)'
   const offlineText   = linkLost ? 'LINK LOST' : 'AWAITING LINK...'
   const offlineColor  = linkLost ? 'var(--red)' : 'var(--text-dim)'
 
@@ -303,10 +301,8 @@ export function KPIBar({ metrics, satellite, connected, linkLost, tleSource, tle
       ? 'var(--amber)'
       : flowing ? 'var(--green)' : 'var(--cyan)'
 
-  const satShortName = selectedSatId.replace(/\s*\(.*?\)\s*$/, '').trim()
-
   return (
-    <div style={{ position: 'fixed', top: 0, left: 0, right: 0, zIndex: 110 }}>
+    <div style={{ position: 'fixed', top: 0, left: 0, right: 0, zIndex: 310 }}>
 
       {/* Pre-fault alert banner */}
       {preFaultClass && (
@@ -548,21 +544,13 @@ export function KPIBar({ metrics, satellite, connected, linkLost, tleSource, tle
           </div>
         )}
 
-        {/* Satellite status */}
-        <div style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '0 14px', borderLeft: '1px solid var(--border)', flexShrink: 0 }}>
+        {/* Connection dot */}
+        <div style={{ display: 'flex', alignItems: 'center', padding: '0 14px', borderLeft: '1px solid var(--border)', flexShrink: 0 }}>
           <div style={{
             width: 7, height: 7, borderRadius: '50%',
             background: dotColor, boxShadow: `0 0 6px ${dotColor}`,
-            animation: dotAnim, flexShrink: 0,
+            animation: dotAnim,
           }} />
-          <div style={{ display: 'flex', flexDirection: 'column' }}>
-            <span style={{ color: liveTextColor, fontSize: 11, fontWeight: 700, letterSpacing: 1, whiteSpace: 'nowrap', lineHeight: 1.2 }}>
-              {satShortName}
-            </span>
-            <span style={{ color: liveTextColor, fontSize: 9, opacity: 0.7, letterSpacing: 1.5, lineHeight: 1.2 }}>
-              {liveLabel}
-            </span>
-          </div>
         </div>
 
         {/* TLE badge */}
