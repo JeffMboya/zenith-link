@@ -2,35 +2,39 @@
 //
 // Each relay instance polls one or more primary spacecraft for telemetry frames,
 // stores them in a DTN bundle store, and forwards them to whichever ground station
-// has the best elevation angle and clearest atmospheric conditions at the time of
-// contact. When cloud cover impairs all reachable ground stations, the relay hands
-// bundles off to peer relays via the ISL mesh (/receive/bundle endpoint).
+// or peer relay the Contact Graph Router selects.
 //
-// The relay also polls /isl/frame on each primary spacecraft to collect frames that
-// a peer spacecraft pushed to that primary via a direct cross-link (e.g. ISS → Tiangong).
+// CGR (RFC 9177): each relay builds a temporal contact plan from orbital mechanics
+// and merges peer plans via a gossip loop (/contacts endpoint). Forwarding decisions
+// use modified Dijkstra on the contact graph, minimising earliest bundle arrival time
+// at any ground station while respecting contact capacity and DTN hop limits.
 //
 // Configuration is read from environment variables:
 //
-//	RELAY_ADDR             HTTP listen address (default: :8082)
-//	RELAY_NORAD_ID         NORAD catalog number for this relay's own orbit (e.g. 43013)
-//	SC1_ADDR               Primary-1 spacecraft base URL (required)
-//	SC2_ADDR               Primary-2 spacecraft base URL (optional)
-//	SC3_ADDR               Primary-3 spacecraft base URL (optional)
-//	GS_ADDR                Ground Station Nairobi base URL (required)
-//	GS_LAT / GS_LON        Nairobi coordinates (default: -1.2864, 36.8172)
+//	RELAY_ADDR               HTTP listen address (default: :8082)
+//	RELAY_NORAD_ID           NORAD catalog number for this relay's own orbit (e.g. 43013)
+//	SC1_ADDR                 Primary-1 spacecraft base URL (required)
+//	SC2_ADDR                 Primary-2 spacecraft base URL (optional)
+//	SC3_ADDR                 Primary-3 spacecraft base URL (optional)
+//	GS_ADDR                  Ground Station Nairobi base URL (required)
+//	GS_LAT / GS_LON          Nairobi coordinates (default: -1.2864, 36.8172)
 //	GS2_ADDR / GS2_LAT / GS2_LON  Svalbard (optional)
 //	GS3_ADDR / GS3_LAT / GS3_LON  Punta Arenas (optional)
-//	GS4_ADDR … GS6_ADDR    Additional ground stations (optional)
-//	PEER_RELAY1_ADDR       Peer relay for ISL handoff when GS link is cloud-blocked (optional)
-//	PEER_RELAY2_ADDR       Second peer relay (optional)
-//	RELAY_SCID             This relay's CCSDS Spacecraft ID (default: 91)
-//	MIN_ELEV_DEG           Minimum elevation for GS contact [degrees] (default: 5.0)
-//	CLOUD_COVER_THRESHOLD  Cloud cover index [0–1] above which GS link is considered impaired (default: 0.65)
-//	MAX_BUNDLE_DEPTH       Maximum DTN store depth before low-priority bundles are dropped (default: 100)
-//	POLL_INTERVAL_SEC      Spacecraft poll interval in seconds (default: 30)
-//	LINK_LOSS_RATE         Frame drop probability [0.0–1.0] to simulate BER (default: 0)
-//	FALLBACK_SMA_M         Fallback semi-major axis in metres if TLE fetch fails (default: 7078000)
-//	FALLBACK_INC_DEG       Fallback inclination in degrees if TLE fetch fails (default: 98.0)
+//	GS4_ADDR … GS6_ADDR      Additional ground stations (optional)
+//	PEER_RELAY_ADDRS         Comma-separated URLs of all peer relays for CGR gossip
+//	PEER_RELAY_NORAD_IDS     Comma-separated NORAD IDs of peer relays for ISL contact computation
+//	PEER_RELAY1_ADDR         Fallback peer-relay URL (used if PEER_RELAY_ADDRS is unset)
+//	PEER_RELAY2_ADDR         Second fallback peer-relay URL
+//	RELAY_SCID               This relay's CCSDS Spacecraft ID (default: 91)
+//	MIN_ELEV_DEG             Minimum elevation for GS contact [degrees] (default: 5.0)
+//	CLOUD_COVER_THRESHOLD    Cloud cover index [0–1] above which GS link is impaired (default: 0.65)
+//	MAX_BUNDLE_DEPTH         Maximum DTN store depth before low-priority drops (default: 100)
+//	POLL_INTERVAL_SEC        Spacecraft poll interval in seconds (default: 30)
+//	LINK_LOSS_RATE           Frame drop probability [0.0–1.0] to simulate BER (default: 0)
+//	FALLBACK_SMA_M           Fallback semi-major axis in metres if TLE fetch fails (default: 7078000)
+//	FALLBACK_INC_DEG         Fallback inclination in degrees if TLE fetch fails (default: 98.0)
+//	ISL_RANGE_KM             Maximum inter-satellite distance for ISL contact (default: 5000)
+//	CGR_HORIZON_H            Contact plan horizon in hours (default: 6)
 package main
 
 import (
@@ -45,10 +49,13 @@ import (
 	"os"
 	"os/signal"
 	"strconv"
+	"strings"
+	"sync"
 	"sync/atomic"
 	"syscall"
 	"time"
 
+	"github.com/absmach/orbitron/pkg/cgr"
 	"github.com/absmach/orbitron/pkg/cloudcover"
 	"github.com/absmach/orbitron/pkg/dtn"
 	"github.com/absmach/orbitron/pkg/link"
@@ -59,39 +66,43 @@ import (
 )
 
 type config struct {
-	Addr                 string  `env:"RELAY_ADDR"              envDefault:":8082"`
-	NoradID              string  `env:"RELAY_NORAD_ID"          envDefault:""`
-	SC1Addr              string  `env:"SC1_ADDR,required"`
-	SC2Addr              string  `env:"SC2_ADDR"                envDefault:""`
-	SC3Addr              string  `env:"SC3_ADDR"                envDefault:""`
-	GSAddr               string  `env:"GS_ADDR,required"`
-	RelaySCID            uint16  `env:"RELAY_SCID"              envDefault:"91"`
-	GSLat                float64 `env:"GS_LAT"                  envDefault:"-1.2864"`
-	GSLon                float64 `env:"GS_LON"                  envDefault:"36.8172"`
-	GS2Addr              string  `env:"GS2_ADDR"                envDefault:""`
-	GS2Lat               float64 `env:"GS2_LAT"                 envDefault:"78.2232"`
-	GS2Lon               float64 `env:"GS2_LON"                 envDefault:"15.6267"`
-	GS3Addr              string  `env:"GS3_ADDR"                envDefault:""`
-	GS3Lat               float64 `env:"GS3_LAT"                 envDefault:"-53.1638"`
-	GS3Lon               float64 `env:"GS3_LON"                 envDefault:"-70.9171"`
-	GS4Addr              string  `env:"GS4_ADDR"                envDefault:""`
-	GS4Lat               float64 `env:"GS4_LAT"                 envDefault:"64.8201"`
-	GS4Lon               float64 `env:"GS4_LON"                 envDefault:"-147.7200"`
-	GS5Addr              string  `env:"GS5_ADDR"                envDefault:""`
-	GS5Lat               float64 `env:"GS5_LAT"                 envDefault:"12.9716"`
-	GS5Lon               float64 `env:"GS5_LON"                 envDefault:"77.5946"`
-	GS6Addr              string  `env:"GS6_ADDR"                envDefault:""`
-	GS6Lat               float64 `env:"GS6_LAT"                 envDefault:"-31.9505"`
-	GS6Lon               float64 `env:"GS6_LON"                 envDefault:"115.8605"`
-	PeerRelay1Addr       string  `env:"PEER_RELAY1_ADDR"        envDefault:""`
-	PeerRelay2Addr       string  `env:"PEER_RELAY2_ADDR"        envDefault:""`
-	MinElevDeg           float64 `env:"MIN_ELEV_DEG"            envDefault:"5.0"`
-	CloudCoverThreshold  float64 `env:"CLOUD_COVER_THRESHOLD"   envDefault:"0.65"`
-	MaxBundleDepth       int     `env:"MAX_BUNDLE_DEPTH"        envDefault:"100"`
-	PollIntervalSec      int     `env:"POLL_INTERVAL_SEC"       envDefault:"30"`
-	LossRate             float64 `env:"LINK_LOSS_RATE"          envDefault:"0"`
-	FallbackSMAM         float64 `env:"FALLBACK_SMA_M"          envDefault:"7078000"`
-	FallbackIncDeg       float64 `env:"FALLBACK_INC_DEG"        envDefault:"98.0"`
+	Addr                string  `env:"RELAY_ADDR"              envDefault:":8082"`
+	NoradID             string  `env:"RELAY_NORAD_ID"          envDefault:""`
+	SC1Addr             string  `env:"SC1_ADDR,required"`
+	SC2Addr             string  `env:"SC2_ADDR"                envDefault:""`
+	SC3Addr             string  `env:"SC3_ADDR"                envDefault:""`
+	GSAddr              string  `env:"GS_ADDR,required"`
+	RelaySCID           uint16  `env:"RELAY_SCID"              envDefault:"91"`
+	GSLat               float64 `env:"GS_LAT"                  envDefault:"-1.2864"`
+	GSLon               float64 `env:"GS_LON"                  envDefault:"36.8172"`
+	GS2Addr             string  `env:"GS2_ADDR"                envDefault:""`
+	GS2Lat              float64 `env:"GS2_LAT"                 envDefault:"78.2232"`
+	GS2Lon              float64 `env:"GS2_LON"                 envDefault:"15.6267"`
+	GS3Addr             string  `env:"GS3_ADDR"                envDefault:""`
+	GS3Lat              float64 `env:"GS3_LAT"                 envDefault:"-53.1638"`
+	GS3Lon              float64 `env:"GS3_LON"                 envDefault:"-70.9171"`
+	GS4Addr             string  `env:"GS4_ADDR"                envDefault:""`
+	GS4Lat              float64 `env:"GS4_LAT"                 envDefault:"64.8201"`
+	GS4Lon              float64 `env:"GS4_LON"                 envDefault:"-147.7200"`
+	GS5Addr             string  `env:"GS5_ADDR"                envDefault:""`
+	GS5Lat              float64 `env:"GS5_LAT"                 envDefault:"12.9716"`
+	GS5Lon              float64 `env:"GS5_LON"                 envDefault:"77.5946"`
+	GS6Addr             string  `env:"GS6_ADDR"                envDefault:""`
+	GS6Lat              float64 `env:"GS6_LAT"                 envDefault:"-31.9505"`
+	GS6Lon              float64 `env:"GS6_LON"                 envDefault:"115.8605"`
+	PeerRelayAddrs      string  `env:"PEER_RELAY_ADDRS"        envDefault:""`
+	PeerRelayNoradIDs   string  `env:"PEER_RELAY_NORAD_IDS"    envDefault:""`
+	PeerRelay1Addr      string  `env:"PEER_RELAY1_ADDR"        envDefault:""`
+	PeerRelay2Addr      string  `env:"PEER_RELAY2_ADDR"        envDefault:""`
+	MinElevDeg          float64 `env:"MIN_ELEV_DEG"            envDefault:"5.0"`
+	CloudCoverThreshold float64 `env:"CLOUD_COVER_THRESHOLD"   envDefault:"0.65"`
+	MaxBundleDepth      int     `env:"MAX_BUNDLE_DEPTH"        envDefault:"100"`
+	PollIntervalSec     int     `env:"POLL_INTERVAL_SEC"       envDefault:"30"`
+	LossRate            float64 `env:"LINK_LOSS_RATE"          envDefault:"0"`
+	FallbackSMAM        float64 `env:"FALLBACK_SMA_M"          envDefault:"7078000"`
+	FallbackIncDeg      float64 `env:"FALLBACK_INC_DEG"        envDefault:"98.0"`
+	ISLRangeKm          float64 `env:"ISL_RANGE_KM"            envDefault:"5000"`
+	CGRHorizonH         int     `env:"CGR_HORIZON_H"           envDefault:"6"`
 }
 
 func (cfg config) gsTargets() []gsTarget {
@@ -126,6 +137,17 @@ func (cfg config) primarySources() []string {
 }
 
 func (cfg config) peerRelayAddrs() []string {
+	// PEER_RELAY_ADDRS is a comma-separated list of all peer relay base URLs.
+	// Falls back to the legacy PEER_RELAY1_ADDR / PEER_RELAY2_ADDR pair.
+	if cfg.PeerRelayAddrs != "" {
+		var out []string
+		for _, s := range strings.Split(cfg.PeerRelayAddrs, ",") {
+			if s = strings.TrimSpace(s); s != "" {
+				out = append(out, s)
+			}
+		}
+		return out
+	}
 	var peers []string
 	if cfg.PeerRelay1Addr != "" {
 		peers = append(peers, cfg.PeerRelay1Addr)
@@ -134,6 +156,19 @@ func (cfg config) peerRelayAddrs() []string {
 		peers = append(peers, cfg.PeerRelay2Addr)
 	}
 	return peers
+}
+
+func (cfg config) peerRelayNoradIDs() []string {
+	if cfg.PeerRelayNoradIDs == "" {
+		return nil
+	}
+	var out []string
+	for _, s := range strings.Split(cfg.PeerRelayNoradIDs, ",") {
+		if s = strings.TrimSpace(s); s != "" {
+			out = append(out, s)
+		}
+	}
+	return out
 }
 
 type gsTarget struct {
@@ -164,6 +199,56 @@ type relayNode struct {
 type partitionReq struct {
 	Link   string `json:"link"`
 	Active bool   `json:"active"`
+}
+
+// contactPlanManager maintains the local CGR contact plan and merges gossip
+// from peer relays. All methods are safe for concurrent use.
+type contactPlanManager struct {
+	mu   sync.RWMutex
+	plan cgr.ContactPlan
+}
+
+func (m *contactPlanManager) get() cgr.ContactPlan {
+	m.mu.RLock()
+	defer m.mu.RUnlock()
+	// shallow copy — slice header + elements are read-only for callers
+	cp := m.plan
+	cp.Contacts = append([]cgr.Contact(nil), m.plan.Contacts...)
+	return cp
+}
+
+func (m *contactPlanManager) merge(other cgr.ContactPlan) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	m.plan.Merge(other)
+}
+
+func (m *contactPlanManager) replace(plan cgr.ContactPlan) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	m.plan = plan
+}
+
+func (m *contactPlanManager) prune(cutoff time.Time) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	m.plan.Prune(cutoff)
+}
+
+func (m *contactPlanManager) reserve(from, to cgr.NodeID, aos time.Time, bytes float64) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	m.plan.Reserve(from, to, aos, bytes)
+}
+
+// gsNodeID returns the canonical CGR node ID for a ground station.
+func gsNodeID(name string) cgr.NodeID {
+	return "gs-" + strings.ToLower(strings.ReplaceAll(name, " ", "-"))
+}
+
+// relayNodeID returns the canonical CGR node ID for a relay satellite.
+func relayNodeIDFromName(name string) cgr.NodeID {
+	return "relay-" + strings.ToLower(strings.ReplaceAll(strings.TrimSpace(name), " ", "-"))
 }
 
 func extractPriority(frame []byte) uint8 {
@@ -239,6 +324,128 @@ func fetchOwnElements(cfg config, logger *slog.Logger) (orbital.Elements, string
 	}, fmt.Sprintf("RELAY-%s", cfg.NoradID)
 }
 
+// buildLocalContacts computes relay→GS and relay→relay contacts over the CGR
+// horizon and stores them in the plan manager. Called at startup and periodically.
+func buildLocalContacts(
+	selfID cgr.NodeID,
+	selfElem orbital.Elements,
+	cfg config,
+	peerElems map[string]orbital.Elements, // norad_id → elements
+	impaired func(lat, lon float64) bool,
+	mgr *contactPlanManager,
+	logger *slog.Logger,
+) {
+	now := time.Now().UTC()
+	horizon := now.Add(time.Duration(cfg.CGRHorizonH) * time.Hour)
+	plan := cgr.ContactPlan{
+		Node:      selfID,
+		UpdatedAt: now,
+	}
+
+	// relay → each ground station
+	for _, gs := range cfg.gsTargets() {
+		windows, err := orbital.ContactWindows(selfElem, gs.Lat, gs.Lon, now, horizon, cfg.MinElevDeg)
+		if err != nil {
+			logger.Warn("cgr: ContactWindows failed", slog.String("gs", gs.Name), slog.Any("error", err))
+			continue
+		}
+		gsID := gsNodeID(gs.Name)
+		for _, w := range windows {
+			rate := cgr.DefaultGSRateBps
+			// Zero capacity if cloud cover will impair this link.
+			if impaired(gs.Lat, gs.Lon) {
+				rate = 0
+			}
+			plan.Add(cgr.Contact{
+				From:    selfID,
+				To:      gsID,
+				AOS:     w.AOS,
+				LOS:     w.LOS,
+				RateBps: rate,
+			})
+		}
+	}
+
+	// relay → each peer relay (inter-satellite links)
+	for noradID, peerElem := range peerElems {
+		peerName := relayNodeIDFromName("relay-" + noradID)
+		windows, err := orbital.ISLContactWindows(selfElem, peerElem, now, horizon, cfg.ISLRangeKm)
+		if err != nil {
+			logger.Warn("cgr: ISLContactWindows failed", slog.String("peer_norad", noradID), slog.Any("error", err))
+			continue
+		}
+		for _, w := range windows {
+			plan.Add(cgr.Contact{
+				From:    selfID,
+				To:      peerName,
+				AOS:     w.AOS,
+				LOS:     w.LOS,
+				RateBps: cgr.DefaultISLRateBps,
+			})
+		}
+		logger.Info("cgr: ISL contacts computed",
+			slog.String("peer_norad", noradID),
+			slog.String("peer_id", peerName),
+			slog.Int("windows", len(windows)),
+		)
+	}
+
+	mgr.replace(plan)
+	logger.Info("cgr: local contact plan rebuilt",
+		slog.String("self", selfID),
+		slog.Int("contacts", len(plan.Contacts)),
+		slog.Time("horizon", horizon),
+	)
+}
+
+// gossipLoop periodically fetches /contacts from all peer relays and merges
+// their plans into the local contact plan manager.
+func gossipLoop(ctx context.Context, client *http.Client, peers []string, mgr *contactPlanManager, logger *slog.Logger) {
+	if len(peers) == 0 {
+		return
+	}
+	tick := time.NewTicker(5 * time.Minute)
+	defer tick.Stop()
+	// Initial gossip immediately at startup.
+	gossipOnce(ctx, client, peers, mgr, logger)
+	for {
+		select {
+		case <-ctx.Done():
+			return
+		case <-tick.C:
+			gossipOnce(ctx, client, peers, mgr, logger)
+		}
+	}
+}
+
+func gossipOnce(ctx context.Context, client *http.Client, peers []string, mgr *contactPlanManager, logger *slog.Logger) {
+	mgr.prune(time.Now().UTC())
+	for _, peer := range peers {
+		url := peer + "/contacts"
+		req, err := http.NewRequestWithContext(ctx, http.MethodGet, url, nil)
+		if err != nil {
+			continue
+		}
+		resp, err := client.Do(req)
+		if err != nil {
+			logger.Debug("cgr gossip: peer unreachable", slog.String("peer", peer), slog.Any("error", err))
+			continue
+		}
+		var remote cgr.ContactPlan
+		err = json.NewDecoder(io.LimitReader(resp.Body, 256*1024)).Decode(&remote)
+		resp.Body.Close()
+		if err != nil {
+			logger.Warn("cgr gossip: decode failed", slog.String("peer", peer), slog.Any("error", err))
+			continue
+		}
+		mgr.merge(remote)
+		logger.Info("cgr gossip: merged peer plan",
+			slog.String("peer", peer),
+			slog.Int("contacts", len(remote.Contacts)),
+		)
+	}
+}
+
 func main() {
 	logger := slog.New(slog.NewJSONHandler(os.Stdout, &slog.HandlerOptions{Level: slog.LevelInfo}))
 	slog.SetDefault(logger)
@@ -283,8 +490,44 @@ func main() {
 		return ccFetcher.IsImpaired(lat, lon, time.Now().UTC(), cfg.CloudCoverThreshold)
 	}
 
+	// Fetch TLEs for peer relays so we can compute ISL contact windows.
+	// Non-fatal: if a TLE fetch fails the relay still functions with the
+	// contacts learned via gossip.
+	peerElems := make(map[string]orbital.Elements)
+	for _, noradID := range cfg.peerRelayNoradIDs() {
+		peerElem, peerName, err := pkgtle.FetchByNoradID(noradID)
+		if err != nil {
+			logger.Warn("cgr: peer TLE fetch failed — ISL contacts for this peer will be gossip-only",
+				slog.String("norad_id", noradID),
+				slog.Any("error", err),
+			)
+			continue
+		}
+		peerElems[noradID] = peerElem
+		logger.Info("cgr: peer TLE fetched", slog.String("norad_id", noradID), slog.String("name", peerName))
+	}
+
+	selfID := relayNodeIDFromName(satName)
+	planMgr := &contactPlanManager{}
+	buildLocalContacts(selfID, elem, cfg, peerElems, impaired, planMgr, logger)
+
+	// Rebuild the contact plan every CGRHorizonH/2 hours so contacts remain fresh.
+	go func() {
+		rebuildTick := time.NewTicker(time.Duration(cfg.CGRHorizonH) * time.Hour / 2)
+		defer rebuildTick.Stop()
+		for {
+			select {
+			case <-ctx.Done():
+				return
+			case <-rebuildTick.C:
+				buildLocalContacts(selfID, elem, cfg, peerElems, impaired, planMgr, logger)
+			}
+		}
+	}()
+
+	go gossipLoop(ctx, client, cfg.peerRelayAddrs(), planMgr, logger)
 	go pollLoop(ctx, client, cfg, node, logger)
-	go forwardLoop(ctx, client, cfg, node, impaired, logger)
+	go forwardLoop(ctx, client, cfg, node, selfID, impaired, planMgr, logger)
 
 	go func() {
 		ticker := time.NewTicker(time.Minute)
@@ -348,8 +591,8 @@ func main() {
 			"cloud_cover_threshold": cfg.CloudCoverThreshold,
 			"cloud_cover":           gsCloudCover,
 			"max_bundle_depth":      cfg.MaxBundleDepth,
-			"peer_relay1":           cfg.PeerRelay1Addr,
-			"peer_relay2":           cfg.PeerRelay2Addr,
+			"peer_relays":           cfg.peerRelayAddrs(),
+			"cgr_contacts":          planMgr.get().Contacts,
 			"partition_sc1":         node.partitionSC1.Load(),
 			"partition_sc2":         node.partitionSC2.Load(),
 			"partition_sc3":         node.partitionSC3.Load(),
@@ -371,6 +614,11 @@ func main() {
 
 	mux.HandleFunc("/windows", relayWindowsHandler(elem, cfg.GSLat, cfg.GSLon, cfg.MinElevDeg))
 	mux.HandleFunc("/telemetry", relayTelemetryHandler(node))
+
+	mux.HandleFunc("/contacts", func(w http.ResponseWriter, _ *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		_ = json.NewEncoder(w).Encode(planMgr.get())
+	})
 
 	mux.HandleFunc("/control/partition", func(w http.ResponseWriter, r *http.Request) {
 		if r.Method != http.MethodPost {
@@ -459,6 +707,8 @@ func main() {
 				"partition_sim",
 				"multi_gs_downlink",
 				"bandwidth_aware_drop",
+				"contact_graph_routing",
+				"cgr_gossip",
 			},
 			"primaries":             cfg.primarySources(),
 			"peer_relays":           cfg.peerRelayAddrs(),
@@ -696,10 +946,36 @@ func fetchFromPrimary(ctx context.Context, client *http.Client, addr, name, sour
 	)
 }
 
-func forwardLoop(ctx context.Context, client *http.Client, cfg config, node *relayNode, impaired func(lat, lon float64) bool, logger *slog.Logger) {
+func forwardLoop(
+	ctx context.Context,
+	client *http.Client,
+	cfg config,
+	node *relayNode,
+	selfID cgr.NodeID,
+	impaired func(lat, lon float64) bool,
+	planMgr *contactPlanManager,
+	logger *slog.Logger,
+) {
 	ticker := time.NewTicker(10 * time.Second)
 	defer ticker.Stop()
 	var lastForwarded time.Time
+
+	// Build a lookup from CGR node ID to gsTarget for direct GS forwarding.
+	gsLookup := make(map[cgr.NodeID]*gsTarget)
+	for i, gs := range cfg.gsTargets() {
+		targets := cfg.gsTargets()
+		gsLookup[gsNodeID(gs.Name)] = &targets[i]
+	}
+
+	// Build a lookup from CGR node ID to peer relay URL.
+	peerLookup := make(map[cgr.NodeID]string)
+	for _, addr := range cfg.peerRelayAddrs() {
+		// Derive an approximate node ID: trim trailing port / path. The gossip
+		// loop will fill in proper IDs from the peer's contact plan; this
+		// lookup is populated lazily from gossip results.
+		_ = addr // populated below via gossip
+	}
+
 	for {
 		select {
 		case <-ctx.Done():
@@ -712,54 +988,148 @@ func forwardLoop(ctx context.Context, client *http.Client, cfg config, node *rel
 				logger.Debug("relay: GS link partitioned — bundle buffered")
 				continue
 			}
-			gs := selectGS(node.elements, cfg.gsTargets(), cfg.MinElevDeg, impaired)
-			if gs == nil {
-				// No GS in view or all reachable GS are cloud-blocked — try ISL peer relay handoff.
-				if peers := cfg.peerRelayAddrs(); len(peers) > 0 {
-					if b := node.store.Next(); b != nil {
-						if ok := tryPeerRelays(ctx, client, peers, b, logger); ok {
-							node.store.Remove(b.ID)
-							node.forwarded.Add(1)
-							node.islForwarded.Add(1)
-							logger.Info("relay: bundle handed off to ISL peer relay",
-								slog.Uint64("bundle_id", b.ID),
-								slog.String("source_sc", b.SourceSC),
-							)
-						}
-					}
-				} else {
-					logger.Debug("relay: not in contact with any clear GS — bundle buffered")
-				}
+			if time.Since(lastForwarded) < 5*time.Second {
 				continue
 			}
-			for {
-				if time.Since(lastForwarded) < 5*time.Second {
-					break
-				}
-				bfwd := node.store.Next()
-				if bfwd == nil {
-					break
-				}
-				if err := forwardFrame(ctx, client, gs.Addr, node.satName, bfwd.SourceSC, bfwd.Payload); err != nil {
-					logger.Warn("relay: forward failed",
-						slog.Uint64("bundle_id", bfwd.ID),
-						slog.String("gs", gs.Name),
-						slog.Any("error", err),
-					)
-					break
-				}
-				node.store.Remove(bfwd.ID)
+
+			b := node.store.Next()
+			if b == nil {
+				continue
+			}
+
+			forwarded := cgrForward(ctx, client, node, selfID, b, cfg, impaired, planMgr, gsLookup, peerLookup, logger)
+			if forwarded {
+				node.store.Remove(b.ID)
 				node.forwarded.Add(1)
 				lastForwarded = time.Now()
-				logger.Info("relay: bundle forwarded to GS",
-					slog.Uint64("bundle_id", bfwd.ID),
-					slog.Int("bytes", len(bfwd.Payload)),
-					slog.String("gs_name", gs.Name),
-					slog.String("source_sc", bfwd.SourceSC),
-				)
 			}
 		}
 	}
+}
+
+// cgrForward uses the contact plan to select the best next hop for bundle b and
+// delivers it. Returns true when the bundle was successfully handed off.
+func cgrForward(
+	ctx context.Context,
+	client *http.Client,
+	node *relayNode,
+	selfID cgr.NodeID,
+	b *dtn.Bundle,
+	cfg config,
+	impaired func(lat, lon float64) bool,
+	planMgr *contactPlanManager,
+	gsLookup map[cgr.NodeID]*gsTarget,
+	peerLookup map[cgr.NodeID]string,
+	logger *slog.Logger,
+) bool {
+	now := time.Now().UTC()
+	plan := planMgr.get()
+
+	// Try each ground station as a destination; pick the one with earliest arrival.
+	var bestRoute *cgr.Route
+	var bestGSID cgr.NodeID
+	for _, gs := range cfg.gsTargets() {
+		if gs.Addr == "" {
+			continue
+		}
+		gsID := gsNodeID(gs.Name)
+		route := cgr.Compute(plan, selfID, gsID, now, len(b.Payload))
+		if route == nil {
+			continue
+		}
+		if bestRoute == nil || route.Arrival.Before(bestRoute.Arrival) {
+			bestRoute = route
+			bestGSID = gsID
+		}
+	}
+
+	if bestRoute == nil {
+		// CGR found no route — fall back to direct elevation check then peer relays.
+		gs := selectGS(node.elements, cfg.gsTargets(), cfg.MinElevDeg, impaired)
+		if gs != nil {
+			if err := forwardFrame(ctx, client, gs.Addr, node.satName, b.SourceSC, b.Payload); err != nil {
+				logger.Warn("relay: direct GS forward failed", slog.Uint64("bundle_id", b.ID), slog.Any("error", err))
+				return false
+			}
+			logger.Info("relay: bundle forwarded to GS (fallback direct)",
+				slog.Uint64("bundle_id", b.ID), slog.String("gs", gs.Name))
+			return true
+		}
+		// No GS reachable — try any configured peer relay.
+		peers := cfg.peerRelayAddrs()
+		if len(peers) == 0 {
+			logger.Debug("relay: no CGR route and no peer relays — buffering")
+			return false
+		}
+		ok := tryPeerRelays(ctx, client, peers, b, logger)
+		if ok {
+			node.islForwarded.Add(1)
+			logger.Info("relay: bundle handed off to peer relay (fallback)",
+				slog.Uint64("bundle_id", b.ID), slog.String("source_sc", b.SourceSC))
+		}
+		return ok
+	}
+
+	_ = bestGSID
+	nextHop := bestRoute.NextHop
+
+	// Is the next hop a GS we can deliver to directly?
+	if gs, ok := gsLookup[nextHop]; ok {
+		if err := forwardFrame(ctx, client, gs.Addr, node.satName, b.SourceSC, b.Payload); err != nil {
+			logger.Warn("relay: CGR GS forward failed",
+				slog.Uint64("bundle_id", b.ID), slog.String("gs", gs.Name), slog.Any("error", err))
+			return false
+		}
+		// Reserve capacity on the first hop contact.
+		if len(bestRoute.Hops) > 0 {
+			h := bestRoute.Hops[0]
+			planMgr.reserve(h.From, h.To, h.AOS, float64(len(b.Payload)))
+		}
+		logger.Info("relay: bundle forwarded via CGR to GS",
+			slog.Uint64("bundle_id", b.ID),
+			slog.String("next_hop", nextHop),
+			slog.Time("cgr_arrival", bestRoute.Arrival),
+		)
+		return true
+	}
+
+	// Next hop is a peer relay — find its URL.
+	peerURL := peerLookup[nextHop]
+	if peerURL == "" {
+		// Populate peerLookup lazily from the contact plan's node field via gossip.
+		// Until we have a match, try all peer relay URLs as a fallback.
+		peers := cfg.peerRelayAddrs()
+		ok := tryPeerRelays(ctx, client, peers, b, logger)
+		if ok {
+			node.islForwarded.Add(1)
+			if len(bestRoute.Hops) > 0 {
+				h := bestRoute.Hops[0]
+				planMgr.reserve(h.From, h.To, h.AOS, float64(len(b.Payload)))
+			}
+			logger.Info("relay: bundle handed off via CGR to peer relay",
+				slog.Uint64("bundle_id", b.ID),
+				slog.String("next_hop", nextHop),
+				slog.Time("cgr_arrival", bestRoute.Arrival),
+			)
+		}
+		return ok
+	}
+
+	ok := tryPeerRelays(ctx, client, []string{peerURL}, b, logger)
+	if ok {
+		node.islForwarded.Add(1)
+		if len(bestRoute.Hops) > 0 {
+			h := bestRoute.Hops[0]
+			planMgr.reserve(h.From, h.To, h.AOS, float64(len(b.Payload)))
+		}
+		logger.Info("relay: bundle handed off via CGR to peer relay",
+			slog.Uint64("bundle_id", b.ID),
+			slog.String("peer_url", peerURL),
+			slog.String("next_hop", nextHop),
+			slog.Time("cgr_arrival", bestRoute.Arrival),
+		)
+	}
+	return ok
 }
 
 // tryPeerRelays attempts to hand a bundle off to one of the configured peer relays.

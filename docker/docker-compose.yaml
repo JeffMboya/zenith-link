@@ -29,6 +29,10 @@ x-relay: &relay
     - MAX_BUNDLE_DEPTH=100
     - POLL_INTERVAL_SEC=30
     - LINK_LOSS_RATE=${LINK_LOSS_RATE:-0.05}
+    - ISL_RANGE_KM=5000
+    - CGR_HORIZON_H=6
+    - PEER_RELAY_ADDRS=http://relay-noaa20:8082,http://relay-sentinel2a:8082,http://relay-landsat9:8082,http://relay-aqua:8082,http://relay-terra:8082,http://relay-noaa19:8082
+    - PEER_RELAY_NORAD_IDS=43013,40697,49260,27424,25994,33591
   depends_on:
     - spacecraft1
     - spacecraft2
@@ -186,8 +190,10 @@ services:
       - LINK_LOSS_RATE=${LINK_LOSS_RATE:-0.05}
       - FALLBACK_SMA_M=7195000
       - FALLBACK_INC_DEG=98.7
-      - PEER_RELAY1_ADDR=http://relay-sentinel2a:8082
-      - PEER_RELAY2_ADDR=http://relay-landsat9:8082
+      - ISL_RANGE_KM=5000
+      - CGR_HORIZON_H=6
+      - PEER_RELAY_ADDRS=http://relay-sentinel2a:8082,http://relay-landsat9:8082,http://relay-aqua:8082,http://relay-terra:8082,http://relay-noaa19:8082
+      - PEER_RELAY_NORAD_IDS=40697,49260,27424,25994,33591
 
   relay-sentinel2a:
     <<: *relay
@@ -216,8 +222,10 @@ services:
       - LINK_LOSS_RATE=${LINK_LOSS_RATE:-0.05}
       - FALLBACK_SMA_M=7164000
       - FALLBACK_INC_DEG=98.6
-      - PEER_RELAY1_ADDR=http://relay-noaa20:8082
-      - PEER_RELAY2_ADDR=http://relay-aqua:8082
+      - ISL_RANGE_KM=5000
+      - CGR_HORIZON_H=6
+      - PEER_RELAY_ADDRS=http://relay-noaa20:8082,http://relay-landsat9:8082,http://relay-aqua:8082,http://relay-terra:8082,http://relay-noaa19:8082
+      - PEER_RELAY_NORAD_IDS=43013,49260,27424,25994,33591
 
   relay-landsat9:
     <<: *relay
@@ -246,8 +254,10 @@ services:
       - LINK_LOSS_RATE=${LINK_LOSS_RATE:-0.05}
       - FALLBACK_SMA_M=7083000
       - FALLBACK_INC_DEG=98.2
-      - PEER_RELAY1_ADDR=http://relay-aqua:8082
-      - PEER_RELAY2_ADDR=http://relay-noaa20:8082
+      - ISL_RANGE_KM=5000
+      - CGR_HORIZON_H=6
+      - PEER_RELAY_ADDRS=http://relay-noaa20:8082,http://relay-sentinel2a:8082,http://relay-aqua:8082,http://relay-terra:8082,http://relay-noaa19:8082
+      - PEER_RELAY_NORAD_IDS=43013,40697,27424,25994,33591
 
   relay-aqua:
     <<: *relay
@@ -276,8 +286,10 @@ services:
       - LINK_LOSS_RATE=${LINK_LOSS_RATE:-0.05}
       - FALLBACK_SMA_M=7083000
       - FALLBACK_INC_DEG=98.2
-      - PEER_RELAY1_ADDR=http://relay-landsat9:8082
-      - PEER_RELAY2_ADDR=http://relay-terra:8082
+      - ISL_RANGE_KM=5000
+      - CGR_HORIZON_H=6
+      - PEER_RELAY_ADDRS=http://relay-noaa20:8082,http://relay-sentinel2a:8082,http://relay-landsat9:8082,http://relay-terra:8082,http://relay-noaa19:8082
+      - PEER_RELAY_NORAD_IDS=43013,40697,49260,25994,33591
 
   relay-terra:
     <<: *relay
@@ -306,8 +318,10 @@ services:
       - LINK_LOSS_RATE=${LINK_LOSS_RATE:-0.05}
       - FALLBACK_SMA_M=7083000
       - FALLBACK_INC_DEG=98.2
-      - PEER_RELAY1_ADDR=http://relay-noaa19:8082
-      - PEER_RELAY2_ADDR=http://relay-aqua:8082
+      - ISL_RANGE_KM=5000
+      - CGR_HORIZON_H=6
+      - PEER_RELAY_ADDRS=http://relay-noaa20:8082,http://relay-sentinel2a:8082,http://relay-landsat9:8082,http://relay-aqua:8082,http://relay-noaa19:8082
+      - PEER_RELAY_NORAD_IDS=43013,40697,49260,27424,33591
 
   relay-noaa19:
     <<: *relay
@@ -336,5 +350,7 @@ services:
       - LINK_LOSS_RATE=${LINK_LOSS_RATE:-0.05}
       - FALLBACK_SMA_M=7248000
       - FALLBACK_INC_DEG=99.1
-      - PEER_RELAY1_ADDR=http://relay-terra:8082
-      - PEER_RELAY2_ADDR=http://relay-sentinel2a:8082
+      - ISL_RANGE_KM=5000
+      - CGR_HORIZON_H=6
+      - PEER_RELAY_ADDRS=http://relay-noaa20:8082,http://relay-sentinel2a:8082,http://relay-landsat9:8082,http://relay-aqua:8082,http://relay-terra:8082
+      - PEER_RELAY_NORAD_IDS=43013,40697,49260,27424,25994
