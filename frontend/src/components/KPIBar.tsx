@@ -224,18 +224,18 @@ function KPICard({ value, label, color, sub, nacks, dimmed }: {
       justifyContent: 'center', minWidth: 72, alignSelf: 'stretch',
       opacity: dimmed ? 0.45 : 1,
     }}>
-      <span style={{ color, fontSize: 15, fontWeight: 700, lineHeight: 1.2, fontVariantNumeric: 'tabular-nums', whiteSpace: 'nowrap' }}>
+      <span style={{ color, fontSize: 18, fontWeight: 700, lineHeight: 1.2, fontVariantNumeric: 'tabular-nums', whiteSpace: 'nowrap' }}>
         {value}
       </span>
       <div style={{ display: 'flex', alignItems: 'center', gap: 4, marginTop: 2 }}>
-        <span style={{ color: 'var(--text-dim)', fontSize: 8, letterSpacing: 1.5, whiteSpace: 'nowrap' }}>{label}</span>
+        <span style={{ color: 'var(--text-dim)', fontSize: 10, letterSpacing: 1.5, whiteSpace: 'nowrap' }}>{label}</span>
         {nacks != null && nacks > 0 && (
-          <span style={{ color: 'var(--amber)', fontSize: 7, fontWeight: 700, border: '1px solid var(--amber)', borderRadius: 2, padding: '0 3px' }}>
+          <span style={{ color: 'var(--amber)', fontSize: 9, fontWeight: 700, border: '1px solid var(--amber)', borderRadius: 2, padding: '0 3px' }}>
             {nacks}N
           </span>
         )}
       </div>
-      {sub && <span style={{ color: 'var(--text-dim)', fontSize: 7, letterSpacing: 1, marginTop: 1, opacity: 0.7 }}>{sub}</span>}
+      {sub && <span style={{ color: 'var(--text-dim)', fontSize: 9, letterSpacing: 1, marginTop: 1, opacity: 0.7 }}>{sub}</span>}
     </div>
   )
 }
@@ -323,7 +323,7 @@ export function KPIBar({ metrics, satellite, connected, linkLost, tleSource, tle
       {/* Main bar */}
       <div style={{
         display: 'flex', alignItems: 'center',
-        height: 48,
+        height: 54,
         background: 'rgba(4,13,28,0.94)',
         borderBottom: '1px solid var(--border)',
         backdropFilter: 'blur(8px)',
@@ -331,8 +331,8 @@ export function KPIBar({ metrics, satellite, connected, linkLost, tleSource, tle
 
         {/* 1. Brand */}
         <div style={{ padding: '0 20px', display: 'flex', flexDirection: 'column', justifyContent: 'center', minWidth: 170, flexShrink: 0 }}>
-          <span style={{ color: 'var(--cyan)', fontSize: 13, letterSpacing: 3, fontWeight: 700, lineHeight: 1.2 }}>ORBITRON</span>
-          <span style={{ color: 'var(--text-dim)', fontSize: 10, letterSpacing: 2, marginTop: 1 }}>MISSION CONTROL</span>
+          <span style={{ color: 'var(--cyan)', fontSize: 15, letterSpacing: 3, fontWeight: 700, lineHeight: 1.2 }}>ORBITRON</span>
+          <span style={{ color: 'var(--text-dim)', fontSize: 11, letterSpacing: 2, marginTop: 1 }}>MISSION CONTROL</span>
         </div>
 
         {DIVIDER}
@@ -344,7 +344,7 @@ export function KPIBar({ metrics, satellite, connected, linkLost, tleSource, tle
             background: dotColor, boxShadow: `0 0 8px ${dotGlow}`, flexShrink: 0,
             animation: dotAnim,
           }} />
-          <span style={{ color: liveTextColor, fontSize: 12, fontWeight: 700, letterSpacing: 1.5 }}>{liveLabel}</span>
+          <span style={{ color: liveTextColor, fontSize: 14, fontWeight: 700, letterSpacing: 1.5 }}>{liveLabel}</span>
         </div>
 
         {DIVIDER}
@@ -364,17 +364,17 @@ export function KPIBar({ metrics, satellite, connected, linkLost, tleSource, tle
             cursor: 'default', alignSelf: 'stretch',
           }}
         >
-          <span style={{ color: inferenceColor, fontSize: 13, fontWeight: 700, letterSpacing: 0.5, lineHeight: 1.2, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+          <span style={{ color: inferenceColor, fontSize: 15, fontWeight: 700, letterSpacing: 0.5, lineHeight: 1.2, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
             {inferenceLabel}
           </span>
           <div style={{ display: 'flex', alignItems: 'center', gap: 5, marginTop: 2 }}>
-            <span style={{ color: 'var(--text-dim)', fontSize: 10, letterSpacing: 1.5 }}>ONBOARD AI</span>
+            <span style={{ color: 'var(--text-dim)', fontSize: 11, letterSpacing: 1.5 }}>ONBOARD AI</span>
             {inferenceDetail && (
-              <span style={{ color: 'var(--text-dim)', fontSize: 8 }}>· Kp {(inferenceDetail.kp_index ?? 0).toFixed(1)}</span>
+              <span style={{ color: 'var(--text-dim)', fontSize: 10 }}>· Kp {(inferenceDetail.kp_index ?? 0).toFixed(1)}</span>
             )}
           </div>
           {inferenceLabel === 'ECLIPSE_COMPUTE' && eclipseStart !== null && (
-            <span style={{ color: 'var(--purple)', fontSize: 8, letterSpacing: 1, marginTop: 1 }}>
+            <span style={{ color: 'var(--purple)', fontSize: 9, letterSpacing: 1, marginTop: 1 }}>
               +{String(Math.floor(eclipseElapsed / 60)).padStart(2, '0')}:{String(eclipseElapsed % 60).padStart(2, '0')}
             </span>
           )}
@@ -426,15 +426,15 @@ export function KPIBar({ metrics, satellite, connected, linkLost, tleSource, tle
           background: passUrgent ? `color-mix(in srgb, ${passColor} 6%, transparent)` : 'transparent',
           alignSelf: 'stretch',
         }}>
-          <span style={{ color: passColor, fontSize: 20, fontWeight: 700, lineHeight: 1.2, letterSpacing: 0.3, fontVariantNumeric: 'tabular-nums', whiteSpace: 'nowrap' }}>
+          <span style={{ color: passColor, fontSize: 22, fontWeight: 700, lineHeight: 1.2, letterSpacing: 0.3, fontVariantNumeric: 'tabular-nums', whiteSpace: 'nowrap' }}>
             {passLabel}
           </span>
           {passDetail && (
-            <span style={{ color: passColor, fontSize: 9, letterSpacing: 0.5, marginTop: 2, opacity: 0.7, whiteSpace: 'nowrap' }}>
+            <span style={{ color: passColor, fontSize: 10, letterSpacing: 0.5, marginTop: 2, opacity: 0.7, whiteSpace: 'nowrap' }}>
               {passDetail}
             </span>
           )}
-          <span style={{ color: 'var(--text-dim)', fontSize: 9, letterSpacing: 2, marginTop: passDetail ? 1 : 2 }}>NEXT DELIVERY</span>
+          <span style={{ color: 'var(--text-dim)', fontSize: 10, letterSpacing: 2, marginTop: passDetail ? 1 : 2 }}>NEXT DELIVERY</span>
         </div>
 
         {DIVIDER}
@@ -442,11 +442,11 @@ export function KPIBar({ metrics, satellite, connected, linkLost, tleSource, tle
         {/* 5. KPI card row — always rendered when connected; placeholders until first WS frame */}
         <div style={{ flex: 1, display: 'flex', alignItems: 'center', overflow: 'hidden' }}>
           {isRebooting ? (
-            <div style={{ padding: '0 20px', color: 'var(--amber)', fontSize: 10, letterSpacing: 2, fontWeight: 700 }}>
+            <div style={{ padding: '0 20px', color: 'var(--amber)', fontSize: 12, letterSpacing: 2, fontWeight: 700 }}>
               REBOOTING OBC...
             </div>
           ) : !connected ? (
-            <div style={{ padding: '0 20px', color: offlineColor, fontSize: 10, letterSpacing: 2, fontWeight: linkLost ? 700 : 400 }}>
+            <div style={{ padding: '0 20px', color: offlineColor, fontSize: 12, letterSpacing: 2, fontWeight: linkLost ? 700 : 400 }}>
               {offlineText}
             </div>
           ) : (
